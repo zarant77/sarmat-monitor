@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <MissionPlannerPath Condition="'$(MissionPlannerPath)' == ''">C:\Program Files (x86)\Mission Planner</MissionPlannerPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SarmatPlugin\SarmatPlugin.csproj" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+</Project>

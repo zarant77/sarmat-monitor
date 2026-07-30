@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatPlugin", "src\SarmatPlugin\SarmatPlugin.csproj", "{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatPlugin.Tests", "tests\SarmatPlugin.Tests\SarmatPlugin.Tests.csproj", "{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
