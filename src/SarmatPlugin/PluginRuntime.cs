@@ -27,6 +27,7 @@ namespace SarmatPlugin
         public PluginRuntime(Func<object> currentState)
         {
             this.currentState = currentState;
+            WidgetCatalog.Discover(currentState?.Invoke());
             settings = store.Load();
             log = new AppLog(settings.DebugLogging);
             audio = new AudioService(settings);
@@ -43,7 +44,7 @@ namespace SarmatPlugin
         public void Tick()
         {
             if (disposed || panel == null) return;
-            var telemetry = new TelemetryReader(currentState).Read();
+            var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
             RuijieStatus currentRuijie;
             ObsStatus currentObs;
             lock (sync)
@@ -75,10 +76,17 @@ namespace SarmatPlugin
         private async Task ObsLoop(CancellationToken token)
         {
             var client = new ObsClient(settings, log);
+            var transitions = new ObsArmingTransitionTracker(
+                new TelemetryReader(currentState).Read().Armed);
             while (!token.IsCancellationRequested)
             {
                 var armed = new TelemetryReader(currentState).Read().Armed;
-                var value = await client.SynchronizeRecordingAsync(armed, token).ConfigureAwait(false);
+                var pending = transitions.PendingCommand(armed);
+                var value = pending.HasValue
+                    ? await client.SynchronizeRecordingAsync(pending.Value, token).ConfigureAwait(false)
+                    : await client.QueryAsync(token).ConfigureAwait(false);
+                if (pending.HasValue && value.Connected)
+                    transitions.Confirm(armed);
                 lock (sync) obs = value;
                 await Task.Delay(TimeSpan.FromSeconds(value.Connected ? 1 : settings.ObsReconnectSeconds), token).ConfigureAwait(false);
             }

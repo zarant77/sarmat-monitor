@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.Reflection;
+using System.Collections.Generic;
+using System.Linq;
 using SarmatPlugin.Core;
 
 namespace SarmatPlugin.Integration
@@ -10,10 +12,10 @@ namespace SarmatPlugin.Integration
         private readonly Func<object> currentState;
         public TelemetryReader(Func<object> currentState) { this.currentState = currentState; }
 
-        public TelemetrySnapshot Read()
+        public TelemetrySnapshot Read(IEnumerable<string> enabledWidgets = null)
         {
             var cs = currentState?.Invoke();
-            return new TelemetrySnapshot
+            var snapshot = new TelemetrySnapshot
             {
                 Armed = ReadBool(cs, "armed"),
                 BatteryVoltage = ReadDouble(cs, "battery_voltage"),
@@ -21,8 +23,31 @@ namespace SarmatPlugin.Integration
                 Hdop = ReadDouble(cs, "gpshdop"),
                 DistanceToHomeMeters = ReadDouble(cs, "DistToHome"),
                 BatteryUsedMah = ReadDouble(cs, "battery_usedmah"),
+                GroundSpeed = ReadDouble(cs, "groundspeed"),
+                VerticalSpeed = ReadDouble(cs, "climbrate"),
+                AirSpeed = ReadDouble(cs, "airspeed"),
+                Altitude = ReadDouble(cs, "alt"),
+                CurrentAmps = ReadDouble(cs, "current"),
                 TimestampUtc = DateTime.UtcNow
             };
+            if (cs != null && enabledWidgets != null)
+            {
+                var enabled = new HashSet<string>(enabledWidgets, StringComparer.OrdinalIgnoreCase);
+                foreach (var definition in WidgetCatalog.Definitions.Where(x =>
+                    x.MemberName != null && enabled.Contains(x.Id)))
+                {
+                    try
+                    {
+                        var value = Member(cs, definition.MemberName);
+                        snapshot.AdditionalTelemetry[definition.Id] = Format(value);
+                    }
+                    catch
+                    {
+                        snapshot.AdditionalTelemetry[definition.Id] = "N/A";
+                    }
+                }
+            }
+            return snapshot;
         }
         private static object Member(object target, string name)
         {
@@ -42,6 +67,17 @@ namespace SarmatPlugin.Integration
         {
             var value = Member(target, name);
             return value == null ? 0 : Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        }
+
+        private static string Format(object value)
+        {
+            if (value == null) return "N/A";
+            if (value is bool) return (bool)value ? "Yes" : "No";
+            if (value is DateTime) return ((DateTime)value).ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            if (value is float || value is double || value is decimal)
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("0.###",
+                    CultureInfo.InvariantCulture);
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
     }
 }

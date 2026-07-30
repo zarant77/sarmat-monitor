@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 using System.Windows.Forms;
 using SarmatPlugin.Core;
 
@@ -15,6 +16,7 @@ namespace SarmatPlugin.UI
         private readonly Func<CancellationToken, Task<string>> testObs;
         private readonly Func<CancellationToken, Task<string>> testRuijie;
         private readonly Action<Severity> testAudio;
+        private CheckedListBox widgetList;
         public PluginSettings Result { get; private set; }
 
         public SettingsForm(PluginSettings source, Func<CancellationToken, Task<string>> testObs,
@@ -27,6 +29,7 @@ namespace SarmatPlugin.UI
             tabs.TabPages.Add(Page("OBS Studio", Obs()));
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
             tabs.TabPages.Add(Page("Audio", Audio()));
+            tabs.TabPages.Add(Page("Widgets", Widgets()));
             tabs.TabPages.Add(Page("General", General()));
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
             var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, AutoSize = true };
@@ -89,9 +92,27 @@ namespace SarmatPlugin.UI
             Check(p, "Show panel", "ShowPanel", settings.ShowPanel);
             Check(p, "Start automatically", "StartAutomatically", settings.StartAutomatically);
             Check(p, "Debug logging", "DebugLogging", settings.DebugLogging);
-            Number(p, "Header font size (pt)", "HeaderFontSize", settings.HeaderFontSize, 6, 24, 1);
-            Number(p, "Value font size (pt)", "ValueFontSize", settings.ValueFontSize, 8, 40, 1);
             return p;
+        }
+        private Control Widgets()
+        {
+            widgetList = new CheckedListBox
+            {
+                Dock = DockStyle.Fill,
+                CheckOnClick = true,
+                IntegralHeight = false,
+                HorizontalScrollbar = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            var enabled = new HashSet<string>(settings.EnabledWidgets ??
+                WidgetCatalog.DefaultIds, StringComparer.OrdinalIgnoreCase);
+            widgetList.BeginUpdate();
+            foreach (var widget in WidgetCatalog.Definitions)
+                widgetList.Items.Add(widget, enabled.Contains(widget.Id));
+            widgetList.EndUpdate();
+            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            panel.Controls.Add(widgetList);
+            return panel;
         }
 
         private PluginSettings Read()
@@ -108,7 +129,10 @@ namespace SarmatPlugin.UI
                 RuijieRequestTimeoutSeconds=N("RuijieRequestTimeoutSeconds"), RuijieStaleSeconds=N("RuijieStaleSeconds"),
                 RuijieAllowInsecureTls=B("RuijieAllowInsecureTls"), AudioEnabled=B("AudioEnabled"), AudioMuted=B("AudioMuted"),
                 AudioVolume=N("AudioVolume")/100, ShowPanel=B("ShowPanel"), StartAutomatically=B("StartAutomatically"),
-                DebugLogging=B("DebugLogging"), HeaderFontSize=N("HeaderFontSize"), ValueFontSize=N("ValueFontSize")
+                DebugLogging=B("DebugLogging"),
+                EnabledWidgets=widgetList == null
+                    ? WidgetCatalog.DefaultIds.ToList()
+                    : widgetList.CheckedItems.Cast<WidgetDefinition>().Select(x => x.Id).ToList()
             };
         }
         private string T(string k) => fields.TryGetValue(k, out var c) ? c.Text : "";

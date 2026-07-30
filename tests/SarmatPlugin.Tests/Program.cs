@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Linq;
 using SarmatPlugin.Core;
 using SarmatPlugin.Infrastructure;
 using SarmatPlugin.Integration;
@@ -19,10 +20,12 @@ namespace SarmatPlugin.Tests
             Run("Critical priority and all reasons", Priority);
             Run("OBS authentication matches v5 example", ObsAuthentication);
             Run("OBS recording control request envelopes", ObsRecordingRequests);
+            Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
-            Run("UI font defaults preserve 1.5 ratio", FontDefaults);
+            Run("Widget catalog defaults are valid and unique", WidgetDefaults);
+            Run("Mission Planner scalar telemetry is discovered dynamically", DynamicTelemetry);
             Run("Sarmat GStreamer pipeline targets Mission Planner appsink", GStreamerPipeline);
             Run("Log sanitizer redacts credentials", Sanitizer);
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
@@ -90,6 +93,22 @@ namespace SarmatPlugin.Tests
                 Equal("test-id", data["requestId"]);
             }
         }
+        private static void ObsArmingEdges()
+        {
+            var tracker = new ObsArmingTransitionTracker(false);
+            Equal(null, tracker.PendingCommand(false));
+
+            Equal(true, tracker.PendingCommand(true));
+            // A failed/disconnected attempt remains pending.
+            Equal(true, tracker.PendingCommand(true));
+            tracker.Confirm(true);
+            // Manual Start/Stop while the ARMED state is unchanged produces no command.
+            Equal(null, tracker.PendingCommand(true));
+
+            Equal(false, tracker.PendingCommand(false));
+            tracker.Confirm(false);
+            Equal(null, tracker.PendingCommand(false));
+        }
         private static void CryptoRoundTrip()
         {
             var encrypted=RuijieCrypto.EncryptPassword("secret","key12345",new byte[]{1,2,3,4,5,6,7,8});
@@ -110,13 +129,37 @@ namespace SarmatPlugin.Tests
                 Equal(new Version(1, 1), request.Version);
             }
         }
-        private static void FontDefaults()
+        private static void WidgetDefaults()
         {
-            var settings = new PluginSettings { HeaderFontSize = 0, ValueFontSize = 0 };
+            var settings = new PluginSettings();
             settings.Normalize();
-            Equal(10.0, settings.HeaderFontSize);
-            Equal(15.0, settings.ValueFontSize);
-            Equal(1.5, settings.ValueFontSize / settings.HeaderFontSize);
+            Equal(WidgetCatalog.Definitions.Count, settings.EnabledWidgets.Count);
+            Equal(settings.EnabledWidgets.Count,
+                settings.EnabledWidgets.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            True(settings.EnabledWidgets.All(WidgetCatalog.IsKnown));
+
+            settings.EnabledWidgets = new List<string> { "obs", "unknown", "OBS" };
+            settings.Normalize();
+            Equal(1, settings.EnabledWidgets.Count);
+            Equal("obs", settings.EnabledWidgets[0]);
+        }
+        private static void DynamicTelemetry()
+        {
+            var state = new FakeCurrentState();
+            WidgetCatalog.Discover(state);
+            True(WidgetCatalog.IsKnown("telemetry:roll"));
+            True(WidgetCatalog.IsKnown("telemetry:flightmode"));
+            True(!WidgetCatalog.IsKnown("telemetry:Complex"));
+            var snapshot = new TelemetryReader(() => state).Read(
+                new[] { "telemetry:roll", "telemetry:flightmode" });
+            Equal("12.345", snapshot.AdditionalTelemetry["telemetry:roll"]);
+            Equal("AUTO", snapshot.AdditionalTelemetry["telemetry:flightmode"]);
+        }
+        private sealed class FakeCurrentState
+        {
+            public double roll { get; set; } = 12.345;
+            public string flightmode = "AUTO";
+            public object Complex { get; set; } = new object();
         }
         private static void GStreamerPipeline()
         {

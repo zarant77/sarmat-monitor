@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 
 namespace SarmatPlugin.Core
 {
     public enum Severity { Inactive = 0, Ok = 1, Warning = 2, Critical = 3 }
     public enum AlertKind { Obs, Satellites, Hdop, Battery, Ruijie }
+    public enum WidgetStatus { Good = 0, Normal = 1, Bad = 2 }
 
     public sealed class TelemetrySnapshot
     {
@@ -15,6 +17,13 @@ namespace SarmatPlugin.Core
         public double Hdop { get; set; }
         public double DistanceToHomeMeters { get; set; }
         public double BatteryUsedMah { get; set; }
+        public double GroundSpeed { get; set; }
+        public double VerticalSpeed { get; set; }
+        public double AirSpeed { get; set; }
+        public double Altitude { get; set; }
+        public double CurrentAmps { get; set; }
+        public Dictionary<string, string> AdditionalTelemetry { get; set; } =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public DateTime TimestampUtc { get; set; }
     }
 
@@ -78,8 +87,7 @@ namespace SarmatPlugin.Core
         [DataMember] public bool ShowPanel { get; set; } = true;
         [DataMember] public bool StartAutomatically { get; set; } = true;
         [DataMember] public bool DebugLogging { get; set; }
-        [DataMember] public double HeaderFontSize { get; set; } = 10.0;
-        [DataMember] public double ValueFontSize { get; set; } = 15.0;
+        [DataMember] public List<string> EnabledWidgets { get; set; } = WidgetCatalog.DefaultIds.ToList();
 
         public void Normalize()
         {
@@ -96,11 +104,12 @@ namespace SarmatPlugin.Core
             RuijieRequestTimeoutSeconds = Math.Max(1, RuijieRequestTimeoutSeconds);
             RuijieStaleSeconds = Math.Max(RuijiePollSeconds, RuijieStaleSeconds);
             AudioVolume = Math.Max(0, Math.Min(1, AudioVolume));
-            if (HeaderFontSize <= 0) HeaderFontSize = 10.0;
-            if (ValueFontSize <= 0) ValueFontSize = 15.0;
-            HeaderFontSize = Math.Max(6, Math.Min(24, HeaderFontSize));
-            ValueFontSize = Math.Max(8, Math.Min(40, ValueFontSize));
             RuijieUsername = string.IsNullOrWhiteSpace(RuijieUsername) ? "admin" : RuijieUsername.Trim();
+            if (EnabledWidgets == null)
+                EnabledWidgets = WidgetCatalog.DefaultIds.ToList();
+            else
+                EnabledWidgets = EnabledWidgets.Where(WidgetCatalog.IsKnown)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
     }
 }

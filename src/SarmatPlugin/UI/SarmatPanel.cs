@@ -1,8 +1,7 @@
 using System;
-using System.Drawing;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using SarmatPlugin.Core;
 
@@ -10,50 +9,48 @@ namespace SarmatPlugin.UI
 {
     public sealed class SarmatPanel : UserControl
     {
-        private readonly Label satCount = MetricValue();
-        private readonly Label gpsHdop = MetricValue();
-        private readonly Label distanceToHome = MetricValue();
-        private readonly Label batteryUsed = MetricValue();
-        private readonly Label ruijie = StatusValue();
-        private readonly Label obs = StatusValue();
-        private readonly List<Label> headers = new List<Label>();
-        private readonly List<TableLayoutPanel> metricTiles = new List<TableLayoutPanel>();
-        private readonly TableLayoutPanel layout;
-        private readonly Control satTile;
-        private readonly Control hdopTile;
-        private readonly Control distanceTile;
-        private readonly Control batteryTile;
-        private readonly Control ruijieTile;
-        private readonly Control obsTile;
-        private readonly ToolTip tooltip = new ToolTip();
-        private float appliedHeaderFontSize;
-        private float appliedValueFontSize;
-        private ResponsiveMode responsiveMode = (ResponsiveMode)(-1);
+        private readonly BufferedTableLayoutPanel grid;
+        private readonly Dictionary<string, TelemetryWidget> widgets;
+        private string enabledSignature;
+        private bool hasTelemetryContent;
+
         public event EventHandler SettingsRequested;
         public event EventHandler VideoSourceRequested;
 
         public SarmatPanel()
         {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.UserPaint, true);
             Name = "SarmatPluginPanel";
-            Width = 520; Height = 132; MinimumSize = new Size(180, 100);
-            BackColor = Color.FromArgb(34, 38, 42); ForeColor = Color.White;
-            layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(4), Margin = new Padding(0) };
-            satTile = Metric("Sat Count", satCount);
-            hdopTile = Metric("GPS HDOP", gpsHdop);
-            distanceTile = Metric("Dist to Home", distanceToHome);
-            batteryTile = Metric("Bat used", batteryUsed);
-            ruijieTile = Metric("Ruijie", ruijie);
-            obsTile = Metric("OBS", obs);
-            Controls.Add(layout);
+            Width = 520;
+            Height = 180;
+            MinimumSize = new Size(160, 100);
+            BackColor = Color.FromArgb(34, 38, 42);
+            ForeColor = Color.White;
+
+            grid = new BufferedTableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 1,
+                Padding = new Padding(3),
+                Margin = new Padding(0),
+                BackColor = BackColor
+            };
+            widgets = WidgetCatalog.Definitions.ToDictionary(x => x.Id, x => new TelemetryWidget(),
+                StringComparer.OrdinalIgnoreCase);
+            Controls.Add(grid);
 
             var menu = new ContextMenuStrip();
             menu.Items.Add("Settings", null, (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Start Sarmat RTSP video", null,
                 (s, e) => VideoSourceRequested?.Invoke(this, EventArgs.Empty));
-            UpdateResponsiveLayout();
             ApplyContextMenu(this, menu);
-            SizeChanged += (s, e) => UpdateResponsiveLayout();
+            foreach (var widget in widgets.Values) ApplyContextMenu(widget, menu);
+
+            SizeChanged += (s, e) => ArrangeWidgets();
+            grid.SizeChanged += (s, e) => ArrangeWidgets();
         }
 
         public void Render(TelemetrySnapshot telemetry, ObsStatus obsStatus, RuijieStatus ruijieStatus,
@@ -64,174 +61,189 @@ namespace SarmatPlugin.UI
                 BeginInvoke(new Action(() => Render(telemetry, obsStatus, ruijieStatus, snapshot, settings)));
                 return;
             }
-            ApplyFontSettings(settings);
-            satCount.Text = telemetry.Satellites.ToString("0");
-            gpsHdop.Text = telemetry.Hdop.ToString("0.00");
-            distanceToHome.Text = telemetry.DistanceToHomeMeters.ToString("0");
-            batteryUsed.Text = telemetry.BatteryUsedMah.ToString("0");
-            satCount.ForeColor = telemetry.Satellites >= settings.MinimumSatellites ? Color.LimeGreen : Color.OrangeRed;
-            gpsHdop.ForeColor = telemetry.Hdop <= settings.MaximumHdop ? Color.LimeGreen : Color.OrangeRed;
-            distanceToHome.ForeColor = DistanceColor(telemetry.DistanceToHomeMeters, settings.SafeDistanceToHomeMeters);
-            batteryUsed.ForeColor = Color.Gold;
-            var age = ruijieStatus.LastSuccessUtc == default ? "never" :
-                Math.Max(0, (DateTime.UtcNow - ruijieStatus.LastSuccessUtc).TotalSeconds).ToString("0") + "s";
+
+            UpdateVisibleWidgets(settings.EnabledWidgets);
+
+            SetWidget("sat_count", "Sat Count", telemetry.Satellites.ToString("0"),
+                telemetry.Satellites >= settings.MinimumSatellites ? WidgetStatus.Good : WidgetStatus.Bad);
+            SetWidget("gps_hdop", "GPS HDOP", telemetry.Hdop.ToString("0.00"),
+                telemetry.Hdop <= settings.MaximumHdop ? WidgetStatus.Good : WidgetStatus.Bad);
+            SetWidget("dist_home", "Dist to Home", telemetry.DistanceToHomeMeters.ToString("0") + " m",
+                DistanceStatus(telemetry.DistanceToHomeMeters, settings.SafeDistanceToHomeMeters));
+            SetWidget("bat_used", "Bat used", telemetry.BatteryUsedMah.ToString("0") + " mAh", WidgetStatus.Normal);
+
             if (!ruijieStatus.Connected || ruijieStatus.Stale || !ruijieStatus.Rssi.HasValue)
-            {
-                ruijie.Text = "Disconnected";
-                ruijie.ForeColor = Color.OrangeRed;
-            }
+                SetWidget("ruijie", "Ruijie", "DIS", WidgetStatus.Bad);
             else
+                SetWidget("ruijie", "Ruijie", ruijieStatus.Rssi.Value + " dBm", RuijieStatus(ruijieStatus));
+
+            SetWidget("obs", "OBS",
+                !obsStatus.Connected ? "DIS" : obsStatus.Recording == true ? "REC" : "NR",
+                obsStatus.Connected && obsStatus.Recording == true ? WidgetStatus.Good : WidgetStatus.Bad);
+
+            SetWidget("ground_speed", "Ground Speed", telemetry.GroundSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
+            SetWidget("vertical_speed", "Vertical Speed", telemetry.VerticalSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
+            SetWidget("air_speed", "Air Speed", telemetry.AirSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
+            SetWidget("altitude", "Altitude", telemetry.Altitude.ToString("0.0") + " m", WidgetStatus.Normal);
+            SetWidget("battery_voltage", "Battery Voltage", telemetry.BatteryVoltage.ToString("0.0") + " V",
+                telemetry.BatteryVoltage >= settings.MinimumBatteryVoltage ? WidgetStatus.Good : WidgetStatus.Bad);
+            SetWidget("current", "Current", telemetry.CurrentAmps.ToString("0.0") + " A", WidgetStatus.Normal);
+            foreach (var item in telemetry.AdditionalTelemetry)
             {
-                ruijie.Text = $"{ruijieStatus.Rssi.Value} dBm";
-                ruijie.ForeColor = RuijieColor(ruijieStatus);
+                var definition = WidgetCatalog.Definitions.FirstOrDefault(x =>
+                    string.Equals(x.Id, item.Key, StringComparison.OrdinalIgnoreCase));
+                if (definition != null)
+                    SetWidget(definition.Id, definition.Title, item.Value, WidgetStatus.Normal);
             }
-            if (!obsStatus.Connected)
+            if (!hasTelemetryContent)
             {
-                obs.Text = "Disconnected";
-                obs.ForeColor = Color.OrangeRed;
+                hasTelemetryContent = true;
+                ArrangeWidgets();
             }
-            else if (obsStatus.Recording == true)
-            {
-                obs.Text = "Recording";
-                obs.ForeColor = Color.LimeGreen;
-            }
-            else
-            {
-                obs.Text = "Not recording";
-                obs.ForeColor = Color.OrangeRed;
-            }
-            var details = new StringBuilder()
-                .AppendLine($"Battery: {telemetry.BatteryVoltage:0.0} V")
-                .AppendLine($"Satellites: {telemetry.Satellites}")
-                .AppendLine($"HDOP: {telemetry.Hdop:0.00}")
-                .AppendLine($"Distance to home: {telemetry.DistanceToHomeMeters:0} m")
-                .AppendLine($"Battery used estimate: {telemetry.BatteryUsedMah:0} mAh")
-                .AppendLine($"Ruijie: {ruijieStatus.Error ?? "OK"}")
-                .AppendLine($"Ruijie last update: {age}")
-                .AppendLine($"OBS: {obsStatus.Error ?? "OK"}")
-                .Append("Safety: ")
-                .Append(snapshot.Reasons.Count == 0 ? snapshot.Severity.ToString() :
-                    string.Join("; ", snapshot.Reasons.Select(x => x.Text))).ToString();
-            tooltip.SetToolTip(this, details);
-            tooltip.SetToolTip(ruijie, details);
-            tooltip.SetToolTip(obs, details);
+
         }
 
-        private static Label MetricValue() => new Label { Dock = DockStyle.Fill, ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true,
-            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 18, FontStyle.Bold) };
-        private static Label StatusValue() => new Label { Dock = DockStyle.Fill, ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true,
-            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 15, FontStyle.Bold) };
-        private Control Metric(string caption, Label value)
+        private void SetWidget(string id, string title, string value, WidgetStatus status)
         {
-            var tile = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = new Padding(1) };
-            metricTiles.Add(tile);
-            tile.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-            tile.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            var header = new Label { Text = caption, Dock = DockStyle.Fill, ForeColor = Color.Silver,
-                TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true,
-                Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 10, FontStyle.Bold) };
-            headers.Add(header);
-            tile.Controls.Add(header, 0, 0);
-            tile.Controls.Add(value, 0, 1);
-            return tile;
+            TelemetryWidget widget;
+            if (widgets.TryGetValue(id, out widget))
+                widget.SetContent(title, value, status);
         }
-        private static Color RuijieColor(RuijieStatus status)
+
+        private void UpdateVisibleWidgets(IEnumerable<string> enabled)
         {
-            if (string.Equals(status.SignalQuality, "Bad", StringComparison.OrdinalIgnoreCase) ||
-                status.Rssi <= -85) return Color.OrangeRed;
-            if (string.Equals(status.SignalQuality, "Weak", StringComparison.OrdinalIgnoreCase) ||
-                status.Rssi <= -75) return Color.Gold;
-            return Color.LimeGreen;
+            var selected = new HashSet<string>(enabled ?? WidgetCatalog.DefaultIds, StringComparer.OrdinalIgnoreCase);
+            var ordered = WidgetCatalog.Definitions.Where(x => selected.Contains(x.Id)).ToArray();
+            var signature = string.Join("|", ordered.Select(x => x.Id));
+            if (signature == enabledSignature) return;
+
+            enabledSignature = signature;
+            grid.SuspendLayout();
+            grid.Controls.Clear();
+            foreach (var definition in ordered)
+                grid.Controls.Add(widgets[definition.Id]);
+            grid.ResumeLayout(true);
+            ArrangeWidgets();
         }
-        private static Color DistanceColor(double distance, double safeDistance)
+
+        private void ArrangeWidgets()
         {
-            if (distance <= safeDistance / 2.0) return Color.LimeGreen;
-            if (distance < safeDistance) return Color.Gold;
-            return Color.OrangeRed;
+            if (grid.ClientSize.Width <= 0 || grid.Controls.Count == 0) return;
+            var count = grid.Controls.Count;
+            var availableWidth = Math.Max(20, grid.ClientSize.Width - grid.Padding.Horizontal);
+            var availableHeight = Math.Max(20, grid.ClientSize.Height - grid.Padding.Vertical);
+            const int spacing = 6;
+
+            var bestColumns = 1;
+            var bestRows = count;
+            var bestHeaderSize = 4f;
+            var bestValueSize = 6f;
+            var bestScore = double.MinValue;
+            for (var columns = 1; columns <= count; columns++)
+            {
+                var rows = (int)Math.Ceiling(count / (double)columns);
+                var cellWidth = availableWidth / (double)columns - spacing;
+                var cellHeight = availableHeight / (double)rows - spacing;
+                if (cellWidth <= 0 || cellHeight <= 0) continue;
+
+                var headerSize = FittingFontSize(true, (int)cellWidth, (int)(cellHeight * 0.38));
+                var valueSize = FittingFontSize(false, (int)cellWidth, (int)(cellHeight * 0.62));
+                var aspect = cellWidth / cellHeight;
+                var score = headerSize / 14.0 + valueSize / 26.0 -
+                    Math.Abs(Math.Log(aspect / 1.65)) * 0.04;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestHeaderSize = headerSize;
+                    bestValueSize = valueSize;
+                    bestColumns = columns;
+                    bestRows = rows;
+                }
+            }
+
+            grid.SuspendLayout();
+            var visibleWidgets = grid.Controls.Cast<TelemetryWidget>().ToArray();
+            grid.Controls.Clear();
+            grid.ColumnCount = bestColumns;
+            grid.RowCount = bestRows;
+            grid.ColumnStyles.Clear();
+            grid.RowStyles.Clear();
+            for (var column = 0; column < bestColumns; column++)
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / bestColumns));
+            for (var row = 0; row < bestRows; row++)
+                grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / bestRows));
+            for (var index = 0; index < visibleWidgets.Length; index++)
+            {
+                var widget = visibleWidgets[index];
+                widget.Dock = DockStyle.Fill;
+                grid.Controls.Add(widget, index % bestColumns, index / bestColumns);
+                widget.ApplyFontSizes(bestHeaderSize, bestValueSize);
+            }
+            grid.ResumeLayout(true);
         }
+
+        private float FittingFontSize(bool title, int width, int height)
+        {
+            var low = title ? 4f : 6f;
+            var high = title ? 14f : 26f;
+            var usableWidth = Math.Max(1, width - 6);
+            var usableHeight = Math.Max(1, height - 4);
+            for (var i = 0; i < 7; i++)
+            {
+                var candidate = (low + high) / 2f;
+                if (AllTextFits(title, candidate, usableWidth, usableHeight))
+                    low = candidate;
+                else
+                    high = candidate;
+            }
+            return low;
+        }
+
+        private bool AllTextFits(bool title, float fontSize, int width, int height)
+        {
+            using (var font = new Font(SystemFonts.MessageBoxFont.FontFamily, fontSize, FontStyle.Bold))
+            {
+                foreach (TelemetryWidget widget in grid.Controls)
+                {
+                    var text = title ? widget.TitleText : widget.ValueText;
+                    var measured = TextRenderer.MeasureText(text ?? "", font, Size.Empty,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                    if (measured.Width > width || measured.Height > height) return false;
+                }
+            }
+            return true;
+        }
+
+        private static WidgetStatus RuijieStatus(RuijieStatus status)
+        {
+            if (string.Equals(status.SignalQuality, "Bad", StringComparison.OrdinalIgnoreCase) || status.Rssi <= -85)
+                return WidgetStatus.Bad;
+            if (string.Equals(status.SignalQuality, "Weak", StringComparison.OrdinalIgnoreCase) || status.Rssi <= -75)
+                return WidgetStatus.Normal;
+            return WidgetStatus.Good;
+        }
+
+        private static WidgetStatus DistanceStatus(double distance, double safeDistance)
+        {
+            if (distance <= safeDistance / 2.0) return WidgetStatus.Good;
+            if (distance < safeDistance) return WidgetStatus.Normal;
+            return WidgetStatus.Bad;
+        }
+
         private static void ApplyContextMenu(Control root, ContextMenuStrip menu)
         {
             root.ContextMenuStrip = menu;
-            foreach (Control child in root.Controls)
-                ApplyContextMenu(child, menu);
+            foreach (Control child in root.Controls) ApplyContextMenu(child, menu);
         }
-        private void UpdateResponsiveLayout()
-        {
-            if (layout == null || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
-            var ratio = (double)ClientSize.Width / Math.Max(1, ClientSize.Height);
-            var next = ClientSize.Width >= 480 && ratio >= 1.8
-                ? ResponsiveMode.Wide
-                : ClientSize.Width >= 300 && ratio >= 0.9
-                    ? ResponsiveMode.Medium
-                    : ResponsiveMode.Narrow;
-            if (next == responsiveMode) return;
-            responsiveMode = next;
 
-            layout.SuspendLayout();
-            layout.Controls.Clear();
-            layout.ColumnStyles.Clear();
-            layout.RowStyles.Clear();
-            switch (next)
+        private sealed class BufferedTableLayoutPanel : TableLayoutPanel
+        {
+            public BufferedTableLayoutPanel()
             {
-                case ResponsiveMode.Wide:
-                    ConfigureGrid(4, 2);
-                    Add(satTile, 0, 0); Add(hdopTile, 1, 0); Add(distanceTile, 2, 0); Add(batteryTile, 3, 0);
-                    Add(ruijieTile, 0, 1, 2); Add(obsTile, 2, 1, 2);
-                    break;
-                case ResponsiveMode.Medium:
-                    ConfigureGrid(2, 3);
-                    Add(satTile, 0, 0); Add(hdopTile, 1, 0);
-                    Add(distanceTile, 0, 1); Add(batteryTile, 1, 1);
-                    Add(ruijieTile, 0, 2); Add(obsTile, 1, 2);
-                    break;
-                default:
-                    ConfigureGrid(1, 6);
-                    Add(satTile, 0, 0); Add(hdopTile, 0, 1); Add(distanceTile, 0, 2);
-                    Add(batteryTile, 0, 3); Add(ruijieTile, 0, 4); Add(obsTile, 0, 5);
-                    break;
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                    ControlStyles.UserPaint, true);
+                UpdateStyles();
             }
-            layout.ResumeLayout(true);
-        }
-        private void ConfigureGrid(int columns, int rows)
-        {
-            layout.ColumnCount = columns;
-            layout.RowCount = rows;
-            for (var i = 0; i < columns; i++)
-                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / columns));
-            for (var i = 0; i < rows; i++)
-                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
-        }
-        private void Add(Control control, int column, int row, int columnSpan = 1)
-        {
-            layout.Controls.Add(control, column, row);
-            if (columnSpan > 1) layout.SetColumnSpan(control, columnSpan);
-        }
-        private void ApplyFontSettings(PluginSettings settings)
-        {
-            var headerSize = (float)settings.HeaderFontSize;
-            var valueSize = (float)settings.ValueFontSize;
-            if (Math.Abs(appliedHeaderFontSize - headerSize) > 0.01f)
-            {
-                foreach (var header in headers)
-                    header.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, headerSize, FontStyle.Bold);
-                foreach (var tile in metricTiles)
-                    tile.RowStyles[0].Height = Math.Max(18, headerSize * 1.8f);
-                appliedHeaderFontSize = headerSize;
-            }
-            if (Math.Abs(appliedValueFontSize - valueSize) > 0.01f)
-            {
-                foreach (var value in new[] { satCount, gpsHdop, distanceToHome, batteryUsed, ruijie, obs })
-                    value.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, valueSize, FontStyle.Bold);
-                appliedValueFontSize = valueSize;
-            }
-        }
-        private enum ResponsiveMode
-        {
-            Wide,
-            Medium,
-            Narrow
         }
     }
 }

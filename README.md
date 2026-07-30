@@ -1,8 +1,8 @@
 # Sarmat Plugin for Mission Planner
 
-Sarmat Plugin adds a compact safety tab to Mission Planner Flight Data. It displays large, readable
-Sat Count, GPS HDOP, distance to home, and estimated battery usage values, and monitors Mission
-Planner telemetry together with OBS Studio recording and a Ruijie wireless bridge.
+Sarmat Plugin adds a compact safety tab to Mission Planner Flight Data. Its configurable,
+responsive widget grid displays flight telemetry and monitors OBS Studio recording together with
+a Ruijie wireless bridge.
 All warnings and audio are gated by the vehicle's `ARMED` state.
 
 ## Compatibility and API
@@ -81,10 +81,10 @@ Settings and logs are intentionally preserved.
 Default endpoint: `ws://127.0.0.1:4455`.
 
 The implementation uses OBS WebSocket v5 Hello/Identify authentication and `GetRecordStatus`.
-After every successful OBS connection, the plugin synchronizes recording with the vehicle state:
-`StartRecord` while ARMED and `StopRecord` while DISARMED. It checks the current state first, so it
-does not repeat Start/Stop requests when OBS already matches the vehicle. The dashboard continues to
-show the confirmed recording state.
+The plugin sends `StartRecord` once on the `DISARMED → ARMED` transition and `StopRecord` once on
+the `ARMED → DISARMED` transition. Between those edges it only reads `GetRecordStatus`, so manual
+OBS Start/Stop remains available and the dashboard shows the actual recording state. A transition
+that occurs while OBS is disconnected stays pending and is retried after reconnect.
 
 ## Ruijie setup
 
@@ -121,9 +121,20 @@ runs at a time, repeats use the configured interval, and a restored pattern play
 The dashboard colors Sat Count and GPS HDOP against their configured limits. Distance to home uses
 the configurable **Safe dist to home** value (default `50 m`): up to half is green, between half and
 the limit is yellow, and the limit or above is red. Estimated battery usage is always yellow.
-Header and value font sizes are configurable under **General**. Defaults are `10 pt` and `15 pt`.
-The Sarmat dashboard reflows automatically: four columns on wide panels, two columns on medium
-panels, and a single vertical column in narrow/tall windows.
+Every dashboard item uses the same title/value/status widget. Status colors are green (good),
+yellow (normal), and red (bad). The grid calculates its column count from the available width and
+automatically wraps widgets into additional rows. Header and value fonts are measured against the
+actual visible text and reduced automatically so every item fits without scrolling. Under
+**Settings → Widgets**, each widget can be shown or hidden independently. Available widgets are Sat Count, GPS HDOP, Dist to Home, Bat used,
+Ruijie, OBS, Ground Speed, Vertical Speed, Air Speed, Altitude, Battery Voltage, and Current.
+OBS uses the compact values `REC`, `NR`, and `DIS`.
+
+In addition to the built-in widgets, the plugin discovers every public scalar telemetry property
+and field exposed by the installed Mission Planner `CurrentState` at startup. Numeric, Boolean,
+text, enum, and timestamp values become optional entries in **Settings → Widgets**. This includes
+attitude, position, navigation, GPS2, sensor, RC, vibration, wind, EKF, mission, radio, and custom
+`NAMED_VALUE_FLOAT` slots when exposed by that Mission Planner version. Dynamically discovered
+items are off by default and only selected values are read during each telemetry update.
 
 The Sarmat context menu includes **Start Sarmat RTSP video**. It stores the supplied RTSP pipeline
 in Mission Planner's native `gstreamer_url` setting and starts it through
