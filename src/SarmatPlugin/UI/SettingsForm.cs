@@ -31,6 +31,7 @@ namespace SarmatPlugin.UI
             tabs.TabPages.Add(Page("Alerts", Alerts()));
             tabs.TabPages.Add(Page("OBS Studio", Obs()));
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
+            tabs.TabPages.Add(Page("Lima", Lima()));
             tabs.TabPages.Add(Page("Audio", Audio()));
             tabs.TabPages.Add(Page("Widgets", Widgets()));
             tabs.TabPages.Add(Page("Mission Planner UI", MissionPlannerUi(currentHudElements)));
@@ -88,6 +89,17 @@ namespace SarmatPlugin.UI
             ButtonRow(p, "Test warning", () => testAudio(Severity.Warning));
             ButtonRow(p, "Test critical", () => testAudio(Severity.Critical));
             ButtonRow(p, "Test restored", () => testAudio(Severity.Ok));
+            return p;
+        }
+        private Control Lima()
+        {
+            var p = Grid();
+            Check(p, "Enabled", "LimaEnabled", settings.LimaEnabled);
+            Number(p, "RC input channel", "LimaRcChannel", settings.LimaRcChannel, 1, 16, 0);
+            Number(p, "PWM threshold", "LimaPwmThreshold", settings.LimaPwmThreshold, 800, 2200, 0);
+            Check(p, "Pressed when PWM is above threshold", "LimaPressedWhenHigh", settings.LimaPressedWhenHigh);
+            Combo(p, "Flight mode", "LimaFlightMode", settings.LimaFlightMode,
+                new[] { "AltHold", "PosHold", "Loiter", "Stabilize", "Auto", "RTL", "Land" });
             return p;
         }
         private Control General()
@@ -174,6 +186,9 @@ namespace SarmatPlugin.UI
                 HudElements=HudElementCatalog.Elements.ToDictionary(x => x.Key,
                     x => B("Hud:" + x.Key), StringComparer.OrdinalIgnoreCase),
                 GStreamerWasStarted=settings.GStreamerWasStarted
+                ,LimaEnabled=B("LimaEnabled"), LimaRcChannel=(int)N("LimaRcChannel"),
+                LimaPwmThreshold=(int)N("LimaPwmThreshold"), LimaPressedWhenHigh=B("LimaPressedWhenHigh"),
+                LimaFlightMode=T("LimaFlightMode"), LimaSettingsInitialized=true
             };
         }
         private void WidgetListMouseDown(object sender, MouseEventArgs e)
@@ -235,6 +250,12 @@ namespace SarmatPlugin.UI
             p.Controls.Add(new Label {Text=label,AutoSize=true}); var c=new NumericUpDown {Minimum=min,Maximum=max,
                 DecimalPlaces=decimals,Increment=decimals==0?1:(decimal)Math.Pow(10,-decimals),Value=Math.Max(min,Math.Min(max,(decimal)value)),Width=120};
             fields[key]=c; p.Controls.Add(c);
+        }
+        private void Combo(TableLayoutPanel p, string label, string key, string value, string[] options)
+        {
+            p.Controls.Add(new Label { Text=label, AutoSize=true });
+            var c=new ComboBox { Width=220, DropDownStyle=ComboBoxStyle.DropDown, Text=value??"" };
+            c.Items.AddRange(options); fields[key]=c; p.Controls.Add(c);
         }
         private void ButtonRow(TableLayoutPanel p, string label, Action action)
         {

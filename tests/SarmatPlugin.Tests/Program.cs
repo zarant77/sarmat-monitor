@@ -24,6 +24,7 @@ namespace SarmatPlugin.Tests
             Run("OBS recording control request envelopes", ObsRecordingRequests);
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
             Run("Takeoff mode warning only checks the arming transition", TakeoffModeWarning);
+            Run("Lima reacts once per RC button press", LimaEdge);
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
@@ -129,6 +130,30 @@ namespace SarmatPlugin.Tests
             correctAtTakeoff.Update(false, "AltHold");
             Equal(false, correctAtTakeoff.Update(true, "Pos Hold"));
             Equal(false, correctAtTakeoff.Update(true, "AltHold"));
+        }
+        private static void LimaEdge()
+        {
+            var edge = new RisingEdgeTrigger();
+            Equal(false, edge.Update(false));
+            Equal(true, edge.Update(true));
+            Equal(false, edge.Update(true));
+            Equal(false, edge.Update(true));
+            Equal(false, edge.Update(false));
+            Equal(true, edge.Update(true));
+            edge.Reset();
+            Equal(true, edge.Update(true));
+
+            var settings = new PluginSettings
+            {
+                LimaRcChannel = 99,
+                LimaPwmThreshold = 9999,
+                LimaFlightMode = " ",
+                LimaSettingsInitialized = true
+            };
+            settings.Normalize();
+            Equal(16, settings.LimaRcChannel);
+            Equal(2200, settings.LimaPwmThreshold);
+            Equal("AltHold", settings.LimaFlightMode);
         }
         private static void CryptoRoundTrip()
         {

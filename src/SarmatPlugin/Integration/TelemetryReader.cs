@@ -51,6 +51,11 @@ namespace SarmatPlugin.Integration
             }
             return snapshot;
         }
+        public double ReadRcInput(int channel)
+        {
+            if (channel < 1 || channel > 16) return 0;
+            return ReadDouble(currentState?.Invoke(), "ch" + channel + "in");
+        }
         private static object Member(object target, string name)
         {
             if (target == null) return null;

@@ -15,6 +15,7 @@ namespace SarmatPlugin
         private readonly SettingsStore store = new SettingsStore();
         private readonly AlertEngine alerts = new AlertEngine();
         private readonly TakeoffModeWarningTracker takeoffModeWarning = new TakeoffModeWarningTracker();
+        private readonly RisingEdgeTrigger limaTrigger = new RisingEdgeTrigger();
         private readonly object sync = new object();
         private PluginSettings settings;
         private AppLog log;
@@ -30,6 +31,7 @@ namespace SarmatPlugin
         private HudVisibilityAdapter hudVisibility;
         public event Action<bool> TakeoffWarningChanged;
         public event Action VehicleConnected;
+        public event Action<string> LimaModeRequested;
         public bool ShouldRestoreGStreamer => settings.GStreamerWasStarted;
 
         public PluginRuntime(Func<object> currentState)
@@ -66,6 +68,7 @@ namespace SarmatPlugin
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
+            UpdateLima();
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
             hudVisibility?.Apply(settings.HudElements);
@@ -102,6 +105,25 @@ namespace SarmatPlugin
             var snapshot = alerts.Update(telemetry, currentObs, currentRuijie, settings, DateTime.UtcNow);
             audio.Update(snapshot, telemetry.Armed);
             panel.Render(telemetry, currentObs, currentRuijie, snapshot, settings);
+        }
+
+        private void UpdateLima()
+        {
+            if (!settings.LimaEnabled)
+            {
+                limaTrigger.Reset();
+                return;
+            }
+            var pwm = new TelemetryReader(currentState).ReadRcInput(settings.LimaRcChannel);
+            if (pwm < 800 || pwm > 2200)
+            {
+                limaTrigger.Reset();
+                return;
+            }
+            var pressed = settings.LimaPressedWhenHigh
+                ? pwm >= settings.LimaPwmThreshold
+                : pwm <= settings.LimaPwmThreshold;
+            if (limaTrigger.Update(pressed)) LimaModeRequested?.Invoke(settings.LimaFlightMode);
         }
 
         private void StartWorkers()

@@ -93,6 +93,12 @@ namespace SarmatPlugin.Core
         [DataMember] public Dictionary<string, bool> HudElements { get; set; } =
             new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         [DataMember] public bool GStreamerWasStarted { get; set; }
+        [DataMember] public bool LimaEnabled { get; set; }
+        [DataMember] public int LimaRcChannel { get; set; } = 7;
+        [DataMember] public int LimaPwmThreshold { get; set; } = 1800;
+        [DataMember] public bool LimaPressedWhenHigh { get; set; } = true;
+        [DataMember] public string LimaFlightMode { get; set; } = "AltHold";
+        [DataMember] public bool LimaSettingsInitialized { get; set; } = true;
 
         public void Normalize()
         {
@@ -120,6 +126,18 @@ namespace SarmatPlugin.Core
             else
                 HudElements = HudElements.Where(x => HudElementCatalog.Elements.ContainsKey(x.Key))
                     .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            if (!LimaSettingsInitialized)
+            {
+                LimaRcChannel = 7;
+                LimaPwmThreshold = 1800;
+                LimaPressedWhenHigh = true;
+                LimaFlightMode = "AltHold";
+                LimaSettingsInitialized = true;
+            }
+            LimaRcChannel = Math.Max(1, Math.Min(16, LimaRcChannel));
+            LimaPwmThreshold = Math.Max(800, Math.Min(2200, LimaPwmThreshold));
+            if (string.IsNullOrWhiteSpace(LimaFlightMode)) LimaFlightMode = "AltHold";
+            else LimaFlightMode = LimaFlightMode.Trim();
         }
     }
 }

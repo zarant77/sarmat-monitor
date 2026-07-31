@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Reflection;
 using System.Drawing;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Windows.Forms;
 using MissionPlanner.Plugin;
 using SarmatPlugin.Infrastructure;
@@ -39,6 +41,8 @@ namespace SarmatPlugin
                 runtime = new PluginRuntime(() => Host.cs);
                 runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
                 runtime.VehicleConnected += RestoreVideoOnConnect;
+                runtime.VehicleConnected += ReconnectJoystickOnConnect;
+                runtime.LimaModeRequested += SetLimaFlightMode;
                 panel = runtime.CreatePanel();
                 panel.VideoSourceRequested += (s, e) => StartSarmatVideo();
                 var mainType = Host.MainForm.GetType();
@@ -194,6 +198,87 @@ namespace SarmatPlugin
             OnUi(control, StartSarmatVideo);
         }
 
+        private void ReconnectJoystickOnConnect()
+        {
+            var main = Host.MainForm;
+            if (main == null) return;
+            OnUi(main, () =>
+            {
+                try
+                {
+                    var flags = BindingFlags.Public | BindingFlags.NonPublic |
+                        BindingFlags.Instance | BindingFlags.Static;
+                    var mainType = main.GetType();
+                    var joystickProperty = mainType.GetProperty("joystick", flags);
+                    if (joystickProperty == null) return;
+                    var current = joystickProperty.GetValue(null, null);
+                    if (current != null)
+                    {
+                        var currentType = current.GetType();
+                        var enabled = currentType.GetField("enabled", flags);
+                        var valid = currentType.GetMethod("IsJoystickValid", flags);
+                        if (enabled != null && (bool)enabled.GetValue(current) &&
+                            valid != null && (bool)valid.Invoke(current, null)) return;
+                        currentType.GetMethod("UnAcquireJoyStick", flags)?.Invoke(current, null);
+                        (current as IDisposable)?.Dispose();
+                        joystickProperty.SetValue(null, null, null);
+                    }
+
+                    var name = GetMissionPlannerSetting("joystick_name");
+                    if (string.IsNullOrWhiteSpace(name)) return;
+                    var joystickBase = joystickProperty.PropertyType;
+                    var getDevices = joystickBase.GetMethod("getDevices", flags);
+                    var devices = (getDevices?.Invoke(null, null) as System.Collections.IEnumerable)?
+                        .Cast<object>().Select(x => Convert.ToString(x)).ToArray();
+                    if (devices == null || !devices.Any(x =>
+                        string.Equals(x, name, StringComparison.OrdinalIgnoreCase))) return;
+
+                    var create = joystickBase.GetMethod("Create", flags);
+                    if (create == null) return;
+                    var callbackType = create.GetParameters()[0].ParameterType;
+                    var returnType = callbackType.GetMethod("Invoke").ReturnType;
+                    var comPort = (object)Host.comPort;
+                    var callback = Expression.Lambda(callbackType,
+                        Expression.Constant(comPort, returnType)).Compile();
+                    var joystick = create.Invoke(null, new object[] { callback });
+                    if (joystick == null) return;
+                    var started = joystick.GetType().GetMethod("start", flags)?
+                        .Invoke(joystick, new object[] { name });
+                    if (!(started is bool) || !(bool)started)
+                    {
+                        (joystick as IDisposable)?.Dispose();
+                        return;
+                    }
+                    joystick.GetType().GetField("enabled", flags)?.SetValue(joystick, true);
+                    joystickProperty.SetValue(null, joystick, null);
+                }
+                catch
+                {
+                    // USB joystick restoration is best-effort and must not block vehicle connection.
+                }
+            });
+        }
+
+        private void SetLimaFlightMode(string mode)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(mode)) return;
+                var comPort = (object)Host.comPort;
+                if (comPort == null) throw new InvalidOperationException("Mission Planner MAVLink connection is unavailable");
+                var setMode = comPort.GetType().GetMethod("setMode",
+                    BindingFlags.Instance | BindingFlags.Public, null,
+                    new[] { typeof(string) }, null);
+                if (setMode == null) throw new MissingMethodException(comPort.GetType().FullName, "setMode(string)");
+                setMode.Invoke(comPort, new object[] { mode });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Unable to switch Lima flight mode:\r\n" + ex.Message,
+                    "Sarmat Plugin", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void SaveMissionPlannerSetting(string key, string value)
         {
             var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
@@ -203,6 +288,16 @@ namespace SarmatPlugin
                 new[] { typeof(string) }, null);
             if (indexer == null) throw new InvalidOperationException("Mission Planner setting indexer is unavailable");
             indexer.SetValue(config, value, new object[] { key });
+        }
+
+        private string GetMissionPlannerSetting(string key)
+        {
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            var config = Host.GetType().GetProperty("config", flags)?.GetValue(Host, null);
+            if (config == null) return null;
+            var indexer = config.GetType().GetProperty("Item", flags, null, typeof(string),
+                new[] { typeof(string) }, null);
+            return Convert.ToString(indexer?.GetValue(config, new object[] { key }));
         }
 
         private void SetHudSixteenByNine()

@@ -10,6 +10,14 @@ vehicle was armed outside PostHold/PosHold, a red warning is shown over the main
 PostHold dismisses it for the remainder of that armed flight; later mode changes do not reactivate
 it. Disarming resets the check for the next takeoff.
 
+## Lima
+
+The **Lima** settings tab passively monitors one Mission Planner `CurrentState.chNin` RC input
+channel. It never sends RC overrides and therefore does not block the button's existing function.
+The trigger can be configured for PWM above or below a threshold. On the released-to-pressed edge,
+Sarmat calls Mission Planner's native MAVLink `setMode` once; holding the button does not repeat the
+command. The default selected mode is `AltHold`, and all Lima settings persist in `settings.json`.
+
 ## Compatibility and API
 
 - Mission Planner plugin API: `MissionPlanner.Plugin.Plugin`
@@ -158,6 +166,12 @@ the native Mission Planner HUD to 16:9 and invokes its normal resize routine.
 Once the Sarmat GStreamer source has started successfully, that fact is persisted. On the next
 Mission Planner run, the source is restored on the first vehicle connection; later
 disconnected-to-connected transitions also restart it once.
+
+On each new vehicle connection, Sarmat also checks Mission Planner's configured USB joystick. If
+`MainV2.joystick` is already enabled and valid, it is left untouched. Otherwise, the plugin uses
+the saved `joystick_name`, confirms the device is currently present, and restores it through the
+native `JoystickBase.Create/start` path. Missing devices and failed best-effort reconnects never
+block the vehicle connection or show a modal dialog.
 
 ## Settings and logs
 
