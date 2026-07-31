@@ -43,6 +43,18 @@ The plugin does not open its own MAVLink connection and does not run or communic
 
 Close Mission Planner before installing or replacing the DLL.
 
+For a downloaded GitHub Release, extract the ZIP, open an elevated PowerShell in the extracted
+folder, and run:
+
+```powershell
+.\install.ps1 -MissionPlannerPath "C:\Program Files (x86)\Mission Planner"
+```
+
+The release folder mirrors the Mission Planner installation layout: `plugins/SarmatPlugin.dll`
+is installed into `plugins`, while `icon.png`, `logo.txt`, `logo2.png`, and `splashbg.png` are
+installed into the Mission Planner root. Existing files are replaced. The installer also removes
+Windows Mark-of-the-Web from all downloaded and installed files.
+
 ## Build
 
 From PowerShell:
