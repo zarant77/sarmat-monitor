@@ -128,6 +128,8 @@ actual visible text and reduced automatically so every item fits without scrolli
 **Settings → Widgets**, each widget can be shown or hidden independently. Available widgets are Sat Count, GPS HDOP, Dist to Home, Bat used,
 Ruijie, OBS, Ground Speed, Vertical Speed, Air Speed, Altitude, Battery Voltage, and Current.
 OBS uses the compact values `REC`, `NR`, and `DIS`.
+Drag entries in the Widgets list to change their order on the dashboard; the checked state and
+saved order are preserved together.
 
 In addition to the built-in widgets, the plugin discovers every public scalar telemetry property
 and field exposed by the installed Mission Planner `CurrentState` at startup. Numeric, Boolean,
@@ -138,7 +140,9 @@ items are off by default and only selected values are read during each telemetry
 
 The Sarmat context menu includes **Start Sarmat RTSP video**. It stores the supplied RTSP pipeline
 in Mission Planner's native `gstreamer_url` setting and starts it through
-`FlightData.hudGStreamer`; it does not launch an external player.
+`FlightData.hudGStreamer`; it does not launch an external player. Successful startup is silent;
+an error dialog is shown only when the source cannot be started. After startup, the plugin sets
+the native Mission Planner HUD to 16:9 and invokes its normal resize routine.
 
 ## Settings and logs
 

@@ -17,6 +17,8 @@ namespace SarmatPlugin.UI
         private readonly Func<CancellationToken, Task<string>> testRuijie;
         private readonly Action<Severity> testAudio;
         private CheckedListBox widgetList;
+        private int draggedWidgetIndex = -1;
+        private Point widgetDragStart;
         public PluginSettings Result { get; private set; }
 
         public SettingsForm(PluginSettings source, Func<CancellationToken, Task<string>> testObs,
@@ -102,16 +104,35 @@ namespace SarmatPlugin.UI
                 CheckOnClick = true,
                 IntegralHeight = false,
                 HorizontalScrollbar = true,
-                BorderStyle = BorderStyle.FixedSingle
+                BorderStyle = BorderStyle.FixedSingle,
+                AllowDrop = true
             };
             var enabled = new HashSet<string>(settings.EnabledWidgets ??
                 WidgetCatalog.DefaultIds, StringComparer.OrdinalIgnoreCase);
+            var definitions = WidgetCatalog.Definitions.ToDictionary(x => x.Id,
+                StringComparer.OrdinalIgnoreCase);
+            var ordered = (settings.EnabledWidgets ?? WidgetCatalog.DefaultIds)
+                .Where(definitions.ContainsKey).Select(x => definitions[x])
+                .Concat(WidgetCatalog.Definitions.Where(x => !enabled.Contains(x.Id)))
+                .Distinct().ToArray();
             widgetList.BeginUpdate();
-            foreach (var widget in WidgetCatalog.Definitions)
+            foreach (var widget in ordered)
                 widgetList.Items.Add(widget, enabled.Contains(widget.Id));
             widgetList.EndUpdate();
+            widgetList.MouseDown += WidgetListMouseDown;
+            widgetList.MouseMove += WidgetListMouseMove;
+            widgetList.DragOver += WidgetListDragOver;
+            widgetList.DragDrop += WidgetListDragDrop;
+            var hint = new Label
+            {
+                Text = "Check widgets to show. Drag items to change their order on the panel.",
+                Dock = DockStyle.Top,
+                Height = 28,
+                AutoEllipsis = true
+            };
             var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
             panel.Controls.Add(widgetList);
+            panel.Controls.Add(hint);
             return panel;
         }
 
@@ -132,8 +153,49 @@ namespace SarmatPlugin.UI
                 DebugLogging=B("DebugLogging"),
                 EnabledWidgets=widgetList == null
                     ? WidgetCatalog.DefaultIds.ToList()
-                    : widgetList.CheckedItems.Cast<WidgetDefinition>().Select(x => x.Id).ToList()
+                    : widgetList.Items.Cast<WidgetDefinition>()
+                        .Where((x, index) => widgetList.GetItemChecked(index))
+                        .Select(x => x.Id).ToList()
             };
+        }
+        private void WidgetListMouseDown(object sender, MouseEventArgs e)
+        {
+            draggedWidgetIndex = widgetList.IndexFromPoint(e.Location);
+            widgetDragStart = e.Location;
+        }
+        private void WidgetListMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left || draggedWidgetIndex < 0) return;
+            var drag = new Rectangle(widgetDragStart.X - SystemInformation.DragSize.Width / 2,
+                widgetDragStart.Y - SystemInformation.DragSize.Height / 2,
+                SystemInformation.DragSize.Width, SystemInformation.DragSize.Height);
+            if (!drag.Contains(e.Location))
+                widgetList.DoDragDrop(widgetList.Items[draggedWidgetIndex], DragDropEffects.Move);
+        }
+        private void WidgetListDragOver(object sender, DragEventArgs e)
+        {
+            e.Effect = e.Data.GetDataPresent(typeof(WidgetDefinition))
+                ? DragDropEffects.Move : DragDropEffects.None;
+        }
+        private void WidgetListDragDrop(object sender, DragEventArgs e)
+        {
+            if (draggedWidgetIndex < 0 || draggedWidgetIndex >= widgetList.Items.Count) return;
+            var point = widgetList.PointToClient(new Point(e.X, e.Y));
+            var target = widgetList.IndexFromPoint(point);
+            if (target == ListBox.NoMatches)
+                target = widgetList.Items.Count;
+            else if (point.Y > widgetList.GetItemRectangle(target).Top +
+                widgetList.GetItemRectangle(target).Height / 2)
+                target++;
+            var item = (WidgetDefinition)widgetList.Items[draggedWidgetIndex];
+            var isChecked = widgetList.GetItemChecked(draggedWidgetIndex);
+            widgetList.Items.RemoveAt(draggedWidgetIndex);
+            if (target > draggedWidgetIndex) target--;
+            target = Math.Max(0, Math.Min(target, widgetList.Items.Count));
+            widgetList.Items.Insert(target, item);
+            widgetList.SetItemChecked(target, isChecked);
+            widgetList.SelectedIndex = target;
+            draggedWidgetIndex = target;
         }
         private string T(string k) => fields.TryGetValue(k, out var c) ? c.Text : "";
         private bool B(string k) => fields.TryGetValue(k, out var c) && ((CheckBox)c).Checked;

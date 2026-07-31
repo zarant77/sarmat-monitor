@@ -129,8 +129,7 @@ namespace SarmatPlugin
                 type.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)?.Invoke(stream, null);
                 type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance)?.Invoke(
                     stream, new object[] { SarmatGStreamerPipeline });
-                MessageBox.Show("Sarmat RTSP video source started.", "Sarmat Plugin",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                SetHudSixteenByNine();
             }
             catch (TargetInvocationException ex)
             {
@@ -151,6 +150,27 @@ namespace SarmatPlugin
                 new[] { typeof(string) }, null);
             if (indexer == null) throw new InvalidOperationException("Mission Planner setting indexer is unavailable");
             indexer.SetValue(config, value, new object[] { key });
+        }
+
+        private void SetHudSixteenByNine()
+        {
+            var staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+            var hud = flightData.GetType().GetField("myhud", staticFlags)?.GetValue(null);
+            if (hud == null) throw new InvalidOperationException("Mission Planner HUD is unavailable");
+            var instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            var hudType = hud.GetType();
+            var property = hudType.GetProperty("SixteenXNine", instanceFlags);
+            if (property != null)
+                property.SetValue(hud, true, null);
+            else
+            {
+                var field = hudType.GetField("SixteenXNine", instanceFlags);
+                if (field == null) throw new MissingMemberException(hudType.FullName, "SixteenXNine");
+                field.SetValue(hud, true);
+            }
+            var resize = hudType.GetMethod("doResize", instanceFlags);
+            if (resize == null) throw new MissingMethodException(hudType.FullName, "doResize");
+            resize.Invoke(hud, null);
         }
 
         private static object GetStaticMember(Type type, string name)

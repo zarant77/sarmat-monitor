@@ -51,6 +51,9 @@ namespace SarmatPlugin.UI
 
             SizeChanged += (s, e) => ArrangeWidgets();
             grid.SizeChanged += (s, e) => ArrangeWidgets();
+            HandleCreated += (s, e) => ScheduleLayout();
+            ParentChanged += (s, e) => ScheduleLayout();
+            VisibleChanged += (s, e) => { if (Visible) ScheduleLayout(); };
         }
 
         public void Render(TelemetrySnapshot telemetry, ObsStatus obsStatus, RuijieStatus ruijieStatus,
@@ -96,10 +99,7 @@ namespace SarmatPlugin.UI
                     SetWidget(definition.Id, definition.Title, item.Value, WidgetStatus.Normal);
             }
             if (!hasTelemetryContent)
-            {
-                hasTelemetryContent = true;
-                ArrangeWidgets();
-            }
+                hasTelemetryContent = ArrangeWidgets();
 
         }
 
@@ -112,8 +112,12 @@ namespace SarmatPlugin.UI
 
         private void UpdateVisibleWidgets(IEnumerable<string> enabled)
         {
-            var selected = new HashSet<string>(enabled ?? WidgetCatalog.DefaultIds, StringComparer.OrdinalIgnoreCase);
-            var ordered = WidgetCatalog.Definitions.Where(x => selected.Contains(x.Id)).ToArray();
+            var definitions = WidgetCatalog.Definitions.ToDictionary(x => x.Id,
+                StringComparer.OrdinalIgnoreCase);
+            var ordered = (enabled ?? WidgetCatalog.DefaultIds)
+                .Where(definitions.ContainsKey)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(x => definitions[x]).ToArray();
             var signature = string.Join("|", ordered.Select(x => x.Id));
             if (signature == enabledSignature) return;
 
@@ -126,9 +130,10 @@ namespace SarmatPlugin.UI
             ArrangeWidgets();
         }
 
-        private void ArrangeWidgets()
+        private bool ArrangeWidgets()
         {
-            if (grid.ClientSize.Width <= 0 || grid.Controls.Count == 0) return;
+            if (grid.ClientSize.Width <= 0 || grid.ClientSize.Height <= 0 ||
+                grid.Controls.Count == 0) return false;
             var count = grid.Controls.Count;
             var availableWidth = Math.Max(20, grid.ClientSize.Width - grid.Padding.Horizontal);
             var availableHeight = Math.Max(20, grid.ClientSize.Height - grid.Padding.Vertical);
@@ -180,6 +185,20 @@ namespace SarmatPlugin.UI
                 widget.ApplyFontSizes(bestHeaderSize, bestValueSize);
             }
             grid.ResumeLayout(true);
+            grid.Invalidate(true);
+            return true;
+        }
+
+        private void ScheduleLayout()
+        {
+            if (!IsHandleCreated || IsDisposed || Disposing) return;
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed || Disposing) return;
+                PerformLayout();
+                grid.PerformLayout();
+                ArrangeWidgets();
+            }));
         }
 
         private float FittingFontSize(bool title, int width, int height)
