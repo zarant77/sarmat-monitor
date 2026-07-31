@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Linq;
+using System.IO;
+using System.Runtime.Serialization.Json;
 using SarmatPlugin.Core;
 using SarmatPlugin.Infrastructure;
 using SarmatPlugin.Integration;
@@ -21,12 +23,14 @@ namespace SarmatPlugin.Tests
             Run("OBS authentication matches v5 example", ObsAuthentication);
             Run("OBS recording control request envelopes", ObsRecordingRequests);
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
+            Run("Takeoff mode warning only checks the arming transition", TakeoffModeWarning);
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
             Run("Widget catalog defaults are valid and unique", WidgetDefaults);
             Run("Mission Planner scalar telemetry is discovered dynamically", DynamicTelemetry);
             Run("Mission Planner HUD visibility adapter", HudVisibility);
+            Run("HUD settings dictionary JSON round trip", HudSettingsRoundTrip);
             Run("Sarmat GStreamer pipeline targets Mission Planner appsink", GStreamerPipeline);
             Run("Log sanitizer redacts credentials", Sanitizer);
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
@@ -110,6 +114,22 @@ namespace SarmatPlugin.Tests
             tracker.Confirm(false);
             Equal(null, tracker.PendingCommand(false));
         }
+        private static void TakeoffModeWarning()
+        {
+            var tracker = new TakeoffModeWarningTracker();
+            Equal(false, tracker.Update(false, "AltHold"));
+            Equal(true, tracker.Update(true, "AltHold"));
+            Equal(true, tracker.Update(true, "Loiter"));
+            Equal(false, tracker.Update(true, "PostHold"));
+            Equal(false, tracker.Update(true, "AltHold"));
+            Equal(false, tracker.Update(false, "AltHold"));
+            Equal(false, tracker.Update(true, "POSHOLD"));
+
+            var correctAtTakeoff = new TakeoffModeWarningTracker();
+            correctAtTakeoff.Update(false, "AltHold");
+            Equal(false, correctAtTakeoff.Update(true, "Pos Hold"));
+            Equal(false, correctAtTakeoff.Update(true, "AltHold"));
+        }
         private static void CryptoRoundTrip()
         {
             var encrypted=RuijieCrypto.EncryptPassword("secret","key12345",new byte[]{1,2,3,4,5,6,7,8});
@@ -175,6 +195,12 @@ namespace SarmatPlugin.Tests
             Equal(false, hud.batteryon);
             Equal(false, hud.displaygps);
             Equal(1, hud.ResizeCount);
+            Equal(false, adapter.Apply(new Dictionary<string, bool>
+            {
+                ["batteryon"] = false,
+                ["displaygps"] = false
+            }));
+            Equal(1, hud.ResizeCount);
         }
         private sealed class FakeHud
         {
@@ -182,6 +208,31 @@ namespace SarmatPlugin.Tests
             public bool displaygps { get; set; } = true;
             public int ResizeCount { get; private set; }
             public void doResize() { ResizeCount++; }
+        }
+        private static void HudSettingsRoundTrip()
+        {
+            var source = new PluginSettings
+            {
+                GStreamerWasStarted = true,
+                HudElements = new Dictionary<string, bool>
+                {
+                    ["batteryon"] = false,
+                    ["displayconninfo"] = false,
+                    ["displaygps"] = true
+                }
+            };
+            var serializer = new DataContractJsonSerializer(typeof(PluginSettings),
+                new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true });
+            using (var stream = new MemoryStream())
+            {
+                serializer.WriteObject(stream, source);
+                stream.Position = 0;
+                var loaded = (PluginSettings)serializer.ReadObject(stream);
+                Equal(3, loaded.HudElements.Count);
+                Equal(false, loaded.HudElements["batteryon"]);
+                Equal(false, loaded.HudElements["displayconninfo"]);
+                Equal(true, loaded.GStreamerWasStarted);
+            }
         }
         private static void GStreamerPipeline()
         {

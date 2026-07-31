@@ -12,6 +12,8 @@ namespace SarmatPlugin.Core
     public sealed class TelemetrySnapshot
     {
         public bool Armed { get; set; }
+        public bool Connected { get; set; }
+        public string FlightMode { get; set; }
         public double BatteryVoltage { get; set; }
         public int Satellites { get; set; }
         public double Hdop { get; set; }
@@ -90,6 +92,7 @@ namespace SarmatPlugin.Core
         [DataMember] public List<string> EnabledWidgets { get; set; } = WidgetCatalog.DefaultIds.ToList();
         [DataMember] public Dictionary<string, bool> HudElements { get; set; } =
             new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        [DataMember] public bool GStreamerWasStarted { get; set; }
 
         public void Normalize()
         {

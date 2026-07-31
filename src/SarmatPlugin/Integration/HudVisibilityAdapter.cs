@@ -26,16 +26,23 @@ namespace SarmatPlugin.Integration
             return result;
         }
 
-        public void Apply(IReadOnlyDictionary<string, bool> values)
+        public bool Apply(IReadOnlyDictionary<string, bool> values)
         {
-            if (hud == null || values == null) return;
+            if (hud == null || values == null || values.Count == 0) return false;
+            var changed = false;
             foreach (var item in values)
             {
                 var property = hud.GetType().GetProperty(item.Key, Flags);
                 if (property != null && property.CanWrite && property.PropertyType == typeof(bool))
+                {
+                    var current = (bool)property.GetValue(hud, null);
+                    if (current == item.Value) continue;
                     property.SetValue(hud, item.Value, null);
+                    changed = true;
+                }
             }
-            hud.GetType().GetMethod("doResize", Flags)?.Invoke(hud, null);
+            if (changed) hud.GetType().GetMethod("doResize", Flags)?.Invoke(hud, null);
+            return changed;
         }
     }
 }

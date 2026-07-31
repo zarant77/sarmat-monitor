@@ -14,6 +14,7 @@ namespace SarmatPlugin
         private readonly Func<object> currentState;
         private readonly SettingsStore store = new SettingsStore();
         private readonly AlertEngine alerts = new AlertEngine();
+        private readonly TakeoffModeWarningTracker takeoffModeWarning = new TakeoffModeWarningTracker();
         private readonly object sync = new object();
         private PluginSettings settings;
         private AppLog log;
@@ -23,7 +24,13 @@ namespace SarmatPlugin
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private bool disposed;
+        private bool takeoffWarningVisible;
+        private bool connectionInitialized;
+        private bool wasConnected;
         private HudVisibilityAdapter hudVisibility;
+        public event Action<bool> TakeoffWarningChanged;
+        public event Action VehicleConnected;
+        public bool ShouldRestoreGStreamer => settings.GStreamerWasStarted;
 
         public PluginRuntime(Func<object> currentState)
         {
@@ -48,10 +55,40 @@ namespace SarmatPlugin
             if (settings.HudElements.Count > 0) hudVisibility.Apply(settings.HudElements);
         }
 
+        public void MarkGStreamerStarted()
+        {
+            if (settings.GStreamerWasStarted) return;
+            settings.GStreamerWasStarted = true;
+            store.Save(settings);
+        }
+
         public void Tick()
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
+            // Mission Planner can restore its own HUD flags after Activate/connect.
+            // Reconcile on every tick; the adapter only redraws when a value differs.
+            hudVisibility?.Apply(settings.HudElements);
+            if (!connectionInitialized)
+            {
+                connectionInitialized = true;
+                wasConnected = telemetry.Connected;
+                if (telemetry.Connected) VehicleConnected?.Invoke();
+            }
+            else if (telemetry.Connected && !wasConnected)
+            {
+                wasConnected = true;
+                hudVisibility?.Apply(settings.HudElements);
+                VehicleConnected?.Invoke();
+            }
+            else if (!telemetry.Connected)
+                wasConnected = false;
+            var warning = takeoffModeWarning.Update(telemetry.Armed, telemetry.FlightMode);
+            if (warning != takeoffWarningVisible)
+            {
+                takeoffWarningVisible = warning;
+                TakeoffWarningChanged?.Invoke(warning);
+            }
             RuijieStatus currentRuijie;
             ObsStatus currentObs;
             lock (sync)

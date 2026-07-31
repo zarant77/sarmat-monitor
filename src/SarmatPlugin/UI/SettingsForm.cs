@@ -172,7 +172,8 @@ namespace SarmatPlugin.UI
                         .Where((x, index) => widgetList.GetItemChecked(index))
                         .Select(x => x.Id).ToList(),
                 HudElements=HudElementCatalog.Elements.ToDictionary(x => x.Key,
-                    x => B("Hud:" + x.Key), StringComparer.OrdinalIgnoreCase)
+                    x => B("Hud:" + x.Key), StringComparer.OrdinalIgnoreCase),
+                GStreamerWasStarted=settings.GStreamerWasStarted
             };
         }
         private void WidgetListMouseDown(object sender, MouseEventArgs e)

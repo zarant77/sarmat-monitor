@@ -5,6 +5,11 @@ responsive widget grid displays flight telemetry and monitors OBS Studio recordi
 a Ruijie wireless bridge.
 All warnings and audio are gated by the vehicle's `ARMED` state.
 
+At the `DISARMED → ARMED` transition, Sarmat checks the Mission Planner flight mode. If the
+vehicle was armed outside PostHold/PosHold, a red warning is shown over the main HUD. Reaching
+PostHold dismisses it for the remainder of that armed flight; later mode changes do not reactivate
+it. Disarming resets the check for the next takeoff.
+
 ## Compatibility and API
 
 - Mission Planner plugin API: `MissionPlanner.Plugin.Plugin`
@@ -135,7 +140,8 @@ The **Mission Planner UI** settings tab controls native HUD elements without rem
 Mission Planner controls. It can toggle battery indicators, cell voltage, altitude, speed,
 heading, roll/pitch, cross-track error, GPS, EKF, vibration, pre-arm and connection status,
 AOA/SSA, and icons versus text. The current HUD state is used on first setup; saved choices are
-then restored and applied through the native HUD resize routine.
+then restored after Mission Planner startup and after each vehicle connection, using the native
+HUD resize routine.
 
 In addition to the built-in widgets, the plugin discovers every public scalar telemetry property
 and field exposed by the installed Mission Planner `CurrentState` at startup. Numeric, Boolean,
@@ -149,6 +155,9 @@ in Mission Planner's native `gstreamer_url` setting and starts it through
 `FlightData.hudGStreamer`; it does not launch an external player. Successful startup is silent;
 an error dialog is shown only when the source cannot be started. After startup, the plugin sets
 the native Mission Planner HUD to 16:9 and invokes its normal resize routine.
+Once the Sarmat GStreamer source has started successfully, that fact is persisted. On the next
+Mission Planner run, the source is restored on the first vehicle connection; later
+disconnected-to-connected transitions also restart it once.
 
 ## Settings and logs
 

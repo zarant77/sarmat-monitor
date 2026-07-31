@@ -17,7 +17,9 @@ namespace SarmatPlugin.Infrastructure
             }
             using (var stream = File.OpenRead(AppPaths.Settings))
             {
-                var settings = (PluginSettings)new DataContractJsonSerializer(typeof(PluginSettings)).ReadObject(stream);
+                var serializer = new DataContractJsonSerializer(typeof(PluginSettings),
+                    new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true });
+                var settings = (PluginSettings)serializer.ReadObject(stream);
                 settings.Normalize();
                 return settings;
             }

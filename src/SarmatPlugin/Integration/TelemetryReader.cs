@@ -18,6 +18,8 @@ namespace SarmatPlugin.Integration
             var snapshot = new TelemetrySnapshot
             {
                 Armed = ReadBool(cs, "armed"),
+                Connected = ReadBool(cs, "connected"),
+                FlightMode = Convert.ToString(Member(cs, "mode"), CultureInfo.InvariantCulture) ?? "",
                 BatteryVoltage = ReadDouble(cs, "battery_voltage"),
                 Satellites = (int)ReadDouble(cs, "satcount"),
                 Hdop = ReadDouble(cs, "gpshdop"),

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Reflection;
+using System.Drawing;
 using System.Windows.Forms;
 using MissionPlanner.Plugin;
 using SarmatPlugin.Infrastructure;
@@ -15,6 +16,7 @@ namespace SarmatPlugin
         private IList originalTabs;
         private object flightData;
         private SarmatPlugin.UI.SarmatPanel panel;
+        private Label takeoffModeWarning;
         internal const string SarmatGStreamerPipeline =
             "rtspsrc location=rtsp://192.168.69.5:554/stream=0 latency=100 ! application/x-rtp ! " +
             "decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! " +
@@ -35,6 +37,8 @@ namespace SarmatPlugin
             try
             {
                 runtime = new PluginRuntime(() => Host.cs);
+                runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
+                runtime.VehicleConnected += RestoreVideoOnConnect;
                 panel = runtime.CreatePanel();
                 panel.VideoSourceRequested += (s, e) => StartSarmatVideo();
                 var mainType = Host.MainForm.GetType();
@@ -44,6 +48,7 @@ namespace SarmatPlugin
                 var hud = flightData?.GetType().GetField("myhud",
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
                 runtime.ConfigureHud(hud);
+                InstallTakeoffWarning(hud as Control);
                 hostTabs = FindNamedControl(flightData as Control, "tabControlactions") as TabControl;
                 if (hostTabs == null) throw new InvalidOperationException("Mission Planner Flight Data action tabs were not found");
 
@@ -90,6 +95,12 @@ namespace SarmatPlugin
                     sarmatTab.Dispose();
                 });
                 runtime?.Dispose();
+                if (takeoffModeWarning != null)
+                {
+                    takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
+                    takeoffModeWarning.Dispose();
+                    takeoffModeWarning = null;
+                }
                 return true;
             }
             catch { return false; }
@@ -109,6 +120,36 @@ namespace SarmatPlugin
         private static void OnUi(Control control, Action action)
         {
             if (control.InvokeRequired) control.Invoke(action); else action();
+        }
+
+        private void InstallTakeoffWarning(Control hud)
+        {
+            if (hud == null) throw new InvalidOperationException("Mission Planner HUD control is unavailable");
+            takeoffModeWarning = new Label
+            {
+                Name = "SarmatTakeoffModeWarning",
+                Text = "WARNING: TAKEOFF MODE IS NOT PostHold",
+                Dock = DockStyle.Top,
+                Height = 48,
+                BackColor = Color.FromArgb(220, 190, 0, 0),
+                ForeColor = Color.White,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 15, FontStyle.Bold),
+                Visible = false
+            };
+            hud.Controls.Add(takeoffModeWarning);
+            takeoffModeWarning.BringToFront();
+        }
+
+        private void SetTakeoffWarningVisible(bool visible)
+        {
+            var warning = takeoffModeWarning;
+            if (warning == null || warning.IsDisposed) return;
+            OnUi(warning, () =>
+            {
+                warning.Visible = visible;
+                if (visible) warning.BringToFront();
+            });
         }
 
         private void StartSarmatVideo()
@@ -133,6 +174,7 @@ namespace SarmatPlugin
                 type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance)?.Invoke(
                     stream, new object[] { SarmatGStreamerPipeline });
                 SetHudSixteenByNine();
+                runtime?.MarkGStreamerStarted();
             }
             catch (TargetInvocationException ex)
             {
@@ -142,6 +184,14 @@ namespace SarmatPlugin
             {
                 ShowVideoError(ex);
             }
+        }
+
+        private void RestoreVideoOnConnect()
+        {
+            if (runtime?.ShouldRestoreGStreamer != true) return;
+            var control = flightData as Control;
+            if (control == null) return;
+            OnUi(control, StartSarmatVideo);
         }
 
         private void SaveMissionPlannerSetting(string key, string value)
