@@ -60,6 +60,29 @@ scripts\build.bat "C:\Program Files (x86)\Mission Planner"
 The script restores packages, builds Release, runs the unit-test executable, and creates `dist`.
 For another installed copy, pass its directory as `MissionPlannerPath`.
 
+## GitHub Release build
+
+The workflow at `.github/workflows/release.yml` builds on `windows-latest`, runs the same Release
+build and tests, packages `dist`, and uploads the ZIP as a workflow artifact. CI downloads and
+caches the official Mission Planner **1.3.83** ZIP so the plugin is compiled against the verified,
+reproducible API version.
+
+To create a GitHub Release, create and push a version tag:
+
+```powershell
+git switch main
+git pull
+git tag -a v1.0.0 -m "Sarmat Plugin v1.0.0"
+git push origin v1.0.0
+```
+
+Pushing a tag matching `v*` starts **Release build** in GitHub Actions. When the build and tests
+pass, the workflow creates a GitHub Release named after the tag and attaches
+`SarmatPlugin-v1.0.0.zip`. Use a new tag for each release, for example `v1.0.1` or `v1.1.0`.
+
+For a build without creating a GitHub Release, open **GitHub → Actions → Release build → Run
+workflow**. The resulting ZIP is available in the run's **Artifacts** section.
+
 ## Install
 
 Run an elevated PowerShell when Mission Planner is installed under `Program Files`:

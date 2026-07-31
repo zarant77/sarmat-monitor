@@ -1,0 +1,86 @@
+name: Release build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      MP_VERSION: "1.3.83"
+      MP_URL: "https://firmware.ardupilot.org/Tools/MissionPlanner/MissionPlanner-1.3.83.zip"
+      MP_CACHE: "${{ github.workspace }}\\.ci\\mission-planner-1.3.83"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache Mission Planner 1.3.83
+        id: mission-planner-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MP_CACHE }}
+          key: mission-planner-${{ runner.os }}-${{ env.MP_VERSION }}
+
+      - name: Download Mission Planner build references
+        if: steps.mission-planner-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "MissionPlanner-$env:MP_VERSION.zip"
+          New-Item -ItemType Directory -Force -Path $env:MP_CACHE | Out-Null
+          Invoke-WebRequest -Uri $env:MP_URL -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:MP_CACHE -Force
+
+      - name: Locate Mission Planner
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -LiteralPath $env:MP_CACHE -Filter MissionPlanner.exe -Recurse |
+            Select-Object -First 1
+          if ($null -eq $exe) { throw "MissionPlanner.exe was not found in the downloaded archive." }
+          "MISSION_PLANNER_PATH=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Release and run tests
+        shell: pwsh
+        run: |
+          .\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "manual-$env:GITHUB_RUN_NUMBER" }
+          $archive = "artifacts\SarmatPlugin-$version.zip"
+          Compress-Archive -Path .\dist\* -DestinationPath $archive -Force
+          "RELEASE_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SarmatPlugin-release-${{ github.run_number }}
+          path: ${{ env.RELEASE_ARCHIVE }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if (gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY 2>$null) {
+            gh release upload $env:GITHUB_REF_NAME $env:RELEASE_ARCHIVE --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $env:GITHUB_REF_NAME $env:RELEASE_ARCHIVE `
+              --generate-notes --title "Sarmat Plugin $env:GITHUB_REF_NAME" `
+              --repo $env:GITHUB_REPOSITORY
+          }

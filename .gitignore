@@ -4,6 +4,8 @@
 [Dd]ebug/
 [Rr]elease/
 dist/
+artifacts/
+.ci/
 
 # Visual Studio / MSBuild
 .vs/
