@@ -71,7 +71,6 @@ namespace SarmatPlugin.Core
         [DataMember] public double SafeDistanceToHomeMeters { get; set; } = 50.0;
         [DataMember] public double ActivationDebounceSeconds { get; set; } = 2;
         [DataMember] public double RecoveryDebounceSeconds { get; set; } = 2;
-        [DataMember] public double RepeatIntervalSeconds { get; set; } = 10;
         [DataMember] public double ArmedGracePeriodSeconds { get; set; } = 3;
         [DataMember] public string ObsEndpoint { get; set; } = "ws://127.0.0.1:4455";
         [DataMember] public string ObsPassword { get; set; } = "";
@@ -86,6 +85,8 @@ namespace SarmatPlugin.Core
         [DataMember] public bool AudioEnabled { get; set; } = true;
         [DataMember] public bool AudioMuted { get; set; }
         [DataMember] public double AudioVolume { get; set; } = 0.8;
+        [DataMember] public int AudioSignalRepeatCount { get; set; } = 3;
+        [DataMember] public string AudioWarningSoundPath { get; set; } = "";
         [DataMember] public bool ShowPanel { get; set; } = true;
         [DataMember] public bool StartAutomatically { get; set; } = true;
         [DataMember] public bool DebugLogging { get; set; }
@@ -94,7 +95,7 @@ namespace SarmatPlugin.Core
             new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         [DataMember] public bool GStreamerWasStarted { get; set; }
         [DataMember] public bool LimaEnabled { get; set; }
-        [DataMember] public int LimaRcChannel { get; set; } = 7;
+        [DataMember] public int LimaRcChannel { get; set; } = 12;
         [DataMember] public int LimaPwmThreshold { get; set; } = 1800;
         [DataMember] public bool LimaPressedWhenHigh { get; set; } = true;
         [DataMember] public string LimaFlightMode { get; set; } = "AltHold";
@@ -108,13 +109,15 @@ namespace SarmatPlugin.Core
             if (SafeDistanceToHomeMeters <= 0) SafeDistanceToHomeMeters = 50.0;
             ActivationDebounceSeconds = Math.Max(0, ActivationDebounceSeconds);
             RecoveryDebounceSeconds = Math.Max(0, RecoveryDebounceSeconds);
-            RepeatIntervalSeconds = Math.Max(1, RepeatIntervalSeconds);
             ArmedGracePeriodSeconds = Math.Max(0, ArmedGracePeriodSeconds);
             ObsReconnectSeconds = Math.Max(1, ObsReconnectSeconds);
             RuijiePollSeconds = Math.Max(0.5, RuijiePollSeconds);
             RuijieRequestTimeoutSeconds = Math.Max(1, RuijieRequestTimeoutSeconds);
             RuijieStaleSeconds = Math.Max(RuijiePollSeconds, RuijieStaleSeconds);
             AudioVolume = Math.Max(0, Math.Min(1, AudioVolume));
+            if (AudioSignalRepeatCount <= 0) AudioSignalRepeatCount = 3;
+            AudioSignalRepeatCount = Math.Max(1, Math.Min(10, AudioSignalRepeatCount));
+            AudioWarningSoundPath = (AudioWarningSoundPath ?? "").Trim();
             RuijieUsername = string.IsNullOrWhiteSpace(RuijieUsername) ? "admin" : RuijieUsername.Trim();
             if (EnabledWidgets == null)
                 EnabledWidgets = WidgetCatalog.DefaultIds.ToList();
@@ -128,7 +131,7 @@ namespace SarmatPlugin.Core
                     .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             if (!LimaSettingsInitialized)
             {
-                LimaRcChannel = 7;
+                LimaRcChannel = 12;
                 LimaPwmThreshold = 1800;
                 LimaPressedWhenHigh = true;
                 LimaFlightMode = "AltHold";

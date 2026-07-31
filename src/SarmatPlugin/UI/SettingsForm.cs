@@ -54,7 +54,6 @@ namespace SarmatPlugin.UI
             Number(p, "Safe dist to home (m)", "SafeDistanceToHomeMeters", settings.SafeDistanceToHomeMeters, 1, 100000, 0);
             Number(p, "Activation debounce (s)", "ActivationDebounceSeconds", settings.ActivationDebounceSeconds, 0, 60, 1);
             Number(p, "Recovery debounce (s)", "RecoveryDebounceSeconds", settings.RecoveryDebounceSeconds, 0, 60, 1);
-            Number(p, "Repeat interval (s)", "RepeatIntervalSeconds", settings.RepeatIntervalSeconds, 1, 3600, 1);
             Number(p, "ARMED grace period (s)", "ArmedGracePeriodSeconds", settings.ArmedGracePeriodSeconds, 0, 60, 1);
             return p;
         }
@@ -86,6 +85,8 @@ namespace SarmatPlugin.UI
             Check(p, "Enabled", "AudioEnabled", settings.AudioEnabled);
             Check(p, "Muted", "AudioMuted", settings.AudioMuted);
             Number(p, "Volume (0–100%)", "AudioVolume", settings.AudioVolume * 100, 0, 100, 0);
+            Number(p, "Signal repeat count", "AudioSignalRepeatCount", settings.AudioSignalRepeatCount, 1, 10, 0);
+            FilePath(p, "Warning sound (WAV)", "AudioWarningSoundPath", settings.AudioWarningSoundPath);
             ButtonRow(p, "Test warning", () => testAudio(Severity.Warning));
             ButtonRow(p, "Test critical", () => testAudio(Severity.Critical));
             ButtonRow(p, "Test restored", () => testAudio(Severity.Ok));
@@ -170,13 +171,15 @@ namespace SarmatPlugin.UI
                 AlertsEnabled=B("AlertsEnabled"), MinimumSatellites=(int)N("MinimumSatellites"), MaximumHdop=N("MaximumHdop"),
                 MinimumBatteryVoltage=N("MinimumBatteryVoltage"), SafeDistanceToHomeMeters=N("SafeDistanceToHomeMeters"),
                 ActivationDebounceSeconds=N("ActivationDebounceSeconds"),
-                RecoveryDebounceSeconds=N("RecoveryDebounceSeconds"), RepeatIntervalSeconds=N("RepeatIntervalSeconds"),
+                RecoveryDebounceSeconds=N("RecoveryDebounceSeconds"),
                 ArmedGracePeriodSeconds=N("ArmedGracePeriodSeconds"), ObsEndpoint=T("ObsEndpoint"), ObsPassword=T("ObsPassword"),
                 ObsReconnectSeconds=N("ObsReconnectSeconds"), RuijieAddress=T("RuijieAddress"), RuijieUsername=T("RuijieUsername"),
                 RuijiePassword=T("RuijiePassword"), RuijiePollSeconds=N("RuijiePollSeconds"),
                 RuijieRequestTimeoutSeconds=N("RuijieRequestTimeoutSeconds"), RuijieStaleSeconds=N("RuijieStaleSeconds"),
                 RuijieAllowInsecureTls=B("RuijieAllowInsecureTls"), AudioEnabled=B("AudioEnabled"), AudioMuted=B("AudioMuted"),
-                AudioVolume=N("AudioVolume")/100, ShowPanel=B("ShowPanel"), StartAutomatically=B("StartAutomatically"),
+                AudioVolume=N("AudioVolume")/100, AudioSignalRepeatCount=(int)N("AudioSignalRepeatCount"),
+                AudioWarningSoundPath=T("AudioWarningSoundPath"),
+                ShowPanel=B("ShowPanel"), StartAutomatically=B("StartAutomatically"),
                 DebugLogging=B("DebugLogging"),
                 EnabledWidgets=widgetList == null
                     ? WidgetCatalog.DefaultIds.ToList()
@@ -256,6 +259,31 @@ namespace SarmatPlugin.UI
             p.Controls.Add(new Label { Text=label, AutoSize=true });
             var c=new ComboBox { Width=220, DropDownStyle=ComboBoxStyle.DropDown, Text=value??"" };
             c.Items.AddRange(options); fields[key]=c; p.Controls.Add(c);
+        }
+        private void FilePath(TableLayoutPanel p, string label, string key, string value)
+        {
+            p.Controls.Add(new Label { Text=label, AutoSize=true });
+            var row=new FlowLayoutPanel { AutoSize=true, Margin=new Padding(0), WrapContents=false };
+            var path=new TextBox { Text=value??"", Width=330 };
+            var browse=new Button { Text="Browse…", AutoSize=true };
+            browse.Click += (s,e) =>
+            {
+                using (var dialog=new OpenFileDialog
+                {
+                    Title="Select warning sound",
+                    Filter="WAV audio (*.wav)|*.wav|All files (*.*)|*.*",
+                    CheckFileExists=true
+                })
+                {
+                    if (!string.IsNullOrWhiteSpace(path.Text))
+                    {
+                        try { dialog.InitialDirectory=System.IO.Path.GetDirectoryName(path.Text); }
+                        catch { }
+                    }
+                    if (dialog.ShowDialog(this)==DialogResult.OK) path.Text=dialog.FileName;
+                }
+            };
+            row.Controls.Add(path); row.Controls.Add(browse); fields[key]=path; p.Controls.Add(row);
         }
         private void ButtonRow(TableLayoutPanel p, string label, Action action)
         {

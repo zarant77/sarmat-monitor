@@ -15,8 +15,10 @@ it. Disarming resets the check for the next takeoff.
 The **Lima** settings tab passively monitors one Mission Planner `CurrentState.chNin` RC input
 channel. It never sends RC overrides and therefore does not block the button's existing function.
 The trigger can be configured for PWM above or below a threshold. On the released-to-pressed edge,
-Sarmat calls Mission Planner's native MAVLink `setMode` once; holding the button does not repeat the
-command. The default selected mode is `AltHold`, and all Lima settings persist in `settings.json`.
+Sarmat remembers the current flight mode and calls Mission Planner's native MAVLink `setMode` once.
+On the pressed-to-released edge, it restores that remembered mode once. Holding either position
+does not repeat commands. The default input is RC12, the default pressed mode is `AltHold`, and all
+Lima settings persist in `settings.json`.
 
 ## Compatibility and API
 
@@ -128,8 +130,12 @@ After arming and the configured grace period:
 - HDOP above threshold: Warning
 
 Activation and recovery use independent debounce periods. Recovery hysteresis is `+0.5 V` for
-battery, `+1` satellite, and `-0.05` HDOP. Critical audio supersedes Warning audio. Only one pattern
-runs at a time, repeats use the configured interval, and a restored pattern plays after full recovery.
+battery, `+1` satellite, and `-0.05` HDOP. Each alert kind can enqueue sound only once during an
+armed flight; battery, satellites, HDOP, OBS, and Ruijie are tracked independently. Disarming
+clears all per-flight audio counters and cancels pending playback. **Signal repeat count** controls
+the number of beeps inside each one-time signal (default `3`, range `1–10`).
+The Audio tab also accepts a custom PCM WAV warning file. An empty path uses the embedded sound;
+missing, unreadable, or invalid custom files safely fall back to the embedded `warning.wav`.
 
 The dashboard colors Sat Count and GPS HDOP against their configured limits. Distance to home uses
 the configurable **Safe dist to home** value (default `50 m`): up to half is green, between half and

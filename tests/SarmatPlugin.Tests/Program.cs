@@ -20,6 +20,7 @@ namespace SarmatPlugin.Tests
             Run("Alert engine debounce and recovery", DebounceRecovery);
             Run("Alert engine hysteresis", Hysteresis);
             Run("Critical priority and all reasons", Priority);
+            Run("Audio alerts are announced once per kind per flight", PerFlightAudioAlerts);
             Run("OBS authentication matches v5 example", ObsAuthentication);
             Run("OBS recording control request envelopes", ObsRecordingRequests);
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
@@ -83,6 +84,20 @@ namespace SarmatPlugin.Tests
             var result=e.Update(T(battery:43,sats:10,hdop:2),O(false,false),R(false),s,n);
             Equal(Severity.Critical,result.Severity); Equal(5,result.Reasons.Count);
         }
+        private static void PerFlightAudioAlerts()
+        {
+            var tracker = new PerFlightAlertTracker();
+            var battery = new AlertReason { Kind=AlertKind.Battery, Severity=Severity.Critical };
+            var sats = new AlertReason { Kind=AlertKind.Satellites, Severity=Severity.Warning };
+            var hdop = new AlertReason { Kind=AlertKind.Hdop, Severity=Severity.Warning };
+            Equal(2, tracker.SelectNew(new[] { battery, sats }, true).Count);
+            Equal(0, tracker.SelectNew(new[] { battery, sats }, true).Count);
+            Equal(0, tracker.SelectNew(new AlertReason[0], true).Count);
+            Equal(0, tracker.SelectNew(new[] { battery }, true).Count);
+            Equal(1, tracker.SelectNew(new[] { battery, hdop }, true).Count);
+            Equal(0, tracker.SelectNew(new AlertReason[0], false).Count);
+            Equal(1, tracker.SelectNew(new[] { battery }, true).Count);
+        }
         private static void ObsAuthentication()
         {
             Equal("lHWJEH5mqVrESU/FA5vyrWKrpu/kWC/aALVmIhPmtlw=",
@@ -133,15 +148,17 @@ namespace SarmatPlugin.Tests
         }
         private static void LimaEdge()
         {
-            var edge = new RisingEdgeTrigger();
-            Equal(false, edge.Update(false));
-            Equal(true, edge.Update(true));
-            Equal(false, edge.Update(true));
-            Equal(false, edge.Update(true));
-            Equal(false, edge.Update(false));
-            Equal(true, edge.Update(true));
-            edge.Reset();
-            Equal(true, edge.Update(true));
+            var latch = new LimaModeLatch();
+            Equal(null, latch.Update(false, "PosHold", "AltHold"));
+            Equal("AltHold", latch.Update(true, "PosHold", "AltHold"));
+            Equal(null, latch.Update(true, "AltHold", "AltHold"));
+            Equal(null, latch.Update(true, "Loiter", "AltHold"));
+            Equal("PosHold", latch.Update(false, "AltHold", "AltHold"));
+            Equal(null, latch.Update(false, "PosHold", "AltHold"));
+            Equal("AltHold", latch.Update(true, "Loiter", "AltHold"));
+            Equal("Loiter", latch.Update(false, "AltHold", "AltHold"));
+            latch.Reset();
+            Equal(null, latch.Update(false, "AltHold", "AltHold"));
 
             var settings = new PluginSettings
             {
@@ -154,6 +171,11 @@ namespace SarmatPlugin.Tests
             Equal(16, settings.LimaRcChannel);
             Equal(2200, settings.LimaPwmThreshold);
             Equal("AltHold", settings.LimaFlightMode);
+
+            var migrated = new PluginSettings { LimaSettingsInitialized = false };
+            migrated.Normalize();
+            Equal(12, migrated.LimaRcChannel);
+            Equal(1800, migrated.LimaPwmThreshold);
         }
         private static void CryptoRoundTrip()
         {
@@ -239,6 +261,7 @@ namespace SarmatPlugin.Tests
             var source = new PluginSettings
             {
                 GStreamerWasStarted = true,
+                AudioWarningSoundPath = @"C:\sounds\custom-warning.wav",
                 HudElements = new Dictionary<string, bool>
                 {
                     ["batteryon"] = false,
@@ -257,6 +280,7 @@ namespace SarmatPlugin.Tests
                 Equal(false, loaded.HudElements["batteryon"]);
                 Equal(false, loaded.HudElements["displayconninfo"]);
                 Equal(true, loaded.GStreamerWasStarted);
+                Equal(@"C:\sounds\custom-warning.wav", loaded.AudioWarningSoundPath);
             }
         }
         private static void GStreamerPipeline()

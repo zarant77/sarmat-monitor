@@ -15,7 +15,7 @@ namespace SarmatPlugin
         private readonly SettingsStore store = new SettingsStore();
         private readonly AlertEngine alerts = new AlertEngine();
         private readonly TakeoffModeWarningTracker takeoffModeWarning = new TakeoffModeWarningTracker();
-        private readonly RisingEdgeTrigger limaTrigger = new RisingEdgeTrigger();
+        private readonly LimaModeLatch limaModeLatch = new LimaModeLatch();
         private readonly object sync = new object();
         private PluginSettings settings;
         private AppLog log;
@@ -68,7 +68,7 @@ namespace SarmatPlugin
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
-            UpdateLima();
+            UpdateLima(telemetry);
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
             hudVisibility?.Apply(settings.HudElements);
@@ -107,23 +107,25 @@ namespace SarmatPlugin
             panel.Render(telemetry, currentObs, currentRuijie, snapshot, settings);
         }
 
-        private void UpdateLima()
+        private void UpdateLima(TelemetrySnapshot telemetry)
         {
             if (!settings.LimaEnabled)
             {
-                limaTrigger.Reset();
+                limaModeLatch.Reset();
                 return;
             }
             var pwm = new TelemetryReader(currentState).ReadRcInput(settings.LimaRcChannel);
             if (pwm < 800 || pwm > 2200)
             {
-                limaTrigger.Reset();
+                limaModeLatch.Reset();
                 return;
             }
             var pressed = settings.LimaPressedWhenHigh
                 ? pwm >= settings.LimaPwmThreshold
                 : pwm <= settings.LimaPwmThreshold;
-            if (limaTrigger.Update(pressed)) LimaModeRequested?.Invoke(settings.LimaFlightMode);
+            var requestedMode = limaModeLatch.Update(pressed, telemetry.FlightMode,
+                settings.LimaFlightMode);
+            if (!string.IsNullOrWhiteSpace(requestedMode)) LimaModeRequested?.Invoke(requestedMode);
         }
 
         private void StartWorkers()

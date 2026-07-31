@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Media;
 using System.Reflection;
@@ -12,9 +13,11 @@ namespace SarmatPlugin.Infrastructure
     public sealed class AudioService : IDisposable
     {
         private readonly object sync = new object();
+        private readonly PerFlightAlertTracker tracker = new PerFlightAlertTracker();
+        private readonly Queue<Severity> pending = new Queue<Severity>();
         private PluginSettings settings;
         private CancellationTokenSource cancellation = new CancellationTokenSource();
-        private Severity active;
+        private bool workerRunning;
         private bool disposed;
 
         public AudioService(PluginSettings settings) { this.settings = settings; }
@@ -24,57 +27,89 @@ namespace SarmatPlugin.Infrastructure
         {
             lock (sync)
             {
-                if (!armed || snapshot.Severity < Severity.Warning || !CanPlay)
+                if (!armed)
                 {
+                    tracker.Reset();
                     CancelLocked();
-                    if (snapshot.Restored && armed && CanPlay) StartLocked(Severity.Ok, false);
                     return;
                 }
-                if (active != snapshot.Severity)
+                if (!CanPlay)
                 {
-                    CancelLocked();
-                    StartLocked(snapshot.Severity, true);
+                    CancelPlaybackLocked();
+                    return;
                 }
+                foreach (var reason in tracker.SelectNew(snapshot.Reasons, true))
+                    pending.Enqueue(reason.Severity);
+                StartWorkerLocked();
             }
         }
 
         public void Test(Severity severity)
         {
-            lock (sync) { CancelLocked(); StartLocked(severity, false); }
+            lock (sync)
+            {
+                if (!CanPlay) return;
+                pending.Enqueue(severity);
+                StartWorkerLocked();
+            }
         }
-        public void Stop() { lock (sync) CancelLocked(); }
+
+        public void Stop() { lock (sync) CancelPlaybackLocked(); }
         private bool CanPlay => !disposed && settings.AudioEnabled && !settings.AudioMuted && settings.AudioVolume > 0;
-        private void StartLocked(Severity severity, bool repeat)
+
+        private void StartWorkerLocked()
         {
-            if (!CanPlay) return;
-            active = severity;
-            cancellation = new CancellationTokenSource();
+            if (workerRunning || pending.Count == 0 || !CanPlay) return;
+            workerRunning = true;
             var token = cancellation.Token;
-            var interval = TimeSpan.FromSeconds(settings.RepeatIntervalSeconds);
             Task.Run(async () =>
             {
-                do
+                while (!token.IsCancellationRequested)
                 {
-                    await PlayPatternAsync(severity, settings.AudioVolume, token).ConfigureAwait(false);
-                    if (!repeat) break;
-                    await Task.Delay(interval, token).ConfigureAwait(false);
-                } while (!token.IsCancellationRequested);
-            }, token).ContinueWith(_ => { }, TaskScheduler.Default);
+                    Severity severity;
+                    double volume;
+                    int repeatCount;
+                    string soundPath;
+                    lock (sync)
+                    {
+                        if (pending.Count == 0 || !CanPlay) { workerRunning = false; return; }
+                        severity = pending.Dequeue();
+                        volume = settings.AudioVolume;
+                        repeatCount = settings.AudioSignalRepeatCount;
+                        soundPath = settings.AudioWarningSoundPath;
+                    }
+                    await PlayPatternAsync(severity, volume, repeatCount, soundPath, token).ConfigureAwait(false);
+                }
+            }, token).ContinueWith(_ =>
+            {
+                lock (sync) workerRunning = false;
+            }, TaskScheduler.Default);
         }
-        private static async Task PlayPatternAsync(Severity severity, double volume, CancellationToken token)
+
+        private static async Task PlayPatternAsync(Severity severity, double volume, int repeatCount,
+            string soundPath, CancellationToken token)
         {
-            var count = severity == Severity.Critical ? 3 : severity == Severity.Warning ? 1 : 2;
+            var count = Math.Max(1, Math.Min(10, repeatCount));
+            var warning = LoadScaledWarning(soundPath, volume);
             for (var i = 0; i < count && !token.IsCancellationRequested; i++)
             {
-                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("SarmatPlugin.Assets.warning.wav"))
-                using (var scaled = new MemoryStream(ScalePcmWav(ReadAll(stream), volume), false))
-                using (var player = new SoundPlayer(scaled))
-                {
-                    player.PlaySync();
-                }
+                using (var scaled = new MemoryStream(warning, false))
+                using (var player = new SoundPlayer(scaled)) player.PlaySync();
                 if (i + 1 < count) await Task.Delay(220, token).ConfigureAwait(false);
             }
         }
+
+        private static byte[] LoadScaledWarning(string soundPath, double volume)
+        {
+            if (!string.IsNullOrWhiteSpace(soundPath))
+            {
+                try { return ScalePcmWav(File.ReadAllBytes(soundPath), volume); }
+                catch { }
+            }
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("SarmatPlugin.Assets.warning.wav"))
+                return ScalePcmWav(ReadAll(stream), volume);
+        }
+
         internal static byte[] ScalePcmWav(byte[] source, double volume)
         {
             if (source == null || source.Length < 44 || Encoding.ASCII.GetString(source, 0, 4) != "RIFF" ||
@@ -84,9 +119,7 @@ namespace SarmatPlugin.Infrastructure
             var format = 0; var bits = 0; var dataOffset = 0; var dataLength = 0; var offset = 12;
             while (offset + 8 <= output.Length)
             {
-                var id = Encoding.ASCII.GetString(output, offset, 4);
-                var length = BitConverter.ToInt32(output, offset + 4);
-                var body = offset + 8;
+                var id = Encoding.ASCII.GetString(output, offset, 4); var length = BitConverter.ToInt32(output, offset + 4); var body = offset + 8;
                 if (length < 0 || body + length > output.Length) throw new InvalidDataException("Truncated WAV chunk");
                 if (id == "fmt " && length >= 16) { format = BitConverter.ToUInt16(output, body); bits = BitConverter.ToUInt16(output, body + 14); }
                 if (id == "data") { dataOffset = body; dataLength = length; break; }
@@ -101,15 +134,16 @@ namespace SarmatPlugin.Infrastructure
             }
             return output;
         }
+
         private static byte[] ReadAll(Stream input)
         {
             using (var output = new MemoryStream()) { input.CopyTo(output); return output.ToArray(); }
         }
-        private void CancelLocked()
+        private void CancelPlaybackLocked()
         {
-            active = Severity.Inactive;
-            cancellation.Cancel(); cancellation.Dispose(); cancellation = new CancellationTokenSource();
+            pending.Clear(); cancellation.Cancel(); cancellation.Dispose(); cancellation = new CancellationTokenSource(); workerRunning = false;
         }
-        public void Dispose() { lock (sync) { disposed = true; CancelLocked(); cancellation.Dispose(); } }
+        private void CancelLocked() { CancelPlaybackLocked(); }
+        public void Dispose() { lock (sync) { disposed = true; tracker.Reset(); CancelLocked(); cancellation.Dispose(); } }
     }
 }
