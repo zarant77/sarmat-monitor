@@ -39,4 +39,5 @@ foreach ($assetName in @('icon.png', 'logo.txt', 'logo2.png', 'splashbg.png')) {
     Copy-Item -LiteralPath $assetPath -Destination $dist
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\install.ps1') -Destination $dist
+Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\install.cmd') -Destination $dist
 Write-Host "Distribution created at $dist"

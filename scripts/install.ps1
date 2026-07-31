@@ -5,6 +5,25 @@ param(
     [string]$SourcePath
 )
 $ErrorActionPreference = 'Stop'
+
+$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+$isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdministrator -and -not $WhatIfPreference) {
+    $elevatedArguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', ('"{0}"' -f $PSCommandPath),
+        '-MissionPlannerPath', ('"{0}"' -f $MissionPlannerPath)
+    )
+    if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
+        $elevatedArguments += @('-SourcePath', ('"{0}"' -f $SourcePath))
+    }
+
+    $elevated = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList $elevatedArguments
+    exit $elevated.ExitCode
+}
+
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($SourcePath)) {
     $packagedDll = Join-Path $PSScriptRoot 'plugins\SarmatPlugin.dll'
