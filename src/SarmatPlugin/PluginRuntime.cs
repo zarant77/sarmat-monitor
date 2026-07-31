@@ -23,6 +23,7 @@ namespace SarmatPlugin
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private bool disposed;
+        private HudVisibilityAdapter hudVisibility;
 
         public PluginRuntime(Func<object> currentState)
         {
@@ -39,6 +40,12 @@ namespace SarmatPlugin
             panel.SettingsRequested += (s, e) => ShowSettings();
             if (settings.StartAutomatically) StartWorkers();
             return panel;
+        }
+
+        public void ConfigureHud(object hud)
+        {
+            hudVisibility = new HudVisibilityAdapter(hud);
+            if (settings.HudElements.Count > 0) hudVisibility.Apply(settings.HudElements);
         }
 
         public void Tick()
@@ -136,10 +143,11 @@ namespace SarmatPlugin
                             ? $"Current status: Connected; RSSI: {result.Rssi} dBm; quality: {result.SignalQuality}"
                             : "Current status: Disconnected — " + result.Error;
                     }
-                }, severity => audio.Test(severity));
+                }, severity => audio.Test(severity), hudVisibility?.Read());
             if (form.ShowDialog(panel.FindForm()) != DialogResult.OK || form.Result == null) return;
             settings = form.Result;
             store.Save(settings);
+            hudVisibility?.Apply(settings.HudElements);
             log.DebugEnabled = settings.DebugLogging;
             audio.UpdateSettings(settings);
             panel.Visible = settings.ShowPanel;

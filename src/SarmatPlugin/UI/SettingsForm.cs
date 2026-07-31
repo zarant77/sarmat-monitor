@@ -22,7 +22,8 @@ namespace SarmatPlugin.UI
         public PluginSettings Result { get; private set; }
 
         public SettingsForm(PluginSettings source, Func<CancellationToken, Task<string>> testObs,
-            Func<CancellationToken, Task<string>> testRuijie, Action<Severity> testAudio)
+            Func<CancellationToken, Task<string>> testRuijie, Action<Severity> testAudio,
+            IReadOnlyDictionary<string, bool> currentHudElements = null)
         {
             settings = source; this.testObs = testObs; this.testRuijie = testRuijie; this.testAudio = testAudio;
             Text = "Sarmat Plugin Settings"; Width = 660; Height = 700; StartPosition = FormStartPosition.CenterParent;
@@ -32,6 +33,7 @@ namespace SarmatPlugin.UI
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
             tabs.TabPages.Add(Page("Audio", Audio()));
             tabs.TabPages.Add(Page("Widgets", Widgets()));
+            tabs.TabPages.Add(Page("Mission Planner UI", MissionPlannerUi(currentHudElements)));
             tabs.TabPages.Add(Page("General", General()));
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
             var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, AutoSize = true };
@@ -135,6 +137,19 @@ namespace SarmatPlugin.UI
             panel.Controls.Add(hint);
             return panel;
         }
+        private Control MissionPlannerUi(IReadOnlyDictionary<string, bool> current)
+        {
+            var p = Grid();
+            foreach (var item in HudElementCatalog.Elements)
+            {
+                bool value;
+                if (!settings.HudElements.TryGetValue(item.Key, out value) &&
+                    (current == null || !current.TryGetValue(item.Key, out value)))
+                    value = true;
+                Check(p, item.Value, "Hud:" + item.Key, value);
+            }
+            return p;
+        }
 
         private PluginSettings Read()
         {
@@ -155,7 +170,9 @@ namespace SarmatPlugin.UI
                     ? WidgetCatalog.DefaultIds.ToList()
                     : widgetList.Items.Cast<WidgetDefinition>()
                         .Where((x, index) => widgetList.GetItemChecked(index))
-                        .Select(x => x.Id).ToList()
+                        .Select(x => x.Id).ToList(),
+                HudElements=HudElementCatalog.Elements.ToDictionary(x => x.Key,
+                    x => B("Hud:" + x.Key), StringComparer.OrdinalIgnoreCase)
             };
         }
         private void WidgetListMouseDown(object sender, MouseEventArgs e)

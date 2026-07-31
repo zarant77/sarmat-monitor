@@ -88,6 +88,8 @@ namespace SarmatPlugin.Core
         [DataMember] public bool StartAutomatically { get; set; } = true;
         [DataMember] public bool DebugLogging { get; set; }
         [DataMember] public List<string> EnabledWidgets { get; set; } = WidgetCatalog.DefaultIds.ToList();
+        [DataMember] public Dictionary<string, bool> HudElements { get; set; } =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
         public void Normalize()
         {
@@ -110,6 +112,11 @@ namespace SarmatPlugin.Core
             else
                 EnabledWidgets = EnabledWidgets.Where(WidgetCatalog.IsKnown)
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (HudElements == null)
+                HudElements = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            else
+                HudElements = HudElements.Where(x => HudElementCatalog.Elements.ContainsKey(x.Key))
+                    .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
         }
     }
 }

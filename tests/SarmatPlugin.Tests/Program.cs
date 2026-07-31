@@ -26,6 +26,7 @@ namespace SarmatPlugin.Tests
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
             Run("Widget catalog defaults are valid and unique", WidgetDefaults);
             Run("Mission Planner scalar telemetry is discovered dynamically", DynamicTelemetry);
+            Run("Mission Planner HUD visibility adapter", HudVisibility);
             Run("Sarmat GStreamer pipeline targets Mission Planner appsink", GStreamerPipeline);
             Run("Log sanitizer redacts credentials", Sanitizer);
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
@@ -160,6 +161,27 @@ namespace SarmatPlugin.Tests
             public double roll { get; set; } = 12.345;
             public string flightmode = "AUTO";
             public object Complex { get; set; } = new object();
+        }
+        private static void HudVisibility()
+        {
+            var hud = new FakeHud();
+            var adapter = new HudVisibilityAdapter(hud);
+            Equal(true, adapter.Read()["batteryon"]);
+            adapter.Apply(new Dictionary<string, bool>
+            {
+                ["batteryon"] = false,
+                ["displaygps"] = false
+            });
+            Equal(false, hud.batteryon);
+            Equal(false, hud.displaygps);
+            Equal(1, hud.ResizeCount);
+        }
+        private sealed class FakeHud
+        {
+            public bool batteryon { get; set; } = true;
+            public bool displaygps { get; set; } = true;
+            public int ResizeCount { get; private set; }
+            public void doResize() { ResizeCount++; }
         }
         private static void GStreamerPipeline()
         {

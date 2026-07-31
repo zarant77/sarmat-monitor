@@ -131,6 +131,12 @@ OBS uses the compact values `REC`, `NR`, and `DIS`.
 Drag entries in the Widgets list to change their order on the dashboard; the checked state and
 saved order are preserved together.
 
+The **Mission Planner UI** settings tab controls native HUD elements without removing or replacing
+Mission Planner controls. It can toggle battery indicators, cell voltage, altitude, speed,
+heading, roll/pitch, cross-track error, GPS, EKF, vibration, pre-arm and connection status,
+AOA/SSA, and icons versus text. The current HUD state is used on first setup; saved choices are
+then restored and applied through the native HUD resize routine.
+
 In addition to the built-in widgets, the plugin discovers every public scalar telemetry property
 and field exposed by the installed Mission Planner `CurrentState` at startup. Numeric, Boolean,
 text, enum, and timestamp values become optional entries in **Settings → Widgets**. This includes

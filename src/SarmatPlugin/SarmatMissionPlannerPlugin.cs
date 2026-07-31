@@ -41,6 +41,9 @@ namespace SarmatPlugin
                 var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                 flightData = mainType.GetProperty("FlightData", flags)?.GetValue(Host.MainForm, null) ??
                     mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
+                var hud = flightData?.GetType().GetField("myhud",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+                runtime.ConfigureHud(hud);
                 hostTabs = FindNamedControl(flightData as Control, "tabControlactions") as TabControl;
                 if (hostTabs == null) throw new InvalidOperationException("Mission Planner Flight Data action tabs were not found");
 
