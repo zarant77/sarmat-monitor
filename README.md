@@ -44,10 +44,12 @@ The plugin does not open its own MAVLink connection and does not run or communic
 Close Mission Planner before installing or replacing the DLL.
 
 For a downloaded GitHub Release, extract the ZIP and double-click `install.cmd`. Confirm the
-Windows UAC prompt. Alternatively, open PowerShell in the extracted folder and run:
+Windows UAC prompt. The installer checks the standard installation folders and Windows uninstall
+registry entries. If Mission Planner cannot be detected, it asks you to select the folder that
+contains `MissionPlanner.exe`. Alternatively, open PowerShell in the extracted folder and run:
 
 ```powershell
-.\install.ps1 -MissionPlannerPath "C:\Program Files (x86)\Mission Planner"
+.\install.ps1
 ```
 
 The release folder mirrors the Mission Planner installation layout: `plugins/SarmatPlugin.dll`

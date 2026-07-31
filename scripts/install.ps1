@@ -1,10 +1,73 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [Parameter(Mandatory = $true)]
     [string]$MissionPlannerPath,
     [string]$SourcePath
 )
 $ErrorActionPreference = 'Stop'
+
+function Test-MissionPlannerDirectory {
+    param([string]$Path)
+    return -not [string]::IsNullOrWhiteSpace($Path) -and
+        (Test-Path -LiteralPath (Join-Path $Path 'MissionPlanner.exe'))
+}
+
+function Find-MissionPlannerDirectory {
+    $candidates = New-Object System.Collections.Generic.List[string]
+    $candidates.Add($PSScriptRoot)
+
+    foreach ($programFiles in @(
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86),
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($programFiles)) {
+            $candidates.Add((Join-Path $programFiles 'Mission Planner'))
+        }
+    }
+
+    foreach ($registryPath in @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )) {
+        Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like '*Mission Planner*' } |
+            ForEach-Object {
+                if (-not [string]::IsNullOrWhiteSpace($_.InstallLocation)) {
+                    $candidates.Add($_.InstallLocation.Trim('"'))
+                }
+                if (-not [string]::IsNullOrWhiteSpace($_.DisplayIcon)) {
+                    $displayIcon = $_.DisplayIcon.Trim('"') -replace ',\d+$', ''
+                    $candidates.Add((Split-Path -Parent $displayIcon))
+                }
+            }
+    }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-MissionPlannerDirectory $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    Add-Type -AssemblyName System.Windows.Forms
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Select the folder containing MissionPlanner.exe'
+    $dialog.ShowNewFolderButton = $false
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+        throw 'Mission Planner installation was not selected.'
+    }
+    if (-not (Test-MissionPlannerDirectory $dialog.SelectedPath)) {
+        throw "MissionPlanner.exe was not found in '$($dialog.SelectedPath)'."
+    }
+    return (Resolve-Path -LiteralPath $dialog.SelectedPath).Path
+}
+
+if ([string]::IsNullOrWhiteSpace($MissionPlannerPath)) {
+    $MissionPlannerPath = Find-MissionPlannerDirectory
+} elseif (-not (Test-MissionPlannerDirectory $MissionPlannerPath)) {
+    throw "MissionPlanner.exe was not found in '$MissionPlannerPath'."
+} else {
+    $MissionPlannerPath = (Resolve-Path -LiteralPath $MissionPlannerPath).Path
+}
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
@@ -35,10 +98,7 @@ if ([string]::IsNullOrWhiteSpace($SourcePath)) {
         $SourcePath = Join-Path $projectRoot 'dist'
     }
 }
-$missionPlanner = (Resolve-Path -LiteralPath $MissionPlannerPath).Path
-if (-not (Test-Path -LiteralPath (Join-Path $missionPlanner 'MissionPlanner.exe'))) {
-    throw "MissionPlanner.exe was not found in '$missionPlanner'."
-}
+$missionPlanner = $MissionPlannerPath
 $sourceDll = Join-Path $SourcePath 'plugins\SarmatPlugin.dll'
 if (-not (Test-Path -LiteralPath $sourceDll)) { throw "Build artifact not found: $sourceDll" }
 $sourceDll = (Resolve-Path -LiteralPath $sourceDll).Path
