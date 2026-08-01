@@ -30,7 +30,7 @@ namespace SarmatPlugin.Core
             new WidgetDefinition("vertical_speed", "Vertical Speed"),
             new WidgetDefinition("air_speed", "Air Speed"),
             new WidgetDefinition("altitude", "Altitude"),
-            new WidgetDefinition("battery_voltage", "Battery Voltage"),
+            new WidgetDefinition("battery_voltage", "Battery"),
             new WidgetDefinition("current", "Current")
         }.ToList();
         private static readonly object sync = new object();

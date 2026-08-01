@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Sarmat Telemetry Monitor"
+           Manufacturer="Sarmat"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="07B94A7A-238D-4BF9-A804-38818209DB69"
+           Language="1033"
+           Scope="perMachine">
+    <SummaryInformation Description="Sarmat telemetry desktop monitor" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Sarmat Telemetry Monitor is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="SARMATDIR" Name="Sarmat">
+        <Directory Id="INSTALLFOLDER" Name="Telemetry Monitor" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuSarmat" Name="Sarmat" />
+    </StandardDirectory>
+
+    <Feature Id="MonitorFeature" Title="Sarmat Telemetry Monitor" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="MonitorFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)InstallerInfo.rtf" />
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="MonitorFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\*.pdb" />
+      </Files>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="ProgramMenuSarmat">
+      <Component Id="StartMenuShortcut" Guid="FD5EAE0C-47A3-405B-A3A6-7903EA40B080">
+        <Shortcut Id="TelemetryMonitorShortcut"
+                  Name="Sarmat Telemetry Monitor"
+                  Description="View current Sarmat station telemetry"
+                  Target="[INSTALLFOLDER]Sarmat.TelemetryMonitor.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveSarmatProgramMenu" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Sarmat\TelemetryMonitor"
+                       Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

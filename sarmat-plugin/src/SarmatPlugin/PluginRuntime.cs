@@ -12,10 +12,12 @@ namespace SarmatPlugin
     internal sealed class PluginRuntime : IDisposable
     {
         private readonly Func<object> currentState;
+        private readonly Func<long?> packetCount;
         private readonly SettingsStore store = new SettingsStore();
         private readonly AlertEngine alerts = new AlertEngine();
         private readonly TakeoffModeWarningTracker takeoffModeWarning = new TakeoffModeWarningTracker();
         private readonly LimaModeLatch limaModeLatch = new LimaModeLatch();
+        private readonly MavlinkSilenceWatchdog mavlinkWatchdog = new MavlinkSilenceWatchdog();
         private readonly object sync = new object();
         private PluginSettings settings;
         private AppLog log;
@@ -24,6 +26,7 @@ namespace SarmatPlugin
         private SarmatPanel panel;
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
+        private string aggregatorStatus = "Disabled";
         private bool disposed;
         private bool takeoffWarningVisible;
         private bool connectionInitialized;
@@ -32,11 +35,13 @@ namespace SarmatPlugin
         public event Action<bool> TakeoffWarningChanged;
         public event Action VehicleConnected;
         public event Action<string> LimaModeRequested;
+        public event Action VehicleReconnectRequested;
         public bool ShouldRestoreGStreamer => settings.GStreamerWasStarted;
 
-        public PluginRuntime(Func<object> currentState)
+        public PluginRuntime(Func<object> currentState, Func<long?> packetCount = null)
         {
             this.currentState = currentState;
+            this.packetCount = packetCount;
             WidgetCatalog.Discover(currentState?.Invoke());
             settings = store.Load();
             log = new AppLog(settings.DebugLogging);
@@ -68,6 +73,7 @@ namespace SarmatPlugin
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
+            UpdateVehicleReconnect(telemetry);
             UpdateLima(telemetry);
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
@@ -107,6 +113,25 @@ namespace SarmatPlugin
             panel.Render(telemetry, currentObs, currentRuijie, snapshot, settings);
         }
 
+        private void UpdateVehicleReconnect(TelemetrySnapshot telemetry)
+        {
+            if (!settings.VehicleAutoReconnectEnabled || packetCount == null)
+            {
+                mavlinkWatchdog.Reset();
+                return;
+            }
+
+            long? count;
+            try { count = packetCount(); }
+            catch { count = null; }
+            if (!mavlinkWatchdog.Update(telemetry.Connected, count, DateTime.UtcNow,
+                settings.VehicleReconnectTimeoutSeconds)) return;
+
+            log.Info("No MAVLink packets for " + settings.VehicleReconnectTimeoutSeconds.ToString("0") +
+                " seconds; requesting Mission Planner reconnect");
+            VehicleReconnectRequested?.Invoke();
+        }
+
         private void UpdateLima(TelemetrySnapshot telemetry)
         {
             if (!settings.LimaEnabled)
@@ -135,6 +160,8 @@ namespace SarmatPlugin
             var token = cancellation.Token;
             Task.Run(() => ObsLoop(token), token).ContinueWith(t => LogFault("OBS worker", t), TaskScheduler.Default);
             Task.Run(() => RuijieLoop(token), token).ContinueWith(t => LogFault("Ruijie worker", t), TaskScheduler.Default);
+            Task.Run(() => AggregatorLoop(token), token)
+                .ContinueWith(t => LogFault("Aggregator worker", t), TaskScheduler.Default);
         }
         private void StopWorkers()
         {
@@ -173,6 +200,7 @@ namespace SarmatPlugin
                         {
                             value.LastSuccessUtc = ruijie.LastSuccessUtc;
                             value.Rssi = ruijie.Rssi;
+                            value.QualityPercent = ruijie.QualityPercent;
                             value.SignalQuality = ruijie.SignalQuality;
                             value.Stale = value.LastSuccessUtc != default &&
                                 (DateTime.UtcNow-value.LastSuccessUtc).TotalSeconds >= settings.RuijieStaleSeconds;
@@ -182,6 +210,18 @@ namespace SarmatPlugin
                     await Task.Delay(TimeSpan.FromSeconds(settings.RuijiePollSeconds), token).ConfigureAwait(false);
                 }
             }
+        }
+
+        private Task AggregatorLoop(CancellationToken token)
+        {
+            var client = new AggregatorClient(settings, log, value =>
+            {
+                lock (sync) aggregatorStatus = value;
+            });
+            return client.RunAsync(
+                () => new TelemetryReader(currentState).Read(),
+                () => { lock (sync) return obs; },
+                () => { lock (sync) return ruijie; }, token);
         }
 
         private void ShowSettings()
@@ -204,7 +244,14 @@ namespace SarmatPlugin
                             ? $"Current status: Connected; RSSI: {result.Rssi} dBm; quality: {result.SignalQuality}"
                             : "Current status: Disconnected — " + result.Error;
                     }
-                }, severity => audio.Test(severity), hudVisibility?.Read());
+                },
+                async (url, secret, ct) =>
+                {
+                    await AggregatorClient.TestConnectionAsync(url, secret, ct).ConfigureAwait(false);
+                    return "Current status: Connected";
+                },
+                () => { lock (sync) return aggregatorStatus; },
+                severity => audio.Test(severity), hudVisibility?.Read());
             if (form.ShowDialog(panel.FindForm()) != DialogResult.OK || form.Result == null) return;
             settings = form.Result;
             store.Save(settings);

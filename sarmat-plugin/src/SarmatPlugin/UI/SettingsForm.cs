@@ -15,6 +15,8 @@ namespace SarmatPlugin.UI
         private readonly Dictionary<string, Control> fields = new Dictionary<string, Control>();
         private readonly Func<CancellationToken, Task<string>> testObs;
         private readonly Func<CancellationToken, Task<string>> testRuijie;
+        private readonly Func<string, string, CancellationToken, Task<string>> testAggregator;
+        private readonly Func<string> aggregatorStatus;
         private readonly Action<Severity> testAudio;
         private CheckedListBox widgetList;
         private int draggedWidgetIndex = -1;
@@ -22,15 +24,20 @@ namespace SarmatPlugin.UI
         public PluginSettings Result { get; private set; }
 
         public SettingsForm(PluginSettings source, Func<CancellationToken, Task<string>> testObs,
-            Func<CancellationToken, Task<string>> testRuijie, Action<Severity> testAudio,
+            Func<CancellationToken, Task<string>> testRuijie,
+            Func<string, string, CancellationToken, Task<string>> testAggregator,
+            Func<string> aggregatorStatus, Action<Severity> testAudio,
             IReadOnlyDictionary<string, bool> currentHudElements = null)
         {
-            settings = source; this.testObs = testObs; this.testRuijie = testRuijie; this.testAudio = testAudio;
+            settings = source; this.testObs = testObs; this.testRuijie = testRuijie;
+            this.testAggregator = testAggregator; this.aggregatorStatus = aggregatorStatus;
+            this.testAudio = testAudio;
             Text = "Sarmat Plugin Settings"; Width = 660; Height = 700; StartPosition = FormStartPosition.CenterParent;
             var tabs = new TabControl { Dock = DockStyle.Fill };
             tabs.TabPages.Add(Page("Alerts", Alerts()));
             tabs.TabPages.Add(Page("OBS Studio", Obs()));
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
+            tabs.TabPages.Add(Page("Aggregator", Aggregator()));
             tabs.TabPages.Add(Page("Lima", Lima()));
             tabs.TabPages.Add(Page("Audio", Audio()));
             tabs.TabPages.Add(Page("Widgets", Widgets()));
@@ -79,6 +86,38 @@ namespace SarmatPlugin.UI
             TestRow(p, "Test connection", testRuijie);
             return p;
         }
+        private Control Aggregator()
+        {
+            var p = Grid();
+            Check(p, "Enabled", "AggregatorEnabled", settings.AggregatorEnabled);
+            TextBox(p, "WebSocket URL", "AggregatorUrl", settings.AggregatorUrl);
+            TextBox(p, "Secret", "AggregatorSecret", settings.AggregatorSecret);
+            Number(p, "Reconnect interval (s)", "AggregatorReconnectSeconds",
+                settings.AggregatorReconnectSeconds, 1, 300, 0);
+            var test = new Button { Text = "Test connection", AutoSize = true };
+            var status = new Label
+            {
+                Text = "Current status: " + (aggregatorStatus?.Invoke() ?? "Unknown"),
+                AutoSize = true,
+                Padding = new Padding(4)
+            };
+            test.Click += async (s, e) =>
+            {
+                test.Enabled = false;
+                status.Text = "Testing…";
+                try
+                {
+                    using (var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+                        status.Text = await testAggregator(T("AggregatorUrl"),
+                            T("AggregatorSecret"), cancellation.Token);
+                }
+                catch (Exception ex) { status.Text = "Current status: Disconnected — " + ex.Message; }
+                finally { test.Enabled = true; }
+            };
+            p.Controls.Add(test);
+            p.Controls.Add(status);
+            return p;
+        }
         private Control Audio()
         {
             var p = Grid();
@@ -108,6 +147,10 @@ namespace SarmatPlugin.UI
             var p = Grid();
             Check(p, "Show panel", "ShowPanel", settings.ShowPanel);
             Check(p, "Start automatically", "StartAutomatically", settings.StartAutomatically);
+            Check(p, "Reconnect vehicle after MAVLink silence", "VehicleAutoReconnectEnabled",
+                settings.VehicleAutoReconnectEnabled);
+            Number(p, "Vehicle reconnect timeout (s)", "VehicleReconnectTimeoutSeconds",
+                settings.VehicleReconnectTimeoutSeconds, 3, 300, 0);
             Check(p, "Debug logging", "DebugLogging", settings.DebugLogging);
             return p;
         }
@@ -176,10 +219,15 @@ namespace SarmatPlugin.UI
                 ObsReconnectSeconds=N("ObsReconnectSeconds"), RuijieAddress=T("RuijieAddress"), RuijieUsername=T("RuijieUsername"),
                 RuijiePassword=T("RuijiePassword"), RuijiePollSeconds=N("RuijiePollSeconds"),
                 RuijieRequestTimeoutSeconds=N("RuijieRequestTimeoutSeconds"), RuijieStaleSeconds=N("RuijieStaleSeconds"),
-                RuijieAllowInsecureTls=B("RuijieAllowInsecureTls"), AudioEnabled=B("AudioEnabled"), AudioMuted=B("AudioMuted"),
+                RuijieAllowInsecureTls=B("RuijieAllowInsecureTls"),
+                AggregatorEnabled=B("AggregatorEnabled"), AggregatorUrl=T("AggregatorUrl"),
+                AggregatorSecret=T("AggregatorSecret"), AggregatorReconnectSeconds=N("AggregatorReconnectSeconds"),
+                AudioEnabled=B("AudioEnabled"), AudioMuted=B("AudioMuted"),
                 AudioVolume=N("AudioVolume")/100, AudioSignalRepeatCount=(int)N("AudioSignalRepeatCount"),
                 AudioWarningSoundPath=T("AudioWarningSoundPath"),
                 ShowPanel=B("ShowPanel"), StartAutomatically=B("StartAutomatically"),
+                VehicleAutoReconnectEnabled=B("VehicleAutoReconnectEnabled"),
+                VehicleReconnectTimeoutSeconds=N("VehicleReconnectTimeoutSeconds"),
                 DebugLogging=B("DebugLogging"),
                 EnabledWidgets=widgetList == null
                     ? WidgetCatalog.DefaultIds.ToList()

@@ -19,6 +19,7 @@ namespace SarmatPlugin
         private object flightData;
         private SarmatPlugin.UI.SarmatPanel panel;
         private Label takeoffModeWarning;
+        private bool vehicleReconnectInProgress;
         internal const string SarmatGStreamerPipeline =
             "rtspsrc location=rtsp://192.168.69.5:554/stream=0 latency=100 ! application/x-rtp ! " +
             "decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! " +
@@ -38,11 +39,12 @@ namespace SarmatPlugin
         {
             try
             {
-                runtime = new PluginRuntime(() => Host.cs);
+                runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
                 runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
                 runtime.VehicleConnected += RestoreVideoOnConnect;
                 runtime.VehicleConnected += ReconnectJoystickOnConnect;
                 runtime.LimaModeRequested += SetLimaFlightMode;
+                runtime.VehicleReconnectRequested += ReconnectVehicle;
                 panel = runtime.CreatePanel();
                 panel.VideoSourceRequested += (s, e) => StartSarmatVideo();
                 var mainType = Host.MainForm.GetType();
@@ -154,6 +156,42 @@ namespace SarmatPlugin
                 warning.Visible = visible;
                 if (visible) warning.BringToFront();
             });
+        }
+
+        private void ReconnectVehicle()
+        {
+            var main = Host.MainForm;
+            if (main == null || vehicleReconnectInProgress) return;
+            vehicleReconnectInProgress = true;
+            main.BeginInvoke((Action)(() =>
+            {
+                try
+                {
+                    var flags = BindingFlags.Public | BindingFlags.NonPublic |
+                        BindingFlags.Instance | BindingFlags.Static;
+                    var mainType = main.GetType();
+                    var comPort = (object)Host.comPort;
+                    if (comPort == null) return;
+                    var portName = Convert.ToString(mainType.GetField("comPortName", flags)?.GetValue(null));
+                    var baudValue = mainType.GetField("comPortBaud", flags)?.GetValue(null);
+                    var baud = Convert.ToString(baudValue);
+                    if (string.IsNullOrWhiteSpace(portName))
+                        throw new InvalidOperationException("Mission Planner connection port is unavailable");
+
+                    var disconnect = mainType.GetMethod("doDisconnect", flags);
+                    var connect = mainType.GetMethod("doConnect", flags, null,
+                        new[] { comPort.GetType(), typeof(string), typeof(string), typeof(bool), typeof(bool) }, null);
+                    if (disconnect == null || connect == null)
+                        throw new MissingMethodException("Mission Planner reconnect API is unavailable");
+                    disconnect.Invoke(main, new[] { comPort });
+                    connect.Invoke(main, new[] { comPort, portName, baud, (object)true, false });
+                }
+                catch (Exception ex)
+                {
+                    try { using (var log = new AppLog(true)) log.Error("Vehicle reconnect failed", ex); } catch { }
+                }
+                finally { vehicleReconnectInProgress = false; }
+            }));
         }
 
         private void StartSarmatVideo()

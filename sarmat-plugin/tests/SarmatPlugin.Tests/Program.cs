@@ -26,9 +26,11 @@ namespace SarmatPlugin.Tests
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
             Run("Takeoff mode warning only checks the arming transition", TakeoffModeWarning);
             Run("Lima reacts once per RC button press", LimaEdge);
+            Run("MAVLink silence watchdog requests bounded reconnects", MavlinkSilenceReconnect);
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
+            Run("Aggregator telemetry uses compact MessagePack", AggregatorMessagePack);
             Run("Widget catalog defaults are valid and unique", WidgetDefaults);
             Run("Mission Planner scalar telemetry is discovered dynamically", DynamicTelemetry);
             Run("Mission Planner HUD visibility adapter", HudVisibility);
@@ -177,6 +179,19 @@ namespace SarmatPlugin.Tests
             Equal(12, migrated.LimaRcChannel);
             Equal(1800, migrated.LimaPwmThreshold);
         }
+        private static void MavlinkSilenceReconnect()
+        {
+            var watchdog = new MavlinkSilenceWatchdog();
+            var now = DateTime.UtcNow;
+            Equal(false, watchdog.Update(true, 10, now, 10));
+            Equal(false, watchdog.Update(true, 10, now.AddSeconds(9), 10));
+            Equal(true, watchdog.Update(true, 10, now.AddSeconds(10), 10));
+            Equal(false, watchdog.Update(true, 10, now.AddSeconds(11), 10));
+            Equal(false, watchdog.Update(true, 11, now.AddSeconds(12), 10));
+            Equal(true, watchdog.Update(true, 11, now.AddSeconds(22), 10));
+            Equal(false, watchdog.Update(false, 11, now.AddSeconds(23), 10));
+            Equal(false, watchdog.Update(true, 11, now.AddSeconds(40), 10));
+        }
         private static void CryptoRoundTrip()
         {
             var encrypted=RuijieCrypto.EncryptPassword("secret","key12345",new byte[]{1,2,3,4,5,6,7,8});
@@ -196,6 +211,24 @@ namespace SarmatPlugin.Tests
                 Equal(false, request.Headers.ExpectContinue);
                 Equal(new Version(1, 1), request.Version);
             }
+        }
+        private static void AggregatorMessagePack()
+        {
+            var packet = MessagePackTelemetryEncoder.Encode(1, null, null, 2,
+                null, null, null, 3, 4);
+            var expected = new byte[] { 0x99, 0x01, 0xc0, 0xc0, 0x02, 0xc0, 0xc0, 0xc0, 0x03, 0x04 };
+            Equal(BitConverter.ToString(expected), BitConverter.ToString(packet));
+
+            var settings = new PluginSettings
+            {
+                AggregatorUrl = "  ws://127.0.0.1:8080/ws/station  ",
+                AggregatorSecret = "  station-secret  ",
+                AggregatorReconnectSeconds = 0
+            };
+            settings.Normalize();
+            Equal("ws://127.0.0.1:8080/ws/station", settings.AggregatorUrl);
+            Equal("station-secret", settings.AggregatorSecret);
+            Equal(1d, settings.AggregatorReconnectSeconds);
         }
         private static void WidgetDefaults()
         {

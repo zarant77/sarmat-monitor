@@ -29,6 +29,7 @@ namespace SarmatPlugin.Integration
                 VerticalSpeed = ReadDouble(cs, "climbrate"),
                 AirSpeed = ReadDouble(cs, "airspeed"),
                 Altitude = ReadDouble(cs, "alt"),
+                Heading = ReadDouble(cs, "yaw"),
                 CurrentAmps = ReadDouble(cs, "current"),
                 TimestampUtc = DateTime.UtcNow
             };

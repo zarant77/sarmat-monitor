@@ -140,7 +140,8 @@ namespace SarmatPlugin.Integration
             if (int.TryParse(MiniJson.String(data, "channf"), out var noise) && noise > -80) score -= 10;
             score = Math.Max(0, Math.Min(100, score));
             var quality = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Weak" : "Bad";
-            return new RuijieStatus { Connected = true, Rssi = average, SignalQuality = quality, LastSuccessUtc = DateTime.UtcNow };
+            return new RuijieStatus { Connected = true, Rssi = average, QualityPercent = score,
+                SignalQuality = quality, LastSuccessUtc = DateTime.UtcNow };
         }
 
         private async Task<IDictionary<string, object>> PostAsync(string path, string auth, object payload, CancellationToken ct)

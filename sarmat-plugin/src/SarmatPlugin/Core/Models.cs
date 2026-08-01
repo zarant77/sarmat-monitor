@@ -23,6 +23,7 @@ namespace SarmatPlugin.Core
         public double VerticalSpeed { get; set; }
         public double AirSpeed { get; set; }
         public double Altitude { get; set; }
+        public double Heading { get; set; }
         public double CurrentAmps { get; set; }
         public Dictionary<string, string> AdditionalTelemetry { get; set; } =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +43,7 @@ namespace SarmatPlugin.Core
         public bool Connected { get; set; }
         public bool Stale { get; set; }
         public int? Rssi { get; set; }
+        public int? QualityPercent { get; set; }
         public string SignalQuality { get; set; }
         public string Error { get; set; }
         public DateTime LastSuccessUtc { get; set; }
@@ -82,6 +84,10 @@ namespace SarmatPlugin.Core
         [DataMember] public double RuijieRequestTimeoutSeconds { get; set; } = 12;
         [DataMember] public double RuijieStaleSeconds { get; set; } = 8;
         [DataMember] public bool RuijieAllowInsecureTls { get; set; } = true;
+        [DataMember] public bool AggregatorEnabled { get; set; }
+        [DataMember] public string AggregatorUrl { get; set; } = "ws://127.0.0.1:8080/ws/station";
+        [DataMember] public string AggregatorSecret { get; set; } = "";
+        [DataMember] public double AggregatorReconnectSeconds { get; set; } = 5;
         [DataMember] public bool AudioEnabled { get; set; } = true;
         [DataMember] public bool AudioMuted { get; set; }
         [DataMember] public double AudioVolume { get; set; } = 0.8;
@@ -90,6 +96,8 @@ namespace SarmatPlugin.Core
         [DataMember] public bool ShowPanel { get; set; } = true;
         [DataMember] public bool StartAutomatically { get; set; } = true;
         [DataMember] public bool DebugLogging { get; set; }
+        [DataMember] public bool VehicleAutoReconnectEnabled { get; set; } = true;
+        [DataMember] public double VehicleReconnectTimeoutSeconds { get; set; } = 10;
         [DataMember] public List<string> EnabledWidgets { get; set; } = WidgetCatalog.DefaultIds.ToList();
         [DataMember] public Dictionary<string, bool> HudElements { get; set; } =
             new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
@@ -114,10 +122,16 @@ namespace SarmatPlugin.Core
             RuijiePollSeconds = Math.Max(0.5, RuijiePollSeconds);
             RuijieRequestTimeoutSeconds = Math.Max(1, RuijieRequestTimeoutSeconds);
             RuijieStaleSeconds = Math.Max(RuijiePollSeconds, RuijieStaleSeconds);
+            AggregatorUrl = string.IsNullOrWhiteSpace(AggregatorUrl)
+                ? "ws://127.0.0.1:8080/ws/station" : AggregatorUrl.Trim();
+            AggregatorSecret = (AggregatorSecret ?? "").Trim();
+            AggregatorReconnectSeconds = Math.Max(1, Math.Min(300, AggregatorReconnectSeconds));
             AudioVolume = Math.Max(0, Math.Min(1, AudioVolume));
             if (AudioSignalRepeatCount <= 0) AudioSignalRepeatCount = 3;
             AudioSignalRepeatCount = Math.Max(1, Math.Min(10, AudioSignalRepeatCount));
             AudioWarningSoundPath = (AudioWarningSoundPath ?? "").Trim();
+            if (VehicleReconnectTimeoutSeconds <= 0) VehicleReconnectTimeoutSeconds = 10;
+            VehicleReconnectTimeoutSeconds = Math.Max(3, Math.Min(300, VehicleReconnectTimeoutSeconds));
             RuijieUsername = string.IsNullOrWhiteSpace(RuijieUsername) ? "admin" : RuijieUsername.Trim();
             if (EnabledWidgets == null)
                 EnabledWidgets = WidgetCatalog.DefaultIds.ToList();

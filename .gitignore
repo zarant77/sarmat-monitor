@@ -26,6 +26,13 @@ project.nuget.cache
 *.nuget.g.targets
 *.nuget.dgspec.json
 
+# Node.js
+node_modules/
+.pnpm-store/
+npm-debug.log*
+/telemetry-aggregator/config.json
+/telemetry-monitor/config.json
+
 # Test and coverage artifacts
 TestResults/
 coverage/

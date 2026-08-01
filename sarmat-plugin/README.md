@@ -30,6 +30,23 @@ Lima settings persist in `settings.json`.
 - Target framework: **.NET Framework 4.7.2 (`net472`)**
 - Verified build target: Mission Planner **1.3.83**
 
+## Telemetry aggregator
+
+The optional **Aggregator** settings tab streams the current Mission Planner telemetry to
+`telemetry-aggregator` once per second. Configure:
+
+- **Enabled** — starts the background connection;
+- **WebSocket URL** — normally `ws://<server>:8080/ws/station`;
+- **Secret** — must match one station entry in the aggregator `config.json`;
+- **Reconnect interval** — retry delay after a failed or closed connection.
+
+The tab shows the current connection state and includes a connection test that uses the values
+currently entered in the form. The secret is sent only in the WebSocket `Authorization: Bearer`
+header. Telemetry uses compact binary MessagePack frames once per second and contains voltage,
+current, satellite count, HDOP, heading, relative altitude, Ruijie quality, OBS recording state,
+and armed state. Network failures do not block Mission Planner, OBS, Ruijie polling, or the plugin
+UI.
+
 The plugin does not open its own MAVLink connection and does not run or communicate with
 `meow-monitor`.
 
@@ -43,10 +60,9 @@ The plugin does not open its own MAVLink connection and does not run or communic
 
 Close Mission Planner before installing or replacing the DLL.
 
-For a downloaded GitHub Release, extract the ZIP and double-click `install.cmd`. Confirm the
-Windows UAC prompt. The installer checks the standard installation folders and Windows uninstall
-registry entries. If Mission Planner cannot be detected, it asks you to select the folder that
-contains `MissionPlanner.exe`. Alternatively, open PowerShell in the extracted folder and run:
+For a downloaded GitHub Release, run `SarmatPlugin-<version>.msi`. The installer defaults to the
+standard Mission Planner directory and allows selecting another folder. For a local portable
+build, the PowerShell installer remains available in `dist`:
 
 ```powershell
 .\install.ps1
@@ -76,8 +92,8 @@ For another installed copy, pass its directory as `MissionPlannerPath`.
 
 ## GitHub Release build
 
-The workflow at `.github/workflows/release.yml` builds on `windows-latest`, runs the same Release
-build and tests, packages `dist`, and uploads the ZIP as a workflow artifact. CI downloads and
+The workflow at `../.github/workflows/release.yml` builds on `windows-latest`, runs the same Release
+build and tests, and builds the MSI installer. CI downloads and
 caches the official Mission Planner **1.3.83** ZIP so the plugin is compiled against the verified,
 reproducible API version.
 
@@ -92,10 +108,31 @@ git push origin v1.0.0
 
 Pushing a tag matching `v*` starts **Release build** in GitHub Actions. When the build and tests
 pass, the workflow creates a GitHub Release named after the tag and attaches
-`SarmatPlugin-v1.0.0.zip`. Use a new tag for each release, for example `v1.0.1` or `v1.1.0`.
+`SarmatPlugin-v1.0.0.msi` together with the aggregator ZIP and monitor MSI. Release tags must use the
+`vMAJOR.MINOR.PATCH` format. Use a new tag for each release, for example `v1.0.1` or `v1.1.0`.
+
+## MSI installer
+
+The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Its setup
+screen defaults to `C:\Program Files (x86)\Mission Planner` and allows selecting another Mission
+Planner directory. The required **Sarmat Plugin** feature installs `SarmatPlugin.dll` into the
+selected directory's `plugins` folder.
+
+The optional **Sarmat Theme** feature is disabled by default. When selected, it installs every
+branding asset from `mission-planner` (`icon.png`, `logo.txt`, `logo2.png`, and `splashbg.png`) into
+the selected Mission Planner directory. Theme files are deliberately preserved when the MSI is
+uninstalled so Mission Planner is not left with missing branding files.
+
+After creating `dist`, build an installer locally with:
+
+```powershell
+dotnet build .\installer\SarmatPlugin.Installer.wixproj -c Release -p:ProductVersion=1.0.0
+```
+
+The MSI is written to `artifacts`.
 
 For a build without creating a GitHub Release, open **GitHub → Actions → Release build → Run
-workflow**. The resulting ZIP is available in the run's **Artifacts** section.
+workflow**. The resulting release packages are available in the run's **Artifacts** section.
 
 ## Install
 
@@ -182,7 +219,8 @@ yellow (normal), and red (bad). The grid calculates its column count from the av
 automatically wraps widgets into additional rows. Header and value fonts are measured against the
 actual visible text and reduced automatically so every item fits without scrolling. Under
 **Settings → Widgets**, each widget can be shown or hidden independently. Available widgets are Sat Count, GPS HDOP, Dist to Home, Bat used,
-Ruijie, OBS, Ground Speed, Vertical Speed, Air Speed, Altitude, Battery Voltage, and Current.
+Ruijie, OBS, Ground Speed, Vertical Speed, Air Speed, Altitude, Battery, and Current. The Battery
+widget combines voltage and present current, for example `44,2V 10A`.
 OBS uses the compact values `REC`, `NR`, and `DIS`.
 Drag entries in the Widgets list to change their order on the dashboard; the checked state and
 saved order are preserved together.
@@ -215,6 +253,13 @@ On each new vehicle connection, Sarmat also checks Mission Planner's configured 
 the saved `joystick_name`, confirms the device is currently present, and restores it through the
 native `JoystickBase.Create/start` path. Missing devices and failed best-effort reconnects never
 block the vehicle connection or show a modal dialog.
+
+The **General** settings tab includes automatic vehicle reconnect and a MAVLink silence timeout
+(default `10 s`). This watchdog uses the actual Mission Planner MAVLink packet counter rather than
+the UDP socket's open state: UDPCl may remain formally connected after the aircraft link is lost.
+If no packets arrive for the configured interval, Sarmat calls Mission Planner's native disconnect
+and connect methods using the currently selected port and baud. Further attempts are rate-limited
+to one per timeout interval, and a deliberate Mission Planner disconnect disables the watchdog.
 
 ## Settings and logs
 
