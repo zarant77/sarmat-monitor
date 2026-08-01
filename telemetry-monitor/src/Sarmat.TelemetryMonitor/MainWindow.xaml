@@ -3,26 +3,34 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Sarmat Telemetry Monitor" Height="440" Width="1220"
         MinHeight="320" MinWidth="900" WindowStartupLocation="CenterScreen"
-        Background="#F3F4F6">
+        Icon="assets/app-icon.ico" Background="#F3F4F6"
+        Loaded="WindowLoaded" Closing="WindowClosing">
     <DockPanel Margin="16">
         <Border DockPanel.Dock="Top" Background="White" CornerRadius="6" Padding="14,10"
                 Margin="0,0,0,12" BorderBrush="#D1D5DB" BorderThickness="1">
-            <StackPanel Orientation="Horizontal">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="ColumnsButton" Content="Columns" Padding="14,5"
+                            Margin="0,0,8,0" Click="ColumnsClick" />
+                    <Button Content="Settings" Padding="14,5" Click="SettingsClick" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Aggregator:" FontWeight="SemiBold" Margin="0,0,8,0" />
                 <TextBlock Text="{Binding ConnectionStatus}" />
                 <TextBlock Text="{Binding LastError}" Foreground="#B91C1C" Margin="14,0,0,0" />
-            </StackPanel>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <Border Background="White" CornerRadius="6" BorderBrush="#D1D5DB" BorderThickness="1">
-            <DataGrid ItemsSource="{Binding Stations}" AutoGenerateColumns="False"
+            <DataGrid x:Name="StationsGrid" ItemsSource="{Binding Stations}" AutoGenerateColumns="False"
                       IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                       CanUserReorderColumns="True" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" RowHeaderWidth="0"
                       AlternatingRowBackground="#F9FAFB" HorizontalGridLinesBrush="#E5E7EB"
                       FontSize="14" RowHeight="44" ColumnHeaderHeight="38">
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Station" Width="130">
+                    <DataGridTemplateColumn Header="Station" SortMemberPath="station" Width="130">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -32,18 +40,16 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
-                    <DataGridTextColumn Header="Voltage" Binding="{Binding Voltage}" Width="90" />
-                    <DataGridTextColumn Header="Current" Binding="{Binding Current}" Width="90" />
-                    <DataGridTextColumn Header="Sat" Binding="{Binding Satellites}" Width="65" />
-                    <DataGridTextColumn Header="HDOP" Binding="{Binding Hdop}" Width="75" />
-                    <DataGridTextColumn Header="Heading" Binding="{Binding Heading}" Width="90" />
-                    <DataGridTextColumn Header="Altitude" Binding="{Binding Altitude}" Width="90" />
-                    <DataGridTextColumn Header="Ruijie" Binding="{Binding Ruijie}" Width="85" />
-                    <DataGridTextColumn Header="OBS" Binding="{Binding Obs}" Width="80" />
-                    <DataGridTextColumn Header="Vehicle" Binding="{Binding Armed}" Width="100" />
-                    <DataGridTextColumn Header="Age" Binding="{Binding Age}" Width="85" />
-                    <DataGridTextColumn Header="Sequence" Binding="{Binding Sequence}" Width="*" />
+                    <DataGridTextColumn Header="Status" SortMemberPath="status" Binding="{Binding Status}" Width="90" />
+                    <DataGridTextColumn Header="Voltage" SortMemberPath="voltage" Binding="{Binding Voltage}" Width="90" />
+                    <DataGridTextColumn Header="Current" SortMemberPath="current" Binding="{Binding Current}" Width="90" />
+                    <DataGridTextColumn Header="Sat" SortMemberPath="satellites" Binding="{Binding Satellites}" Width="65" />
+                    <DataGridTextColumn Header="HDOP" SortMemberPath="hdop" Binding="{Binding Hdop}" Width="75" />
+                    <DataGridTextColumn Header="Heading" SortMemberPath="heading" Binding="{Binding Heading}" Width="90" />
+                    <DataGridTextColumn Header="Altitude" SortMemberPath="altitude" Binding="{Binding Altitude}" Width="90" />
+                    <DataGridTextColumn Header="Ruijie" SortMemberPath="ruijie" Binding="{Binding Ruijie}" Width="85" />
+                    <DataGridTextColumn Header="OBS" SortMemberPath="obs" Binding="{Binding Obs}" Width="80" />
+                    <DataGridTextColumn Header="Vehicle" SortMemberPath="vehicle" Binding="{Binding Armed}" Width="100" />
                 </DataGrid.Columns>
             </DataGrid>
         </Border>

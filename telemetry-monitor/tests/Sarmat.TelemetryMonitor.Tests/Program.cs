@@ -1,8 +1,12 @@
 using Sarmat.TelemetryMonitor.Protocol;
+using Sarmat.TelemetryMonitor.Configuration;
+using Sarmat.TelemetryMonitor.Services;
 
 var failures = 0;
 Run("decodes aggregator station configuration", Configuration);
 Run("decodes aggregator telemetry snapshot", Snapshot);
+if (Environment.GetEnvironmentVariable("SARMAT_AGGREGATOR_INTEGRATION") == "1")
+    Run("connects to local telemetry aggregator", LocalIntegration);
 Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
 return failures;
 
@@ -40,6 +44,24 @@ void Snapshot()
     Equal(274d, station.Heading);
     Equal(86, station.RuijieQuality);
     Equal((byte)3, station.Flags);
+}
+
+void LocalIntegration()
+{
+    using var client = new TelemetryClient(new MonitorConfig
+    {
+        AggregatorUrl = "ws://127.0.0.1:8080/ws/monitor",
+        Secret = "sarmat-main-monitor-2026",
+        ReconnectSeconds = 1
+    });
+    var result = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+    string? error = null;
+    client.ConnectionChanged += (_, value) => error = value;
+    client.ConfigurationReceived += stations => result.TrySetResult(stations.Count);
+    client.Start();
+    if (!result.Task.Wait(TimeSpan.FromSeconds(5)))
+        throw new Exception("No station configuration received. " + (error ?? "No connection error reported."));
+    Equal(3, result.Task.Result);
 }
 
 void Equal<T>(T expected, T actual)

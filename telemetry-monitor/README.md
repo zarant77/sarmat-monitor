@@ -3,6 +3,9 @@
 Windows desktop client that connects to `telemetry-aggregator` and displays the current state of
 all configured stations in a table.
 
+The application icon uses a blue-and-yellow drone and telemetry mark. Source PNG and Windows ICO
+assets are stored in `src/Sarmat.TelemetryMonitor/assets`.
+
 ## Configuration
 
 Copy `config.example.json` to the ignored `config.json` and set values matching the aggregator:
@@ -22,9 +25,23 @@ An installed copy creates its editable configuration at
 
 ## Run
 
+The simplest local launch command is:
+
+```powershell
+.\run.cmd
+```
+
+The script creates `config.json` from the example when it is missing. You can also run the project
+directly:
+
 ```powershell
 dotnet run --project .\src\Sarmat.TelemetryMonitor\Sarmat.TelemetryMonitor.csproj
 ```
+
+Use the **Settings** button in the application header to change the aggregator URL, secret, and
+reconnect interval. Saving reconnects immediately and writes the active `config.json`.
+The window size and maximized state are restored between launches. Use the **Columns** button to
+show or hide individual table columns; that selection is saved in the same configuration file.
 
 Run protocol tests with:
 

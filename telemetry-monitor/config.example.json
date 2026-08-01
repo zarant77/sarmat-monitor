@@ -1,5 +1,9 @@
 {
   "aggregatorUrl": "ws://127.0.0.1:8080/ws/monitor",
   "secret": "sarmat-main-monitor-2026",
-  "reconnectSeconds": 5
+  "reconnectSeconds": 5,
+  "windowWidth": 1220,
+  "windowHeight": 440,
+  "windowMaximized": false,
+  "hiddenColumns": []
 }

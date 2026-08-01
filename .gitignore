@@ -5,6 +5,7 @@
 [Rr]elease/
 dist/
 artifacts/
+publish/
 .ci/
 
 # Visual Studio / MSBuild
