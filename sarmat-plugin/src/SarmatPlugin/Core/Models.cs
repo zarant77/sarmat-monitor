@@ -102,6 +102,19 @@ namespace SarmatPlugin.Core
         [DataMember] public Dictionary<string, bool> HudElements { get; set; } =
             new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         [DataMember] public bool GStreamerWasStarted { get; set; }
+        [DataMember] public string CameraUrl { get; set; } = "rtsp://192.168.69.5:554/stream=0";
+        [DataMember] public string CameraProtocol { get; set; } = "tcp";
+        [DataMember] public int CameraLatencyMs { get; set; } = 150;
+        [DataMember] public bool CameraDropOnLatency { get; set; } = true;
+        [DataMember] public string CameraDepayloader { get; set; } = "rtph264depay";
+        [DataMember] public string CameraParser { get; set; } = "h264parse";
+        [DataMember] public string CameraDecoder { get; set; } = "avdec_h264";
+        [DataMember] public int CameraQueueMaxBuffers { get; set; } = 1;
+        [DataMember] public string CameraQueueLeaky { get; set; } = "downstream";
+        [DataMember] public string CameraConverter { get; set; } = "videoconvert";
+        [DataMember] public string CameraRawFormat { get; set; } = "BGRA";
+        [DataMember] public string CameraAppSinkName { get; set; } = "outsink";
+        [DataMember] public bool CameraSync { get; set; }
         [DataMember] public bool LimaEnabled { get; set; }
         [DataMember] public int LimaRcChannel { get; set; } = 12;
         [DataMember] public int LimaPwmThreshold { get; set; } = 1800;
@@ -132,6 +145,18 @@ namespace SarmatPlugin.Core
             AudioWarningSoundPath = (AudioWarningSoundPath ?? "").Trim();
             if (VehicleReconnectTimeoutSeconds <= 0) VehicleReconnectTimeoutSeconds = 10;
             VehicleReconnectTimeoutSeconds = Math.Max(3, Math.Min(300, VehicleReconnectTimeoutSeconds));
+            CameraUrl = string.IsNullOrWhiteSpace(CameraUrl)
+                ? "rtsp://192.168.69.5:554/stream=0" : CameraUrl.Trim();
+            CameraProtocol = string.IsNullOrWhiteSpace(CameraProtocol) ? "tcp" : CameraProtocol.Trim();
+            CameraLatencyMs = Math.Max(0, Math.Min(10000, CameraLatencyMs));
+            CameraDepayloader = Default(CameraDepayloader, "rtph264depay");
+            CameraParser = Default(CameraParser, "h264parse");
+            CameraDecoder = Default(CameraDecoder, "avdec_h264");
+            CameraQueueMaxBuffers = Math.Max(1, Math.Min(1000, CameraQueueMaxBuffers));
+            CameraQueueLeaky = Default(CameraQueueLeaky, "downstream");
+            CameraConverter = Default(CameraConverter, "videoconvert");
+            CameraRawFormat = Default(CameraRawFormat, "BGRA");
+            CameraAppSinkName = Default(CameraAppSinkName, "outsink");
             RuijieUsername = string.IsNullOrWhiteSpace(RuijieUsername) ? "admin" : RuijieUsername.Trim();
             if (EnabledWidgets == null)
                 EnabledWidgets = WidgetCatalog.DefaultIds.ToList();
@@ -156,5 +181,8 @@ namespace SarmatPlugin.Core
             if (string.IsNullOrWhiteSpace(LimaFlightMode)) LimaFlightMode = "AltHold";
             else LimaFlightMode = LimaFlightMode.Trim();
         }
+
+        private static string Default(string value, string fallback) =>
+            string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 }

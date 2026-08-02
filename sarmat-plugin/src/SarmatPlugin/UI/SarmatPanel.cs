@@ -16,6 +16,7 @@ namespace SarmatPlugin.UI
 
         public event EventHandler SettingsRequested;
         public event EventHandler VideoSourceRequested;
+        public event EventHandler VehicleReconnectRequested;
 
         public SarmatPanel()
         {
@@ -44,8 +45,10 @@ namespace SarmatPlugin.UI
             var menu = new ContextMenuStrip();
             menu.Items.Add("Settings", null, (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Start Sarmat RTSP video", null,
+            menu.Items.Add("Reconnect camera", null,
                 (s, e) => VideoSourceRequested?.Invoke(this, EventArgs.Empty));
+            menu.Items.Add("Reconnect drone", null,
+                (s, e) => VehicleReconnectRequested?.Invoke(this, EventArgs.Empty));
             ApplyContextMenu(this, menu);
             foreach (var widget in widgets.Values) ApplyContextMenu(widget, menu);
 

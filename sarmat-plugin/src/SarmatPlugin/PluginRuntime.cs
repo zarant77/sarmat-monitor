@@ -38,6 +38,7 @@ namespace SarmatPlugin
         public event Action<string> LimaModeRequested;
         public event Action VehicleReconnectRequested;
         public bool ShouldRestoreGStreamer => settings.GStreamerWasStarted;
+        public PluginSettings CurrentSettings => settings;
 
         public PluginRuntime(Func<object> currentState, Func<long?> packetCount = null)
         {

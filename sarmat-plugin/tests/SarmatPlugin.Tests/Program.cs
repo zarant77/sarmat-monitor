@@ -318,10 +318,20 @@ namespace SarmatPlugin.Tests
         }
         private static void GStreamerPipeline()
         {
-            var pipeline = SarmatMissionPlannerPlugin.SarmatGStreamerPipeline;
-            True(pipeline.Contains("rtsp://192.168.69.5:554/stream=0"));
-            True(pipeline.Contains("video/x-raw,format=BGRA"));
-            True(pipeline.Contains("appsink name=outsink sync=false"));
+            var pipeline = GStreamerPipelineBuilder.Build(new PluginSettings());
+            Equal("rtspsrc location=rtsp://192.168.69.5:554/stream=0 protocols=tcp latency=150 " +
+                "drop-on-latency=true ! rtph264depay ! h264parse ! avdec_h264 ! queue " +
+                "max-size-buffers=1 leaky=downstream ! videoconvert ! video/x-raw,format=BGRA ! " +
+                "appsink name=outsink sync=false", pipeline);
+            var customized = GStreamerPipelineBuilder.Build(new PluginSettings
+            {
+                CameraUrl = "rtsp://10.0.0.7/live",
+                CameraProtocol = "udp",
+                CameraLatencyMs = 250,
+                CameraDecoder = "decodebin3"
+            });
+            True(customized.Contains("location=rtsp://10.0.0.7/live protocols=udp latency=250"));
+            True(customized.Contains("! decodebin3 !"));
         }
         private static void Sanitizer()
         {

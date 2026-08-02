@@ -7,6 +7,7 @@ using System.Linq.Expressions;
 using System.Windows.Forms;
 using MissionPlanner.Plugin;
 using SarmatPlugin.Infrastructure;
+using SarmatPlugin.Core;
 
 namespace SarmatPlugin
 {
@@ -22,11 +23,6 @@ namespace SarmatPlugin
         private Label takeoffModeWarning;
         private bool vehicleReconnectInProgress;
         private bool tabRegistrationPendingLogged;
-        internal const string SarmatGStreamerPipeline =
-            "rtspsrc location=rtsp://192.168.69.5:554/stream=0 latency=100 ! application/x-rtp ! " +
-            "decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! " +
-            "video/x-raw,format=BGRA ! appsink name=outsink sync=false";
-
         public override string Name => "Sarmat Plugin";
         public override string Version => "1.0.0";
         public override string Author => "Sarmat";
@@ -87,6 +83,7 @@ namespace SarmatPlugin
                 runtime.VehicleReconnectRequested += ReconnectVehicle;
                 panel = runtime.CreatePanel();
                 panel.VideoSourceRequested += PanelVideoSourceRequested;
+                panel.VehicleReconnectRequested += PanelVehicleReconnectRequested;
                 ConfigureOptionalFlightDataUi();
                 if (!RegisterSarmatTab())
                 {
@@ -236,6 +233,7 @@ namespace SarmatPlugin
         }
 
         private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo();
+        private void PanelVehicleReconnectRequested(object sender, EventArgs e) => ReconnectVehicle();
 
         private void CleanupUiAndRuntime()
         {
@@ -254,6 +252,11 @@ namespace SarmatPlugin
 
         private void DisposeRuntime()
         {
+            if (panel != null)
+            {
+                panel.VideoSourceRequested -= PanelVideoSourceRequested;
+                panel.VehicleReconnectRequested -= PanelVehicleReconnectRequested;
+            }
             if (runtime != null)
             {
                 runtime.TakeoffWarningChanged -= SetTakeoffWarningVisible;
@@ -369,7 +372,8 @@ namespace SarmatPlugin
         {
             try
             {
-                SaveMissionPlannerSetting("gstreamer_url", SarmatGStreamerPipeline);
+                var pipeline = GStreamerPipelineBuilder.Build(runtime?.CurrentSettings);
+                SaveMissionPlannerSetting("gstreamer_url", pipeline);
                 if (flightData == null) throw new InvalidOperationException("Mission Planner Flight Data is unavailable");
 
                 var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
@@ -385,7 +389,7 @@ namespace SarmatPlugin
 
                 type.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)?.Invoke(stream, null);
                 type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance)?.Invoke(
-                    stream, new object[] { SarmatGStreamerPipeline });
+                    stream, new object[] { pipeline });
                 SetHudSixteenByNine();
                 runtime?.MarkGStreamerStarted();
             }

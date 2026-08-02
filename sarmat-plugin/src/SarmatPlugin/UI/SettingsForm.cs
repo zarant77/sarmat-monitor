@@ -38,6 +38,7 @@ namespace SarmatPlugin.UI
             tabs.TabPages.Add(Page("OBS Studio", Obs()));
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
             tabs.TabPages.Add(Page("Aggregator", Aggregator()));
+            tabs.TabPages.Add(Page("Camera", Camera()));
             tabs.TabPages.Add(Page("Lima", Lima()));
             tabs.TabPages.Add(Page("Audio", Audio()));
             tabs.TabPages.Add(Page("Widgets", Widgets()));
@@ -129,6 +130,27 @@ namespace SarmatPlugin.UI
             ButtonRow(p, "Test warning", () => testAudio(Severity.Warning));
             ButtonRow(p, "Test critical", () => testAudio(Severity.Critical));
             ButtonRow(p, "Test restored", () => testAudio(Severity.Ok));
+            return p;
+        }
+        private Control Camera()
+        {
+            var p = Grid();
+            TextBox(p, "RTSP URL", "CameraUrl", settings.CameraUrl);
+            Combo(p, "Protocol", "CameraProtocol", settings.CameraProtocol,
+                new[] { "tcp", "udp", "udp-mcast", "http" });
+            Number(p, "Latency (ms)", "CameraLatencyMs", settings.CameraLatencyMs, 0, 10000, 0);
+            Check(p, "Drop frames when latency is exceeded", "CameraDropOnLatency", settings.CameraDropOnLatency);
+            TextBox(p, "RTP depayloader", "CameraDepayloader", settings.CameraDepayloader);
+            TextBox(p, "Parser", "CameraParser", settings.CameraParser);
+            TextBox(p, "Decoder", "CameraDecoder", settings.CameraDecoder);
+            Number(p, "Queue max buffers", "CameraQueueMaxBuffers", settings.CameraQueueMaxBuffers, 1, 1000, 0);
+            Combo(p, "Queue leaky mode", "CameraQueueLeaky", settings.CameraQueueLeaky,
+                new[] { "downstream", "upstream", "no" });
+            TextBox(p, "Video converter", "CameraConverter", settings.CameraConverter);
+            Combo(p, "Raw pixel format", "CameraRawFormat", settings.CameraRawFormat,
+                new[] { "BGRA", "BGRx", "RGBA", "RGBx" });
+            TextBox(p, "App sink name", "CameraAppSinkName", settings.CameraAppSinkName);
+            Check(p, "Synchronize appsink", "CameraSync", settings.CameraSync);
             return p;
         }
         private Control Lima()
@@ -237,6 +259,13 @@ namespace SarmatPlugin.UI
                 HudElements=HudElementCatalog.Elements.ToDictionary(x => x.Key,
                     x => B("Hud:" + x.Key), StringComparer.OrdinalIgnoreCase),
                 GStreamerWasStarted=settings.GStreamerWasStarted
+                ,CameraUrl=T("CameraUrl"), CameraProtocol=T("CameraProtocol"),
+                CameraLatencyMs=(int)N("CameraLatencyMs"), CameraDropOnLatency=B("CameraDropOnLatency"),
+                CameraDepayloader=T("CameraDepayloader"), CameraParser=T("CameraParser"),
+                CameraDecoder=T("CameraDecoder"), CameraQueueMaxBuffers=(int)N("CameraQueueMaxBuffers"),
+                CameraQueueLeaky=T("CameraQueueLeaky"), CameraConverter=T("CameraConverter"),
+                CameraRawFormat=T("CameraRawFormat"), CameraAppSinkName=T("CameraAppSinkName"),
+                CameraSync=B("CameraSync")
                 ,LimaEnabled=B("LimaEnabled"), LimaRcChannel=(int)N("LimaRcChannel"),
                 LimaPwmThreshold=(int)N("LimaPwmThreshold"), LimaPressedWhenHigh=B("LimaPressedWhenHigh"),
                 LimaFlightMode=T("LimaFlightMode"), LimaSettingsInitialized=true
