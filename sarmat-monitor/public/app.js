@@ -9,10 +9,11 @@ let refreshTimer;
 
 const authHeaders = () => ({ Authorization: `Bearer ${secret}` });
 const number = (value, digits, suffix = "") => value == null ? dash : `${value.toFixed(digits)}${suffix}`;
-function cell(value, className = "") {
+function cell(value, className = "", label = "") {
   const element = document.createElement("td");
   element.textContent = value;
   if (className) element.className = className;
+  if (label) element.dataset.label = label;
   return element;
 }
 
@@ -32,26 +33,32 @@ function render({ stations, thresholds }) {
     const row = document.createElement("tr");
     const identity = document.createElement("td");
     identity.className = "station-name";
+    identity.dataset.label = "Станція";
     identity.style.color = station.color;
     identity.textContent = station.name.toUpperCase();
     row.append(identity);
     const snapshot = station.snapshot;
     if (!snapshot) {
-      row.append(cell(dash), ...Array.from({ length: 8 }, () => cell(dash)));
+      row.append(
+        cell(dash, "", "Статус"), cell(dash, "", "Напруга"), cell(dash, "", "Струм"),
+        cell(dash, "", "Sat"), cell(dash, "", "HDOP"), cell(dash, "", "Азимут"),
+        cell(dash, "", "Висота"), cell(dash, "", "Зв'язок"), cell(dash, "", "OBS"),
+      );
     } else {
       const [, , , voltage, current, satellites, hdop, heading, altitude, ruijie, flags] = snapshot;
       const vehicle = flags & 2 ? "Armed" : "Disarmed";
       const vehicleClass = flags & 2 ? "armed" : "disarmed";
       const recording = Boolean(flags & 1);
       const obsClass = flags & 2 ? (recording ? "good" : "bad") : (recording ? "normal" : "good");
-      row.append(cell(vehicle, vehicleClass),
-        cell(number(voltage, 1, " V"), minimumClass(voltage, thresholds.voltage)),
-        cell(number(current, 1, " A"), maximumClass(current, thresholds.current)),
-        cell(satellites ?? dash, minimumClass(satellites, thresholds.satellites)),
-        cell(number(hdop, 2), maximumClass(hdop, thresholds.hdop)),
-        cell(number(heading, 1, "°")), cell(number(altitude, 1, " m")),
-        cell(ruijie == null ? dash : `${ruijie} dBm`, minimumClass(ruijie, thresholds.linkRssi)),
-        cell(recording ? "REC" : "NR", obsClass));
+      row.append(cell(vehicle, vehicleClass, "Статус"),
+        cell(number(voltage, 1, " V"), minimumClass(voltage, thresholds.voltage), "Напруга"),
+        cell(number(current, 1, " A"), maximumClass(current, thresholds.current), "Струм"),
+        cell(satellites ?? dash, minimumClass(satellites, thresholds.satellites), "Sat"),
+        cell(number(hdop, 2), maximumClass(hdop, thresholds.hdop), "HDOP"),
+        cell(number(heading, 1, "°"), "", "Азимут"),
+        cell(number(altitude, 1, " m"), "", "Висота"),
+        cell(ruijie == null ? dash : `${ruijie} dBm`, minimumClass(ruijie, thresholds.linkRssi), "Зв'язок"),
+        cell(recording ? "REC" : "NR", obsClass, "OBS"));
     }
     table.append(row);
   }

@@ -78,7 +78,7 @@ export function createTelemetryServer(config, logger = console) {
     if (publicFile) {
       try {
         const [fileName, contentType] = publicFile;
-        response.writeHead(200, { "content-type": contentType });
+        response.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
         response.end(await readFile(new URL(fileName, publicDirectory)));
       } catch (error) {
         logger.error?.(`Cannot serve web interface: ${error.message}`);

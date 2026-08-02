@@ -4,16 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sarmat Monitor</title>
-    <link rel="stylesheet" href="/app.css">
-    <script type="module" src="/app.js"></script>
+    <link rel="stylesheet" href="/app.css?v=3">
+    <script type="module" src="/app.js?v=3"></script>
   </head>
   <body>
     <section id="login" class="login-card">
-      <p class="eyebrow">SARMAT</p>
-      <h1>Вхід у монітор</h1>
-      <p>Введіть спільний секрет станцій.</p>
+      <h1 class="brand login-brand" aria-label="SARMAT"><span class="brand-sar">SAR</span><span class="brand-mat">MAT</span></h1>
       <form id="login-form">
-        <input id="secret" type="password" autocomplete="current-password" placeholder="Секрет" required autofocus>
+        <input id="secret" type="password" autocomplete="current-password" placeholder="Пароль" required autofocus>
         <button type="submit">Увійти</button>
       </form>
       <p id="login-error" class="login-error" role="alert"></p>
