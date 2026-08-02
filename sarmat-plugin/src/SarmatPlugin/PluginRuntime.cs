@@ -24,6 +24,7 @@ namespace SarmatPlugin
         private AudioService audio;
         private CancellationTokenSource cancellation;
         private SarmatPanel panel;
+        private SettingsForm settingsForm;
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private string aggregatorStatus = "Disabled";
@@ -51,10 +52,12 @@ namespace SarmatPlugin
         public SarmatPanel CreatePanel()
         {
             panel = new SarmatPanel { Visible = settings.ShowPanel, Dock = DockStyle.Top };
-            panel.SettingsRequested += (s, e) => ShowSettings();
+            panel.SettingsRequested += PanelSettingsRequested;
             if (settings.StartAutomatically) StartWorkers();
             return panel;
         }
+
+        private void PanelSettingsRequested(object sender, EventArgs e) => ShowSettings();
 
         public void ConfigureHud(object hud)
         {
@@ -224,10 +227,19 @@ namespace SarmatPlugin
                 () => { lock (sync) return ruijie; }, token);
         }
 
-        private void ShowSettings()
+        public void ShowSettings(IWin32Window owner = null)
         {
-            if (panel == null) return;
-            var form = new SettingsForm(settings,
+            if (disposed) return;
+            if (settingsForm != null && !settingsForm.IsDisposed)
+            {
+                if (settingsForm.WindowState == FormWindowState.Minimized)
+                    settingsForm.WindowState = FormWindowState.Normal;
+                settingsForm.Activate();
+                settingsForm.BringToFront();
+                return;
+            }
+
+            settingsForm = new SettingsForm(settings,
                 async ct =>
                 {
                     var result = await new ObsClient(settings, log).QueryAsync(ct).ConfigureAwait(false);
@@ -252,8 +264,18 @@ namespace SarmatPlugin
                 },
                 () => { lock (sync) return aggregatorStatus; },
                 severity => audio.Test(severity), hudVisibility?.Read());
-            if (form.ShowDialog(panel.FindForm()) != DialogResult.OK || form.Result == null) return;
-            settings = form.Result;
+            DialogResult result;
+            try
+            {
+                result = settingsForm.ShowDialog(owner ?? panel?.FindForm());
+                if (result != DialogResult.OK || settingsForm.Result == null) return;
+                settings = settingsForm.Result;
+            }
+            finally
+            {
+                settingsForm?.Dispose();
+                settingsForm = null;
+            }
             store.Save(settings);
             hudVisibility?.Apply(settings.HudElements);
             log.DebugEnabled = settings.DebugLogging;
@@ -271,7 +293,19 @@ namespace SarmatPlugin
         public void Dispose()
         {
             if (disposed) return; disposed = true;
-            StopWorkers(); audio.Dispose(); panel?.Dispose(); log.Info("Plugin stopped"); log.Dispose();
+            if (settingsForm != null)
+            {
+                settingsForm.Close();
+                settingsForm.Dispose();
+                settingsForm = null;
+            }
+            if (panel != null)
+            {
+                panel.SettingsRequested -= PanelSettingsRequested;
+                panel.Dispose();
+                panel = null;
+            }
+            StopWorkers(); audio.Dispose(); log.Info("Plugin stopped"); log.Dispose();
         }
     }
 }

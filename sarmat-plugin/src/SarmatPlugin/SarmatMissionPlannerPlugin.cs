@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Reflection;
 using System.Drawing;
 using System.Linq;
@@ -13,11 +12,10 @@ namespace SarmatPlugin
     public sealed class SarmatMissionPlannerPlugin : Plugin
     {
         private PluginRuntime runtime;
-        private TabControl hostTabs;
-        private TabPage sarmatTab;
-        private IList originalTabs;
         private object flightData;
         private SarmatPlugin.UI.SarmatPanel panel;
+        private ToolStripButton sarmatButton;
+        private AppLog lifecycleLog;
         private Label takeoffModeWarning;
         private bool vehicleReconnectInProgress;
         internal const string SarmatGStreamerPipeline =
@@ -31,54 +29,64 @@ namespace SarmatPlugin
 
         public override bool Init()
         {
-            loopratehz = 4;
-            return true;
-        }
-
-        public override bool Loaded()
-        {
             try
             {
-                runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
-                runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
-                runtime.VehicleConnected += RestoreVideoOnConnect;
-                runtime.VehicleConnected += ReconnectJoystickOnConnect;
-                runtime.LimaModeRequested += SetLimaFlightMode;
-                runtime.VehicleReconnectRequested += ReconnectVehicle;
-                panel = runtime.CreatePanel();
-                panel.VideoSourceRequested += (s, e) => StartSarmatVideo();
-                var mainType = Host.MainForm.GetType();
-                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                flightData = mainType.GetProperty("FlightData", flags)?.GetValue(Host.MainForm, null) ??
-                    mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
-                var hud = flightData?.GetType().GetField("myhud",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
-                runtime.ConfigureHud(hud);
-                InstallTakeoffWarning(hud as Control);
-                hostTabs = FindNamedControl(flightData as Control, "tabControlactions") as TabControl;
-                if (hostTabs == null) throw new InvalidOperationException("Mission Planner Flight Data action tabs were not found");
-
-                originalTabs = flightData?.GetType().GetField("TabListOriginal", flags)?.GetValue(flightData) as IList;
-                OnUi(hostTabs, () =>
-                {
-                    sarmatTab = new TabPage("Sarmat")
-                    {
-                        Name = "tabSarmatPlugin",
-                        Padding = new Padding(3),
-                        UseVisualStyleBackColor = true
-                    };
-                    panel.Dock = DockStyle.Fill;
-                    sarmatTab.Controls.Add(panel);
-                    hostTabs.TabPages.Insert(0, sarmatTab);
-                    if (originalTabs != null && !originalTabs.Contains(sarmatTab))
-                        originalTabs.Insert(0, sarmatTab);
-                });
+                lifecycleLog = new AppLog(true);
+                lifecycleLog.Info("Init started");
+                loopratehz = 4;
+                lifecycleLog.Info("Init completed; loopratehz=4");
                 return true;
             }
             catch (Exception ex)
             {
-                try { using (var log = new AppLog(true)) log.Error("Plugin load failed", ex); } catch { }
-                runtime?.Dispose(); runtime = null;
+                TryLog("Init failed", ex);
+                // Logging availability must not decide whether Mission Planner loads the plugin.
+                loopratehz = 4;
+                return true;
+            }
+        }
+
+        public override bool Loaded()
+        {
+            TryLog("Loaded started");
+            try
+            {
+                var main = Host.MainForm;
+                if (main == null) throw new InvalidOperationException("Mission Planner MainForm is unavailable");
+                OnUi(main, () =>
+                {
+                    TryLog("UI thread setup started");
+                    runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
+                    runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
+                    runtime.VehicleConnected += RestoreVideoOnConnect;
+                    runtime.VehicleConnected += ReconnectJoystickOnConnect;
+                    runtime.LimaModeRequested += SetLimaFlightMode;
+                    runtime.VehicleReconnectRequested += ReconnectVehicle;
+                    panel = runtime.CreatePanel();
+                    panel.VideoSourceRequested += PanelVideoSourceRequested;
+
+                    sarmatButton = new ToolStripButton
+                    {
+                        Name = "MenuSarmatPlugin",
+                        Text = "Sarmat",
+                        ToolTipText = "Open Sarmat settings",
+                        AutoSize = true,
+                        DisplayStyle = ToolStripItemDisplayStyle.Text
+                    };
+                    sarmatButton.Click += SarmatButtonClick;
+                    main.MainMenu.Items.Add(sarmatButton);
+                    TryLog("UI registered: MainMenu/MenuSarmatPlugin");
+
+                    ConfigureOptionalFlightDataUi();
+                });
+                TryLog("Loaded completed");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                TryLog("Loaded failed", ex);
+                var main = Host?.MainForm;
+                if (main != null) OnUi(main, CleanupUiAndRuntime); else CleanupUiAndRuntime();
                 return false;
             }
         }
@@ -91,25 +99,97 @@ namespace SarmatPlugin
 
         public override bool Exit()
         {
+            TryLog("Exit started");
             try
             {
-                if (hostTabs != null && sarmatTab != null) OnUi(hostTabs, () =>
-                {
-                    if (originalTabs != null && originalTabs.Contains(sarmatTab))
-                        originalTabs.Remove(sarmatTab);
-                    hostTabs.TabPages.Remove(sarmatTab);
-                    sarmatTab.Dispose();
-                });
-                runtime?.Dispose();
-                if (takeoffModeWarning != null)
-                {
-                    takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
-                    takeoffModeWarning.Dispose();
-                    takeoffModeWarning = null;
-                }
+                var main = Host?.MainForm;
+                if (main != null) OnUi(main, CleanupUiAndRuntime); else CleanupUiAndRuntime();
+                TryLog("Exit completed");
+                lifecycleLog?.Dispose();
+                lifecycleLog = null;
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                TryLog("Exit failed", ex);
+                lifecycleLog?.Dispose();
+                lifecycleLog = null;
+                return false;
+            }
+        }
+
+        private void ConfigureOptionalFlightDataUi()
+        {
+            try
+            {
+                var mainType = Host.MainForm.GetType();
+                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                flightData = mainType.GetProperty("FlightData", flags)?.GetValue(Host.MainForm, null) ??
+                    mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
+                var hud = flightData?.GetType().GetField("myhud",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+                runtime.ConfigureHud(hud);
+                if (hud is Control hudControl) InstallTakeoffWarning(hudControl);
+                else TryLog("Optional HUD integration skipped: HUD control is unavailable");
+            }
+            catch (Exception ex)
+            {
+                TryLog("Optional FlightData/HUD integration failed; Sarmat entry remains available", ex);
+            }
+        }
+
+        private void SarmatButtonClick(object sender, EventArgs e)
+        {
+            try { runtime?.ShowSettings(Host.MainForm); }
+            catch (Exception ex) { TryLog("Opening Sarmat UI failed", ex); }
+        }
+
+        private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo();
+
+        private void CleanupUiAndRuntime()
+        {
+            if (sarmatButton != null)
+            {
+                sarmatButton.Click -= SarmatButtonClick;
+                sarmatButton.Owner?.Items.Remove(sarmatButton);
+                sarmatButton.Dispose();
+                sarmatButton = null;
+            }
+            if (panel != null) panel.VideoSourceRequested -= PanelVideoSourceRequested;
+            if (runtime != null)
+            {
+                runtime.TakeoffWarningChanged -= SetTakeoffWarningVisible;
+                runtime.VehicleConnected -= RestoreVideoOnConnect;
+                runtime.VehicleConnected -= ReconnectJoystickOnConnect;
+                runtime.LimaModeRequested -= SetLimaFlightMode;
+                runtime.VehicleReconnectRequested -= ReconnectVehicle;
+                runtime.Dispose();
+                runtime = null;
+            }
+            panel = null;
+            if (takeoffModeWarning != null)
+            {
+                takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
+                takeoffModeWarning.Dispose();
+                takeoffModeWarning = null;
+            }
+            flightData = null;
+        }
+
+        private void TryLog(string message, Exception error = null)
+        {
+            try
+            {
+                if (lifecycleLog != null)
+                {
+                    if (error == null) lifecycleLog.Info(message); else lifecycleLog.Error(message, error);
+                }
+                else using (var log = new AppLog(true))
+                {
+                    if (error == null) log.Info(message); else log.Error(message, error);
+                }
+            }
+            catch { }
         }
 
         private static Control FindNamedControl(Control root, string name)
