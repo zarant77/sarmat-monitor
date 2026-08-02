@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using System.Drawing;
 using System.Linq;
@@ -14,11 +15,13 @@ namespace SarmatPlugin
         private PluginRuntime runtime;
         private object flightData;
         private SarmatPlugin.UI.SarmatPanel panel;
-        private ToolStripButton sarmatButton;
-        private ToolStripMenuItem sarmatMenuItem;
+        private TabControl hostTabs;
+        private TabPage sarmatTab;
+        private IList originalTabs;
         private AppLog lifecycleLog;
         private Label takeoffModeWarning;
         private bool vehicleReconnectInProgress;
+        private bool tabRegistrationPendingLogged;
         internal const string SarmatGStreamerPipeline =
             "rtspsrc location=rtsp://192.168.69.5:554/stream=0 latency=100 ! application/x-rtp ! " +
             "decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! " +
@@ -57,7 +60,6 @@ namespace SarmatPlugin
                 OnUi(main, () =>
                 {
                     TryLog("UI thread setup started");
-                    RegisterUiEntry(main);
                     InitializeRuntime();
                 });
                 TryLog("Loaded completed");
@@ -69,56 +71,6 @@ namespace SarmatPlugin
                 var main = Host?.MainForm;
                 if (main != null) OnUi(main, CleanupUiAndRuntime); else CleanupUiAndRuntime();
                 return false;
-            }
-        }
-
-        private void RegisterUiEntry(Control main)
-        {
-            var flightDataMenu = Host.FDMenuMap;
-            if (flightDataMenu == null)
-                throw new InvalidOperationException("Mission Planner Host.FDMenuMap is unavailable");
-
-            sarmatMenuItem = new ToolStripMenuItem("Sarmat")
-            {
-                Name = "MenuSarmatPluginContext",
-                ToolTipText = "Open Sarmat settings"
-            };
-            sarmatMenuItem.Click += SarmatButtonClick;
-            flightDataMenu.Items.Add(sarmatMenuItem);
-            TryLog("UI registered: Host.FDMenuMap/MenuSarmatPluginContext");
-
-            // MainMenu is not stable across all Mission Planner builds. The supported
-            // Flight Data context menu above remains the guaranteed entry point.
-            try
-            {
-                var mainMenu = main.GetType().GetProperty("MainMenu",
-                    BindingFlags.Instance | BindingFlags.Public)?.GetValue(main, null) as ToolStrip;
-                if (mainMenu == null)
-                {
-                    TryLog("Optional MainMenu button skipped: MainMenu is unavailable");
-                    return;
-                }
-                sarmatButton = new ToolStripButton
-                {
-                    Name = "MenuSarmatPlugin",
-                    Text = "Sarmat",
-                    ToolTipText = "Open Sarmat settings",
-                    AutoSize = true,
-                    DisplayStyle = ToolStripItemDisplayStyle.Text
-                };
-                sarmatButton.Click += SarmatButtonClick;
-                mainMenu.Items.Add(sarmatButton);
-                TryLog("UI registered: MainMenu/MenuSarmatPlugin");
-            }
-            catch (Exception ex)
-            {
-                TryLog("Optional MainMenu button registration failed; context-menu entry remains available", ex);
-                if (sarmatButton != null)
-                {
-                    sarmatButton.Click -= SarmatButtonClick;
-                    sarmatButton.Dispose();
-                    sarmatButton = null;
-                }
             }
         }
 
@@ -136,18 +88,103 @@ namespace SarmatPlugin
                 panel = runtime.CreatePanel();
                 panel.VideoSourceRequested += PanelVideoSourceRequested;
                 ConfigureOptionalFlightDataUi();
+                if (!RegisterSarmatTab())
+                {
+                    tabRegistrationPendingLogged = true;
+                    TryLog("Sarmat tab registration deferred: FlightData controls are not ready yet");
+                }
                 TryLog("Runtime initialization completed");
             }
             catch (Exception ex)
             {
-                TryLog("Runtime initialization failed; Sarmat UI entry remains available", ex);
+                TryLog("Runtime initialization failed", ex);
                 DisposeRuntime();
+                throw;
             }
+        }
+
+        private bool RegisterSarmatTab()
+        {
+            try
+            {
+                if (sarmatTab != null && !sarmatTab.IsDisposed && hostTabs != null &&
+                    !hostTabs.IsDisposed && hostTabs.TabPages.Contains(sarmatTab)) return true;
+                if (sarmatTab != null) RemoveSarmatTab();
+                ResolveFlightData();
+                var main = Host.MainForm as Control;
+                hostTabs = FindNamedControl(flightData as Control, "tabControlactions") as TabControl ??
+                    FindNamedControl(main, "tabControlactions") as TabControl;
+                if (hostTabs == null) return false;
+
+                var existing = hostTabs.TabPages.Cast<TabPage>().FirstOrDefault(page =>
+                    string.Equals(page.Name, "tabSarmatPlugin", StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    sarmatTab = existing;
+                    TryLog("Sarmat tab already registered");
+                    return true;
+                }
+
+                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                originalTabs = flightData?.GetType().GetField("TabListOriginal", flags)?.GetValue(flightData) as IList ??
+                    flightData?.GetType().GetProperty("TabListOriginal", flags)?.GetValue(flightData, null) as IList;
+                sarmatTab = new TabPage("Sarmat")
+                {
+                    Name = "tabSarmatPlugin",
+                    Padding = new Padding(3),
+                    UseVisualStyleBackColor = true
+                };
+                panel.Dock = DockStyle.Fill;
+                sarmatTab.Controls.Add(panel);
+                hostTabs.TabPages.Insert(0, sarmatTab);
+                if (originalTabs != null && !originalTabs.Contains(sarmatTab))
+                    originalTabs.Insert(0, sarmatTab);
+                TryLog("UI registered: FlightData/tabControlactions/tabSarmatPlugin");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                TryLog("Sarmat tab registration attempt failed; it will be retried", ex);
+                RemoveSarmatTab();
+                return false;
+            }
+        }
+
+        private void RemoveSarmatTab()
+        {
+            if (sarmatTab == null) return;
+            if (originalTabs != null && originalTabs.Contains(sarmatTab))
+                originalTabs.Remove(sarmatTab);
+            hostTabs?.TabPages.Remove(sarmatTab);
+            // Detach the panel: PluginRuntime owns and disposes it.
+            if (panel != null && sarmatTab.Controls.Contains(panel))
+                sarmatTab.Controls.Remove(panel);
+            sarmatTab.Dispose();
+            sarmatTab = null;
+            hostTabs = null;
+            originalTabs = null;
         }
 
         public override bool Loop()
         {
-            try { runtime?.Tick(); } catch { }
+            try
+            {
+                if (runtime != null && (sarmatTab == null || sarmatTab.IsDisposed || hostTabs == null ||
+                    hostTabs.IsDisposed || !hostTabs.TabPages.Contains(sarmatTab)))
+                {
+                    var main = Host?.MainForm;
+                    if (main != null) OnUi(main, () =>
+                    {
+                        if (RegisterSarmatTab() && tabRegistrationPendingLogged)
+                        {
+                            TryLog("Deferred Sarmat tab registration completed");
+                            tabRegistrationPendingLogged = false;
+                        }
+                    });
+                }
+                runtime?.Tick();
+            }
+            catch (Exception ex) { TryLog("Plugin loop failed", ex); }
             return true;
         }
 
@@ -176,10 +213,7 @@ namespace SarmatPlugin
         {
             try
             {
-                var mainType = Host.MainForm.GetType();
-                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                flightData = mainType.GetProperty("FlightData", flags)?.GetValue(Host.MainForm, null) ??
-                    mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
+                ResolveFlightData();
                 var hud = flightData?.GetType().GetField("myhud",
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
                 runtime.ConfigureHud(hud);
@@ -192,39 +226,20 @@ namespace SarmatPlugin
             }
         }
 
-        private void SarmatButtonClick(object sender, EventArgs e)
+        private void ResolveFlightData()
         {
-            try
-            {
-                if (runtime == null)
-                {
-                    MessageBox.Show("Sarmat runtime could not be initialized. See sarmat-plugin.log for the full error.",
-                        "Sarmat", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-                runtime.ShowSettings(Host.MainForm);
-            }
-            catch (Exception ex) { TryLog("Opening Sarmat UI failed", ex); }
+            if (flightData != null) return;
+            var mainType = Host.MainForm.GetType();
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            flightData = mainType.GetProperty("FlightData", flags)?.GetValue(Host.MainForm, null) ??
+                mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
         }
 
         private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo();
 
         private void CleanupUiAndRuntime()
         {
-            if (sarmatButton != null)
-            {
-                sarmatButton.Click -= SarmatButtonClick;
-                sarmatButton.Owner?.Items.Remove(sarmatButton);
-                sarmatButton.Dispose();
-                sarmatButton = null;
-            }
-            if (sarmatMenuItem != null)
-            {
-                sarmatMenuItem.Click -= SarmatButtonClick;
-                sarmatMenuItem.Owner?.Items.Remove(sarmatMenuItem);
-                sarmatMenuItem.Dispose();
-                sarmatMenuItem = null;
-            }
+            RemoveSarmatTab();
             if (panel != null) panel.VideoSourceRequested -= PanelVideoSourceRequested;
             DisposeRuntime();
             panel = null;
