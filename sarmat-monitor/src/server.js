@@ -20,7 +20,7 @@ try {
 
   const server = createTelemetryServer(config);
   const address = await server.listen();
-  console.info(`Telemetry aggregator listening on ws://${address.address}:${address.port}`);
+  console.info(`Sarmat Monitor listening on http://${address.address}:${address.port}`);
 
   let stopping = false;
   async function stop(signal) {

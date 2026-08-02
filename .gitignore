@@ -31,8 +31,7 @@ project.nuget.cache
 node_modules/
 .pnpm-store/
 npm-debug.log*
-/telemetry-aggregator/config.json
-/telemetry-monitor/config.json
+/sarmat-monitor/config.json
 
 # Test and coverage artifacts
 TestResults/

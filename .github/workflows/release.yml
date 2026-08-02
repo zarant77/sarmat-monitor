@@ -92,60 +92,28 @@ jobs:
           if ($built -ne $release) { Move-Item -LiteralPath $built -Destination $release -Force }
           "PLUGIN_MSI=$release" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Test and package telemetry aggregator
+      - name: Test and package Sarmat Monitor
         shell: pwsh
         run: |
           corepack enable
           corepack prepare pnpm@11.9.0 --activate
-          Push-Location .\telemetry-aggregator
+          Push-Location .\sarmat-monitor
           pnpm install --frozen-lockfile
           pnpm test
           if ($LASTEXITCODE -ne 0) { throw "Aggregator tests failed with exit code $LASTEXITCODE." }
           Pop-Location
 
-          $stage = Join-Path $env:RUNNER_TEMP "telemetry-aggregator"
+          $stage = Join-Path $env:RUNNER_TEMP "sarmat-monitor"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -LiteralPath .\telemetry-aggregator\src -Destination $stage -Recurse
+          Copy-Item -LiteralPath .\sarmat-monitor\src -Destination $stage -Recurse
+          Copy-Item -LiteralPath .\sarmat-monitor\public -Destination $stage -Recurse
           foreach ($file in @('package.json', 'pnpm-lock.yaml', 'config.example.json',
               'README.md', 'install.cmd', 'start.cmd')) {
-            Copy-Item -LiteralPath (Join-Path .\telemetry-aggregator $file) -Destination $stage
+            Copy-Item -LiteralPath (Join-Path .\sarmat-monitor $file) -Destination $stage
           }
-          $archive = Join-Path $env:RELEASE_ARTIFACTS "TelemetryAggregator-$env:FILE_VERSION.zip"
+          $archive = Join-Path $env:RELEASE_ARTIFACTS "SarmatMonitor-$env:FILE_VERSION.zip"
           Compress-Archive -Path "$stage\*" -DestinationPath $archive -Force
-          "AGGREGATOR_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Test and publish telemetry monitor
-        shell: pwsh
-        run: |
-          dotnet run --project .\telemetry-monitor\tests\Sarmat.TelemetryMonitor.Tests\Sarmat.TelemetryMonitor.Tests.csproj `
-            --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Monitor tests failed with exit code $LASTEXITCODE." }
-          dotnet publish .\telemetry-monitor\src\Sarmat.TelemetryMonitor\Sarmat.TelemetryMonitor.csproj `
-            --configuration Release `
-            --runtime win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:DebugType=None `
-            -p:DebugSymbols=false `
-            -p:Version=$env:PRODUCT_VERSION `
-            --output .\telemetry-monitor\publish\win-x64 `
-            --configfile .\sarmat-plugin\NuGet.Config
-          if ($LASTEXITCODE -ne 0) { throw "Monitor publish failed with exit code $LASTEXITCODE." }
-
-      - name: Build telemetry monitor MSI
-        shell: pwsh
-        run: |
-          $publishDir = Join-Path $env:GITHUB_WORKSPACE "telemetry-monitor\publish\win-x64"
-          dotnet build .\telemetry-monitor\installer\Sarmat.TelemetryMonitor.Installer.wixproj `
-            --configuration Release `
-            "-p:ProductVersion=$env:PRODUCT_VERSION" `
-            "-p:PublishDir=$publishDir" `
-            "-p:OutputPath=$env:RELEASE_ARTIFACTS"
-          if ($LASTEXITCODE -ne 0) { throw "Monitor MSI build failed with exit code $LASTEXITCODE." }
-          $built = Join-Path $env:RELEASE_ARTIFACTS "TelemetryMonitor-$env:PRODUCT_VERSION-win-x64.msi"
-          $release = Join-Path $env:RELEASE_ARTIFACTS "TelemetryMonitor-$env:FILE_VERSION-win-x64.msi"
-          if ($built -ne $release) { Move-Item -LiteralPath $built -Destination $release -Force }
-          "MONITOR_MSI=$release" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "MONITOR_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -153,8 +121,7 @@ jobs:
           name: SarmatMonitor-release-${{ github.run_number }}
           path: |
             ${{ env.PLUGIN_MSI }}
-            ${{ env.AGGREGATOR_ZIP }}
-            ${{ env.MONITOR_MSI }}
+            ${{ env.MONITOR_ZIP }}
           if-no-files-found: error
 
       - name: Create or update GitHub Release
@@ -163,7 +130,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @($env:PLUGIN_MSI, $env:AGGREGATOR_ZIP, $env:MONITOR_MSI)
+          $files = @($env:PLUGIN_MSI, $env:MONITOR_ZIP)
           if (gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY 2>$null) {
             gh release upload $env:GITHUB_REF_NAME $files --clobber --repo $env:GITHUB_REPOSITORY
           } else {

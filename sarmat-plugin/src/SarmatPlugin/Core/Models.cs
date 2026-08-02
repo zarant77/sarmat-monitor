@@ -87,6 +87,8 @@ namespace SarmatPlugin.Core
         [DataMember] public bool AggregatorEnabled { get; set; }
         [DataMember] public string AggregatorUrl { get; set; } = "ws://127.0.0.1:8080/ws/station";
         [DataMember] public string AggregatorSecret { get; set; } = "";
+        [DataMember] public string MonitorStationName { get; set; } = "Station";
+        [DataMember] public string MonitorStationColor { get; set; } = "#3B82F6";
         [DataMember] public double AggregatorReconnectSeconds { get; set; } = 5;
         [DataMember] public bool AudioEnabled { get; set; } = true;
         [DataMember] public bool AudioMuted { get; set; }
@@ -138,6 +140,12 @@ namespace SarmatPlugin.Core
             AggregatorUrl = string.IsNullOrWhiteSpace(AggregatorUrl)
                 ? "ws://127.0.0.1:8080/ws/station" : AggregatorUrl.Trim();
             AggregatorSecret = (AggregatorSecret ?? "").Trim();
+            MonitorStationName = string.IsNullOrWhiteSpace(MonitorStationName)
+                ? "Station" : MonitorStationName.Trim();
+            MonitorStationColor = string.IsNullOrWhiteSpace(MonitorStationColor)
+                ? "#3B82F6" : MonitorStationColor.Trim().ToUpperInvariant();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(MonitorStationColor, "^#[0-9A-F]{6}$"))
+                MonitorStationColor = "#3B82F6";
             AggregatorReconnectSeconds = Math.Max(1, Math.Min(300, AggregatorReconnectSeconds));
             AudioVolume = Math.Max(0, Math.Min(1, AudioVolume));
             if (AudioSignalRepeatCount <= 0) AudioSignalRepeatCount = 3;

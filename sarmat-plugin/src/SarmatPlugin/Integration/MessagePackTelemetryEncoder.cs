@@ -6,7 +6,7 @@ namespace SarmatPlugin.Integration
     internal static class MessagePackTelemetryEncoder
     {
         public static byte[] Encode(uint sequence, double? voltage, double? current, int? satellites,
-            double? hdop, double? heading, double? altitude, int? ruijieQuality, byte flags)
+            double? hdop, double? heading, double? altitude, int? linkRssi, byte flags)
         {
             using (var output = new MemoryStream(80))
             {
@@ -18,7 +18,7 @@ namespace SarmatPlugin.Integration
                 WriteNullableDouble(output, hdop);
                 WriteNullableDouble(output, heading);
                 WriteNullableDouble(output, altitude);
-                WriteNullableInteger(output, ruijieQuality);
+                WriteNullableInteger(output, linkRssi);
                 WriteUnsigned(output, flags);
                 return output.ToArray();
             }
@@ -44,7 +44,25 @@ namespace SarmatPlugin.Integration
                 output.WriteByte(0xc0);
                 return;
             }
-            WriteUnsigned(output, unchecked((uint)value.Value));
+            if (value.Value >= 0)
+            {
+                WriteUnsigned(output, (uint)value.Value);
+                return;
+            }
+            if (value.Value >= -32)
+            {
+                output.WriteByte(unchecked((byte)value.Value));
+                return;
+            }
+            if (value.Value >= sbyte.MinValue)
+            {
+                output.WriteByte(0xd0);
+                output.WriteByte(unchecked((byte)value.Value));
+                return;
+            }
+            output.WriteByte(0xd1);
+            output.WriteByte(unchecked((byte)(value.Value >> 8)));
+            output.WriteByte(unchecked((byte)value.Value));
         }
 
         private static void WriteUnsigned(Stream output, uint value)

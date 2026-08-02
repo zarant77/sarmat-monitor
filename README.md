@@ -4,25 +4,16 @@
 
 ## Структура
 
-- [`sarmat-plugin`](./sarmat-plugin) — плагін для Mission Planner.
-- [`telemetry-aggregator`](./telemetry-aggregator) — Node.js WebSocket-сервер, що зберігає
-  актуальну телеметрію станцій у пам'яті.
-- [`telemetry-monitor`](./telemetry-monitor) — WPF-клієнт для табличного перегляду актуальної
-  телеметрії.
+- [`sarmat-plugin`](./sarmat-plugin) — плагін для Mission Planner, який надсилає телеметрію.
+- [`sarmat-monitor`](./sarmat-monitor) — Node.js сервер, який збирає актуальну телеметрію станцій і показує її у вебінтерфейсі.
 
-Усі три компоненти використовують компактний MessagePack-протокол через WebSocket.
+Обидва компоненти використовують компактний MessagePack-протокол через WebSocket. Вебпанель доступна на корені HTTP-сервера Sarmat Monitor, типово `http://localhost:8080/`.
 
 ## Релізи
 
-Тег у форматі `vMAJOR.MINOR.PATCH` створює три окремі пакети:
+Тег у форматі `vMAJOR.MINOR.PATCH` створює два окремі пакети:
 
 - `SarmatPlugin-<version>.msi`;
-- `TelemetryAggregator-<version>.zip`;
-- `TelemetryMonitor-<version>-win-x64.msi`.
+- `SarmatMonitor-<version>.zip`.
 
 До пакетів додаються лише приклади конфігурації без робочих секретів.
-
-## Робота з плагіном
-
-Інструкції зі збирання, тестування та встановлення розміщені в
-[`sarmat-plugin/README.md`](./sarmat-plugin/README.md).

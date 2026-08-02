@@ -1,5 +1,6 @@
 using System;
 using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using SarmatPlugin.Core;
@@ -30,7 +31,8 @@ namespace SarmatPlugin.Integration
                 return;
             }
 
-            Validate(settings.AggregatorUrl, settings.AggregatorSecret);
+            Validate(settings.AggregatorUrl, settings.AggregatorSecret,
+                settings.MonitorStationName, settings.MonitorStationColor);
             while (!token.IsCancellationRequested)
             {
                 try
@@ -39,6 +41,8 @@ namespace SarmatPlugin.Integration
                     using (var socket = CreateSocket(settings.AggregatorSecret))
                     {
                         await socket.ConnectAsync(new Uri(settings.AggregatorUrl), token).ConfigureAwait(false);
+                        await SendMetadataAsync(socket, settings.MonitorStationName,
+                            settings.MonitorStationColor, token).ConfigureAwait(false);
                         updateStatus("Connected");
                         log.Info("Telemetry aggregator connected");
 
@@ -72,16 +76,29 @@ namespace SarmatPlugin.Integration
             updateStatus(settings.AggregatorEnabled ? "Stopped" : "Disabled");
         }
 
-        public static async Task TestConnectionAsync(string url, string secret, CancellationToken token)
+        public static async Task TestConnectionAsync(string url, string secret,
+            string stationName, string stationColor, CancellationToken token)
         {
-            Validate(url, secret);
+            Validate(url, secret, stationName, stationColor);
             using (var socket = CreateSocket(secret))
             {
                 await socket.ConnectAsync(new Uri(url), token).ConfigureAwait(false);
+                await SendMetadataAsync(socket, stationName, stationColor, token).ConfigureAwait(false);
                 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection test", token)
                     .ConfigureAwait(false);
             }
         }
+
+        private static Task SendMetadataAsync(ClientWebSocket socket, string name, string color,
+            CancellationToken token)
+        {
+            var json = "{\"name\":\"" + EscapeJson(name.Trim()) + "\",\"color\":\"" +
+                color.Trim().ToUpperInvariant() + "\"}";
+            var bytes = Encoding.UTF8.GetBytes(json);
+            return socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token);
+        }
+
+        private static string EscapeJson(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
         private async Task SendLoopAsync(ClientWebSocket socket, Func<TelemetrySnapshot> readTelemetry,
             Func<ObsStatus> readObs, Func<RuijieStatus> readRuijie, CancellationToken token)
@@ -98,7 +115,7 @@ namespace SarmatPlugin.Integration
                 if (heading < 0) heading += 360;
                 var packet = MessagePackTelemetryEncoder.Encode(sequence++, telemetry.BatteryVoltage,
                     telemetry.CurrentAmps, telemetry.Satellites, telemetry.Hdop, heading,
-                    telemetry.Altitude, ruijie?.QualityPercent, flags);
+                    telemetry.Altitude, ruijie?.Rssi, flags);
                 await socket.SendAsync(new ArraySegment<byte>(packet), WebSocketMessageType.Binary,
                     true, token).ConfigureAwait(false);
                 await Task.Delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
@@ -126,13 +143,18 @@ namespace SarmatPlugin.Integration
             return socket;
         }
 
-        private static void Validate(string url, string secret)
+        private static void Validate(string url, string secret, string stationName, string stationColor)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var endpoint) ||
                 (endpoint.Scheme != "ws" && endpoint.Scheme != "wss"))
                 throw new ArgumentException("Aggregator URL must start with ws:// or wss://");
             if (string.IsNullOrWhiteSpace(secret))
                 throw new ArgumentException("Aggregator secret is required");
+            if (string.IsNullOrWhiteSpace(stationName) || stationName.Trim().Length > 100)
+                throw new ArgumentException("Station name is required and must not exceed 100 characters");
+            if (string.IsNullOrWhiteSpace(stationColor) ||
+                !System.Text.RegularExpressions.Regex.IsMatch(stationColor.Trim(), "^#[0-9A-Fa-f]{6}$"))
+                throw new ArgumentException("Station color must use the #RRGGBB format");
         }
     }
 }

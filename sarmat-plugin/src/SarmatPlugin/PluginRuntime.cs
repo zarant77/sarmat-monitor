@@ -258,9 +258,10 @@ namespace SarmatPlugin
                             : "Current status: Disconnected — " + result.Error;
                     }
                 },
-                async (url, secret, ct) =>
+                async (url, secret, stationName, stationColor, ct) =>
                 {
-                    await AggregatorClient.TestConnectionAsync(url, secret, ct).ConfigureAwait(false);
+                    await AggregatorClient.TestConnectionAsync(url, secret, stationName, stationColor, ct)
+                        .ConfigureAwait(false);
                     return "Current status: Connected";
                 },
                 () => { lock (sync) return aggregatorStatus; },

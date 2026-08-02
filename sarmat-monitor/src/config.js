@@ -9,6 +9,14 @@ const DEFAULT_SERVER = Object.freeze({
   maxMessageBytes: 4096,
 });
 
+const DEFAULT_THRESHOLDS = Object.freeze({
+  voltage: { goodMin: 44, normalMin: 42 },
+  current: { goodMax: 80, normalMax: 120 },
+  satellites: { goodMin: 30, normalMin: 26 },
+  hdop: { goodMax: 0.6, normalMax: 0.8 },
+  linkRssi: { goodMin: -70, normalMin: -80 },
+});
+
 function requireNonEmptyString(value, path) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${path} must be a non-empty string`);
@@ -19,6 +27,12 @@ function requirePositiveInteger(value, path, allowZero = false) {
   const minimum = allowZero ? 0 : 1;
   if (!Number.isInteger(value) || value < minimum) {
     throw new Error(`${path} must be an integer greater than or equal to ${minimum}`);
+  }
+}
+
+function requireFiniteNumber(value, path) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${path} must be a finite number`);
   }
 }
 
@@ -38,38 +52,24 @@ export function validateConfig(input) {
     throw new Error("server.offlineAfterMs must be greater than server.staleAfterMs");
   }
 
-  if (!Array.isArray(input.stations) || input.stations.length === 0) {
-    throw new Error("stations must be a non-empty array");
+  requireNonEmptyString(input.secret, "secret");
+  const thresholds = Object.fromEntries(Object.entries(DEFAULT_THRESHOLDS).map(([key, defaults]) => [
+    key, { ...defaults, ...input.thresholds?.[key] },
+  ]));
+  for (const [key, values] of Object.entries(thresholds)) {
+    for (const [name, value] of Object.entries(values)) requireFiniteNumber(value, `thresholds.${key}.${name}`);
   }
-  if (!Array.isArray(input.clients)) {
-    throw new Error("clients must be an array");
-  }
-
-  const allSecrets = new Set();
-  const stations = input.stations.map((station, index) => {
-    requireNonEmptyString(station?.secret, `stations[${index}].secret`);
-    requireNonEmptyString(station?.name, `stations[${index}].name`);
-    if (typeof station?.color !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(station.color)) {
-      throw new Error(`stations[${index}].color must use the #RRGGBB format`);
-    }
-    if (allSecrets.has(station.secret)) {
-      throw new Error(`duplicate secret in stations[${index}]`);
-    }
-    allSecrets.add(station.secret);
-    return { secret: station.secret, name: station.name, color: station.color.toUpperCase() };
-  });
-
-  const clients = input.clients.map((client, index) => {
-    requireNonEmptyString(client?.secret, `clients[${index}].secret`);
-    requireNonEmptyString(client?.name, `clients[${index}].name`);
-    if (allSecrets.has(client.secret)) {
-      throw new Error(`duplicate secret in clients[${index}]`);
-    }
-    allSecrets.add(client.secret);
-    return { secret: client.secret, name: client.name };
-  });
-
-  return { server, stations, clients };
+  if (thresholds.voltage.normalMin >= thresholds.voltage.goodMin)
+    throw new Error("thresholds.voltage.normalMin must be less than goodMin");
+  if (thresholds.current.goodMax >= thresholds.current.normalMax)
+    throw new Error("thresholds.current.goodMax must be less than normalMax");
+  if (thresholds.satellites.normalMin >= thresholds.satellites.goodMin)
+    throw new Error("thresholds.satellites.normalMin must be less than goodMin");
+  if (thresholds.hdop.goodMax >= thresholds.hdop.normalMax)
+    throw new Error("thresholds.hdop.goodMax must be less than normalMax");
+  if (thresholds.linkRssi.normalMin >= thresholds.linkRssi.goodMin)
+    throw new Error("thresholds.linkRssi.normalMin must be less than goodMin");
+  return { server, secret: input.secret.trim(), thresholds };
 }
 
 export async function loadConfig(path) {

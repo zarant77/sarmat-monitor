@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sarmat Monitor</title>
+    <link rel="stylesheet" href="/app.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <section id="login" class="login-card">
+      <p class="eyebrow">SARMAT</p>
+      <h1>Вхід у монітор</h1>
+      <p>Введіть спільний секрет станцій.</p>
+      <form id="login-form">
+        <input id="secret" type="password" autocomplete="current-password" placeholder="Секрет" required autofocus>
+        <button type="submit">Увійти</button>
+      </form>
+      <p id="login-error" class="login-error" role="alert"></p>
+    </section>
+    <main id="dashboard" hidden>
+      <header>
+        <h1 class="brand" aria-label="SARMAT"><span class="brand-sar">SAR</span><span class="brand-mat">MAT</span></h1>
+        <div class="connection"><span id="connection-dot"></span><span id="connection">Підключення…</span><button id="logout" class="logout">Вийти</button></div>
+      </header>
+      <section class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Станція</th><th>Статус</th><th>Напруга</th><th>Струм</th><th>Sat</th><th>HDOP</th><th>Азимут</th><th>Висота</th><th>Зв'язок</th><th>OBS</th></tr></thead>
+            <tbody id="stations"><tr><td colspan="10" class="empty">Очікування даних…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

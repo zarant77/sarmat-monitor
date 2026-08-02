@@ -30,20 +30,21 @@ Lima settings persist in `settings.json`.
 - Target framework: **.NET Framework 4.7.2 (`net472`)**
 - Verified build target: Mission Planner **1.3.83**
 
-## Telemetry aggregator
+## Sarmat Monitor
 
-The optional **Aggregator** settings tab streams the current Mission Planner telemetry to
-`telemetry-aggregator` once per second. Configure:
+The optional **Monitor** settings tab streams the current Mission Planner telemetry to
+`sarmat-monitor` once per second. Configure:
 
 - **Enabled** — starts the background connection;
 - **WebSocket URL** — normally `ws://<server>:8080/ws/station`;
-- **Secret** — must match one station entry in the aggregator `config.json`;
+- **Secret** — shared secret from the monitor `config.json`, also used for web login;
+- **Station name** and **Station color** — presentation sent when the station connects;
 - **Reconnect interval** — retry delay after a failed or closed connection.
 
 The tab shows the current connection state and includes a connection test that uses the values
 currently entered in the form. The secret is sent only in the WebSocket `Authorization: Bearer`
 header. Telemetry uses compact binary MessagePack frames once per second and contains voltage,
-current, satellite count, HDOP, heading, relative altitude, Ruijie quality, OBS recording state,
+current, satellite count, HDOP, heading, relative altitude, Ruijie RSSI, OBS recording state,
 and armed state. Network failures do not block Mission Planner, OBS, Ruijie polling, or the plugin
 UI.
 
@@ -108,7 +109,7 @@ git push origin v1.0.0
 
 Pushing a tag matching `v*` starts **Release build** in GitHub Actions. When the build and tests
 pass, the workflow creates a GitHub Release named after the tag and attaches
-`SarmatPlugin-v1.0.0.msi` together with the aggregator ZIP and monitor MSI. Release tags must use the
+`SarmatPlugin-v1.0.0.msi` together with the Sarmat Monitor ZIP. Release tags must use the
 `vMAJOR.MINOR.PATCH` format. Use a new tag for each release, for example `v1.0.1` or `v1.1.0`.
 
 ## MSI installer

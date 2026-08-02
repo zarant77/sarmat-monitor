@@ -215,19 +215,23 @@ namespace SarmatPlugin.Tests
         private static void AggregatorMessagePack()
         {
             var packet = MessagePackTelemetryEncoder.Encode(1, null, null, 2,
-                null, null, null, 3, 4);
-            var expected = new byte[] { 0x99, 0x01, 0xc0, 0xc0, 0x02, 0xc0, 0xc0, 0xc0, 0x03, 0x04 };
+                null, null, null, -70, 4);
+            var expected = new byte[] { 0x99, 0x01, 0xc0, 0xc0, 0x02, 0xc0, 0xc0, 0xc0, 0xd0, 0xba, 0x04 };
             Equal(BitConverter.ToString(expected), BitConverter.ToString(packet));
 
             var settings = new PluginSettings
             {
                 AggregatorUrl = "  ws://127.0.0.1:8080/ws/station  ",
                 AggregatorSecret = "  station-secret  ",
+                MonitorStationName = "  Red station  ",
+                MonitorStationColor = "#ff0000",
                 AggregatorReconnectSeconds = 0
             };
             settings.Normalize();
             Equal("ws://127.0.0.1:8080/ws/station", settings.AggregatorUrl);
             Equal("station-secret", settings.AggregatorSecret);
+            Equal("Red station", settings.MonitorStationName);
+            Equal("#FF0000", settings.MonitorStationColor);
             Equal(1d, settings.AggregatorReconnectSeconds);
         }
         private static void WidgetDefaults()
