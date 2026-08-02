@@ -15,6 +15,7 @@ namespace SarmatPlugin
         private object flightData;
         private SarmatPlugin.UI.SarmatPanel panel;
         private ToolStripButton sarmatButton;
+        private ToolStripMenuItem sarmatMenuItem;
         private AppLog lifecycleLog;
         private Label takeoffModeWarning;
         private bool vehicleReconnectInProgress;
@@ -56,28 +57,8 @@ namespace SarmatPlugin
                 OnUi(main, () =>
                 {
                     TryLog("UI thread setup started");
-                    runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
-                    runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
-                    runtime.VehicleConnected += RestoreVideoOnConnect;
-                    runtime.VehicleConnected += ReconnectJoystickOnConnect;
-                    runtime.LimaModeRequested += SetLimaFlightMode;
-                    runtime.VehicleReconnectRequested += ReconnectVehicle;
-                    panel = runtime.CreatePanel();
-                    panel.VideoSourceRequested += PanelVideoSourceRequested;
-
-                    sarmatButton = new ToolStripButton
-                    {
-                        Name = "MenuSarmatPlugin",
-                        Text = "Sarmat",
-                        ToolTipText = "Open Sarmat settings",
-                        AutoSize = true,
-                        DisplayStyle = ToolStripItemDisplayStyle.Text
-                    };
-                    sarmatButton.Click += SarmatButtonClick;
-                    main.MainMenu.Items.Add(sarmatButton);
-                    TryLog("UI registered: MainMenu/MenuSarmatPlugin");
-
-                    ConfigureOptionalFlightDataUi();
+                    RegisterUiEntry(main);
+                    InitializeRuntime();
                 });
                 TryLog("Loaded completed");
                 return true;
@@ -88,6 +69,79 @@ namespace SarmatPlugin
                 var main = Host?.MainForm;
                 if (main != null) OnUi(main, CleanupUiAndRuntime); else CleanupUiAndRuntime();
                 return false;
+            }
+        }
+
+        private void RegisterUiEntry(Control main)
+        {
+            var flightDataMenu = Host.FDMenuMap;
+            if (flightDataMenu == null)
+                throw new InvalidOperationException("Mission Planner Host.FDMenuMap is unavailable");
+
+            sarmatMenuItem = new ToolStripMenuItem("Sarmat")
+            {
+                Name = "MenuSarmatPluginContext",
+                ToolTipText = "Open Sarmat settings"
+            };
+            sarmatMenuItem.Click += SarmatButtonClick;
+            flightDataMenu.Items.Add(sarmatMenuItem);
+            TryLog("UI registered: Host.FDMenuMap/MenuSarmatPluginContext");
+
+            // MainMenu is not stable across all Mission Planner builds. The supported
+            // Flight Data context menu above remains the guaranteed entry point.
+            try
+            {
+                var mainMenu = main.GetType().GetProperty("MainMenu",
+                    BindingFlags.Instance | BindingFlags.Public)?.GetValue(main, null) as ToolStrip;
+                if (mainMenu == null)
+                {
+                    TryLog("Optional MainMenu button skipped: MainMenu is unavailable");
+                    return;
+                }
+                sarmatButton = new ToolStripButton
+                {
+                    Name = "MenuSarmatPlugin",
+                    Text = "Sarmat",
+                    ToolTipText = "Open Sarmat settings",
+                    AutoSize = true,
+                    DisplayStyle = ToolStripItemDisplayStyle.Text
+                };
+                sarmatButton.Click += SarmatButtonClick;
+                mainMenu.Items.Add(sarmatButton);
+                TryLog("UI registered: MainMenu/MenuSarmatPlugin");
+            }
+            catch (Exception ex)
+            {
+                TryLog("Optional MainMenu button registration failed; context-menu entry remains available", ex);
+                if (sarmatButton != null)
+                {
+                    sarmatButton.Click -= SarmatButtonClick;
+                    sarmatButton.Dispose();
+                    sarmatButton = null;
+                }
+            }
+        }
+
+        private void InitializeRuntime()
+        {
+            try
+            {
+                TryLog("Runtime initialization started");
+                runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
+                runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
+                runtime.VehicleConnected += RestoreVideoOnConnect;
+                runtime.VehicleConnected += ReconnectJoystickOnConnect;
+                runtime.LimaModeRequested += SetLimaFlightMode;
+                runtime.VehicleReconnectRequested += ReconnectVehicle;
+                panel = runtime.CreatePanel();
+                panel.VideoSourceRequested += PanelVideoSourceRequested;
+                ConfigureOptionalFlightDataUi();
+                TryLog("Runtime initialization completed");
+            }
+            catch (Exception ex)
+            {
+                TryLog("Runtime initialization failed; Sarmat UI entry remains available", ex);
+                DisposeRuntime();
             }
         }
 
@@ -140,7 +194,16 @@ namespace SarmatPlugin
 
         private void SarmatButtonClick(object sender, EventArgs e)
         {
-            try { runtime?.ShowSettings(Host.MainForm); }
+            try
+            {
+                if (runtime == null)
+                {
+                    MessageBox.Show("Sarmat runtime could not be initialized. See sarmat-plugin.log for the full error.",
+                        "Sarmat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                runtime.ShowSettings(Host.MainForm);
+            }
             catch (Exception ex) { TryLog("Opening Sarmat UI failed", ex); }
         }
 
@@ -155,7 +218,27 @@ namespace SarmatPlugin
                 sarmatButton.Dispose();
                 sarmatButton = null;
             }
+            if (sarmatMenuItem != null)
+            {
+                sarmatMenuItem.Click -= SarmatButtonClick;
+                sarmatMenuItem.Owner?.Items.Remove(sarmatMenuItem);
+                sarmatMenuItem.Dispose();
+                sarmatMenuItem = null;
+            }
             if (panel != null) panel.VideoSourceRequested -= PanelVideoSourceRequested;
+            DisposeRuntime();
+            panel = null;
+            if (takeoffModeWarning != null)
+            {
+                takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
+                takeoffModeWarning.Dispose();
+                takeoffModeWarning = null;
+            }
+            flightData = null;
+        }
+
+        private void DisposeRuntime()
+        {
             if (runtime != null)
             {
                 runtime.TakeoffWarningChanged -= SetTakeoffWarningVisible;
@@ -167,13 +250,6 @@ namespace SarmatPlugin
                 runtime = null;
             }
             panel = null;
-            if (takeoffModeWarning != null)
-            {
-                takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
-                takeoffModeWarning.Dispose();
-                takeoffModeWarning = null;
-            }
-            flightData = null;
         }
 
         private void TryLog(string message, Exception error = null)

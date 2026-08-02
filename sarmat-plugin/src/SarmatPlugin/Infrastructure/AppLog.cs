@@ -10,17 +10,17 @@ namespace SarmatPlugin.Infrastructure
         private static readonly Regex Secrets = new Regex(
             "(?i)(password|pwd|token|sid|auth|authorization|cookie|webauth|key)([\"'\\s:=]+)([^\"'&\\s,;}]+)",
             RegexOptions.Compiled);
-        private readonly object sync = new object();
-        private StreamWriter writer;
+        private static readonly object Sync = new object();
         public bool DebugEnabled { get; set; }
 
         public AppLog(bool debug)
         {
             DebugEnabled = debug;
-            Directory.CreateDirectory(AppPaths.LogDirectory);
-            Rotate();
-            writer = new StreamWriter(new FileStream(AppPaths.Log, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
-                { AutoFlush = true };
+            lock (Sync)
+            {
+                Directory.CreateDirectory(AppPaths.LogDirectory);
+                Rotate();
+            }
         }
 
         public void Debug(string message) { if (DebugEnabled) Write("DEBUG", message); }
@@ -38,10 +38,12 @@ namespace SarmatPlugin.Infrastructure
 
         private void Write(string level, string message)
         {
-            lock (sync)
+            lock (Sync)
             {
-                if (writer == null) return;
-                writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {level,-5} {Sanitize(message)}");
+                // Open for each record so every AppLog instance shares one serialized file
+                // position. Multiple StreamWriters otherwise corrupt and reorder the log.
+                File.AppendAllText(AppPaths.Log,
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {level,-5} {Sanitize(message)}{Environment.NewLine}");
             }
         }
 
@@ -53,9 +55,6 @@ namespace SarmatPlugin.Infrastructure
             File.Move(AppPaths.Log, old);
         }
 
-        public void Dispose()
-        {
-            lock (sync) { writer?.Dispose(); writer = null; }
-        }
+        public void Dispose() { }
     }
 }
