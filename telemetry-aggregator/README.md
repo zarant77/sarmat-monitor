@@ -34,6 +34,10 @@ $env:SARMAT_CONFIG = "C:\path\to\config.json"
 npm start
 ```
 
+For Railway and other hosted environments, set `SARMAT_CONFIG_JSON` to the
+complete JSON configuration. It takes precedence over the config file. When
+the platform supplies `PORT`, the server listens on that port automatically.
+
 Endpoints:
 
 - `GET /health` returns the process health.

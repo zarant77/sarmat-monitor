@@ -74,11 +74,15 @@ export function validateConfig(input) {
 
 export async function loadConfig(path) {
   const contents = await readFile(path, "utf8");
+  return parseConfig(contents, path);
+}
+
+export function parseConfig(contents, source = "configuration") {
   let parsed;
   try {
     parsed = JSON.parse(contents);
   } catch (error) {
-    throw new Error(`cannot parse config '${path}': ${error.message}`, { cause: error });
+    throw new Error(`cannot parse config '${source}': ${error.message}`, { cause: error });
   }
   return validateConfig(parsed);
 }
