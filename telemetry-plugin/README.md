@@ -51,7 +51,7 @@ The plugin does not open its own MAVLink connection and does not run or communic
 
 Close Mission Planner before installing or replacing the DLL.
 
-For a downloaded GitHub Release, run `SarmatTelemetry-<version>.msi`. The installer defaults to the
+For a downloaded GitHub Release, run `SarmatPlugins-<version>.msi`. The installer defaults to the
 standard Mission Planner directory and allows selecting another folder. For a local portable
 build, the PowerShell installer remains available in `dist`:
 
@@ -99,18 +99,20 @@ git push origin v1.0.0
 
 Pushing a tag matching `v*` starts **Release build** in GitHub Actions. When the build and tests
 pass, the workflow creates a GitHub Release named after the tag and attaches
-`SarmatPlugin-v1.0.0.msi` together with the Sarmat Monitor ZIP. Release tags must use the
+`SarmatPlugins-v1.0.0.msi` together with the Sarmat Monitor ZIP. Release tags must use the
 `vMAJOR.MINOR.PATCH` format. Use a new tag for each release, for example `v1.0.1` or `v1.1.0`.
 
 ## MSI installer
 
 The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Its setup
 screen defaults to `C:\Program Files (x86)\Mission Planner` and allows selecting another Mission
-Planner directory. The required **Sarmat Plugin** feature installs `SarmatTelemetry.dll` into the
-selected directory's `plugins` folder.
+Planner directory. The required **SarmatTelemetry** feature installs `SarmatTelemetry.dll` into the
+selected directory's `plugins` folder. **SarmatVisionHold** is included in the MSI but remains
+disabled at install level 0, so it cannot be installed yet.
 
-The optional **Sarmat Theme** feature is disabled by default. When selected, it installs every
-branding asset from `mission-planner` (`icon.png`, `logo.txt`, `logo2.png`, and `splashbg.png`) into
+The optional **SarmatTheme** feature is disabled by default. When selected, it installs every
+branding asset from the repository-level `theme` directory (`icon.png`, `logo.txt`, `logo2.png`,
+and `splashbg.png`) into
 the selected Mission Planner directory. Theme files are deliberately preserved when the MSI is
 uninstalled so Mission Planner is not left with missing branding files.
 

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="Sarmat Plugin for Mission Planner"
+  <Package Name="Sarmat Plugins for Mission Planner"
            Manufacturer="Sarmat"
            Version="$(var.ProductVersion)"
            UpgradeCode="B2BEB421-36D8-4FD7-8515-98146D77945C"
            Language="1033"
            Scope="perMachine">
-    <SummaryInformation Description="Sarmat Plugin installer for Mission Planner" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Sarmat Plugin is already installed." />
+    <SummaryInformation Description="Sarmat plugin suite installer for Mission Planner" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Sarmat Plugins is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <StandardDirectory Id="ProgramFilesFolder">
@@ -17,16 +17,24 @@
       </Directory>
     </StandardDirectory>
 
-    <Feature Id="PluginFeature"
-             Title="Sarmat Plugin"
+    <Feature Id="SarmatTelemetryFeature"
+             Title="SarmatTelemetry"
              Description="Mission Planner telemetry and safety plugin."
              Level="1"
              AllowAbsent="no">
       <ComponentGroupRef Id="PluginComponents" />
     </Feature>
 
+    <Feature Id="SarmatVisionHoldFeature"
+             Title="SarmatVisionHold (unavailable)"
+             Description="Vision Hold is included for a future release and cannot be installed yet."
+             Level="0"
+             AllowAbsent="yes">
+      <ComponentGroupRef Id="VisionHoldComponents" />
+    </Feature>
+
     <Feature Id="SarmatThemeFeature"
-             Title="Sarmat Theme"
+             Title="SarmatTheme"
              Description="Install the Sarmat icons and cat splash screen for Mission Planner."
              Level="2"
              AllowAbsent="yes">
@@ -60,6 +68,26 @@
         <File Id="SarmatThemeLogoText" Source="$(var.ThemeSource)\logo.txt" />
         <File Id="SarmatThemeLogo" Source="$(var.ThemeSource)\logo2.png" />
         <File Id="SarmatThemeSplash" Source="$(var.ThemeSource)\splashbg.png" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="VisionHoldComponents" Directory="MISSIONPLANNERPLUGINSDIR">
+      <Component Id="SarmatVisionHoldDll" Guid="34E2EFD3-A39A-4B10-9787-58DB9C9C97DA">
+        <File Id="SarmatVisionHoldFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="SarmatVisionHoldCoreDll" Guid="BC46C4C5-E540-45BE-A718-E234F41CA267">
+        <File Id="SarmatVisionHoldCoreFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Core.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="SarmatVisionHoldVisionDll" Guid="7AA93079-3E1B-42EE-A323-D4CAEE871784">
+        <File Id="SarmatVisionHoldVisionFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Vision.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="OpenCvSharpDll" Guid="831B0924-7087-43E5-8D8A-88880E214743">
+        <File Id="OpenCvSharpFile" Source="$(var.VisionDist)\plugins\OpenCvSharp.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="OpenCvSharpExternDll" Guid="2B94C14D-D723-4227-B0D4-D653244FE3C6">
+        <File Id="OpenCvSharpExternFile" Source="$(var.VisionDist)\plugins\OpenCvSharpExtern.dll" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>

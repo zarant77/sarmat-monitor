@@ -32,7 +32,7 @@ $distPlugins = Join-Path $dist 'plugins'
 New-Item -ItemType Directory -Path $distPlugins | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot "src\SarmatPlugin\bin\$Configuration\net472\SarmatTelemetry.dll") -Destination $distPlugins
 foreach ($assetName in @('icon.png', 'logo.txt', 'logo2.png', 'splashbg.png')) {
-    $assetPath = Join-Path (Join-Path $projectRoot 'mission-planner') $assetName
+    $assetPath = Join-Path (Join-Path (Split-Path $projectRoot -Parent) 'theme') $assetName
     if (-not (Test-Path -LiteralPath $assetPath)) {
         throw "Mission Planner branding asset was not found: $assetPath"
     }

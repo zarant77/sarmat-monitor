@@ -7,6 +7,7 @@
 - [`telemetry-plugin`](./telemetry-plugin) — плагін для Mission Planner, який надсилає телеметрію.
 - [`monitor`](./monitor) — Node.js сервер, який збирає актуальну телеметрію станцій і показує її у вебінтерфейсі.
 - [`vision-hold-plugin`](./vision-hold-plugin) — плагін утримання позиції за даними комп'ютерного зору.
+- [`theme`](./theme) — спільні ресурси оформлення Mission Planner для всіх плагінів.
 
 Обидва компоненти використовують компактний MessagePack-протокол через WebSocket. Вебпанель доступна на корені HTTP-сервера Sarmat Monitor, типово `http://localhost:8080/`.
 
@@ -14,7 +15,7 @@
 
 Тег у форматі `vMAJOR.MINOR.PATCH` створює два окремі пакети:
 
-- `SarmatTelemetry-<version>.msi`;
+- `SarmatPlugins-<version>.msi`;
 - `SarmatMonitor-<version>.zip`.
 
 До пакетів додаються лише приклади конфігурації без робочих секретів.

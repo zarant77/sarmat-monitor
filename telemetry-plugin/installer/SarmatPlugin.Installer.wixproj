@@ -1,12 +1,13 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
   <PropertyGroup>
     <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
-    <OutputName>SarmatTelemetry-$(ProductVersion)</OutputName>
+    <OutputName>SarmatPlugins-$(ProductVersion)</OutputName>
     <OutputPath>$(MSBuildProjectDirectory)\..\artifacts\</OutputPath>
     <DefineConstants>
       ProductVersion=$(ProductVersion);
       PluginDist=$(MSBuildProjectDirectory)\..\dist;
-      ThemeSource=$(MSBuildProjectDirectory)\..\mission-planner
+      VisionDist=$(MSBuildProjectDirectory)\..\..\vision-hold-plugin\dist;
+      ThemeSource=$(MSBuildProjectDirectory)\..\..\theme
     </DefineConstants>
   </PropertyGroup>
 

@@ -74,21 +74,22 @@ jobs:
           if ($null -eq $exe) { throw "MissionPlanner.exe was not found in the downloaded archive." }
           "MISSION_PLANNER_PATH=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Build plugin and run tests
+      - name: Build plugins and run tests
         shell: pwsh
         run: |
           .\telemetry-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
+          .\vision-hold-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
 
-      - name: Build plugin MSI
+      - name: Build plugins MSI
         shell: pwsh
         run: |
           dotnet build .\telemetry-plugin\installer\SarmatPlugin.Installer.wixproj `
             --configuration Release `
             "-p:ProductVersion=$env:PRODUCT_VERSION" `
             "-p:OutputPath=$env:RELEASE_ARTIFACTS"
-          if ($LASTEXITCODE -ne 0) { throw "Plugin MSI build failed with exit code $LASTEXITCODE." }
-          $built = Join-Path $env:RELEASE_ARTIFACTS "SarmatTelemetry-$env:PRODUCT_VERSION.msi"
-          $release = Join-Path $env:RELEASE_ARTIFACTS "SarmatTelemetry-$env:FILE_VERSION.msi"
+          if ($LASTEXITCODE -ne 0) { throw "Plugins MSI build failed with exit code $LASTEXITCODE." }
+          $built = Join-Path $env:RELEASE_ARTIFACTS "SarmatPlugins-$env:PRODUCT_VERSION.msi"
+          $release = Join-Path $env:RELEASE_ARTIFACTS "SarmatPlugins-$env:FILE_VERSION.msi"
           if ($built -ne $release) { Move-Item -LiteralPath $built -Destination $release -Force }
           "PLUGIN_MSI=$release" | Out-File -FilePath $env:GITHUB_ENV -Append
 
