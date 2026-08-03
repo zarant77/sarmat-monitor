@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><TargetFramework>net472</TargetFramework><AssemblyName>SarmatVisionHold.Core</AssemblyName><RootNamespace>SarmatVisionHold.Core</RootNamespace><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+ <ItemGroup><Compile Include="..\SarmatVisionHold\Core\**\*.cs" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" /></ItemGroup>
+ <ItemGroup><Reference Include="System.Runtime.Serialization" /></ItemGroup>
+</Project>

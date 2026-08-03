@@ -3,7 +3,7 @@ namespace SarmatVisionHold.Integration
 {
  public sealed class MissionPlannerVehicleGateway:IVehicleGateway
  { private readonly Func<object> state;private readonly Func<object> port;public MissionPlannerVehicleGateway(Func<object>s,Func<object>p){state=s;port=p;}
-  public TelemetrySample ReadTelemetry(int channel){var cs=state();var stamp=Date(cs,"datetime");if(stamp==default(DateTime))stamp=Date(cs,"lastupdate");var age=stamp==default(DateTime)?TimeSpan.MaxValue:DateTime.UtcNow-stamp.ToUniversalTime();var alt=D(cs,"alt");return new TelemetrySample{TimestampUtc=stamp,LinkActive=port()!=null&&age.TotalSeconds<2,RollRate=D(cs,"gyro_x"),PitchRate=D(cs,"gyro_y"),HeightMeters=Math.Max(0,alt),HeightValid=alt>0&&age.TotalSeconds<2,FlightMode=S(cs,"mode"),RcPwm=(int)D(cs,"ch"+channel+"in")};}
+  public TelemetrySample ReadTelemetry(int channel){var cs=state();var stamp=Date(cs,"datetime");if(stamp==default(DateTime))stamp=Date(cs,"lastupdate");var age=stamp==default(DateTime)?TimeSpan.MaxValue:DateTime.UtcNow-stamp.ToUniversalTime();var alt=D(cs,"alt");return new TelemetrySample{TimestampUtc=stamp,LinkActive=port()!=null&&age.TotalSeconds<2,RollRate=D(cs,"gyro_x"),PitchRate=D(cs,"gyro_y"),YawRate=D(cs,"gyro_z"),HeightMeters=Math.Max(0,alt),HeightValid=alt>0&&age.TotalSeconds<2,FlightMode=S(cs,"mode"),RcPwm=(int)D(cs,"ch"+channel+"in")};}
   public string CurrentMode=>S(state(),"mode");public int CurrentEkfSourceSet=>1;
   public bool SetMode(string mode)=>InvokeBool(port(),"setMode",mode);
   public bool SetEkfSourceSet(int set){return InvokeCommand(port(),42007,set,0,0,0,0,0,0);}

@@ -23,6 +23,16 @@
 
 Скопіюйте весь вміст `dist\plugins` до `Mission Planner\plugins`.
 
+## Unit-тести
+
+Core-тести не потребують Mission Planner, MAVLink, RTSP, мережі або обладнання:
+
+```powershell
+dotnet run --project .\tests\SarmatVisionHold.Tests\SarmatVisionHold.Tests.csproj -c Release
+```
+
+Табличні тести покривають RC threshold/hysteresis/debounce/inversion/stale та edge events; усі переходи state machine і `Lost` re-arm latch; frame/telemetry freshness, FPS/points/quality/height boundaries; FOV-based velocity, signs, scaling і saturation; roll/pitch/yaw compensation та invalid IMU; припинення публікації і зафіксовані причини для video/MAVLink/RC/height/quality loss, tracker/publisher exceptions і зупинки плагіна.
+
 ## RC switch
 
 Після першого запуску закрийте Mission Planner і відредагуйте `settings.json`: `RcChannel` (1–18), `RcEnableThreshold` (1700), `RcDisableThreshold` (1300), `RcInverted`, `RcDebounceMs` (300), `RcStaleMs` (1000). Значення лише читаються з телеметрії Mission Planner. Зміна фіксується один раз після debounce; недоступний або застарілий канал примусово дає OFF.
