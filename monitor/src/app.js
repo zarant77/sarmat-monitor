@@ -42,7 +42,15 @@ function rejectUpgrade(socket, statusCode, message) {
 }
 
 export function createTelemetryServer(config, logger = console) {
-  const stationStates = [];
+  const stationStates = config.stations.map((station) => ({
+    station,
+    socket: null,
+    connected: false,
+    telemetry: null,
+    receivedAt: null,
+    name: station.title,
+    color: station.color,
+  }));
 
   const httpServer = createServer(async (request, response) => {
     const path = new URL(request.url, "http://localhost").pathname;
@@ -89,11 +97,12 @@ export function createTelemetryServer(config, logger = console) {
 
   const stationServer = new WebSocketServer({ noServer: true, maxPayload: config.server.maxMessageBytes });
   stationServer.on("connection", (socket, _request, station) => {
-    const state = {
-      socket, station, connected: true, telemetry: null, receivedAt: null,
-      name: station.title, color: station.color,
-    };
-    stationStates.push(state);
+    const state = stationStates.find((candidate) => candidate.station === station);
+    state.socket?.terminate();
+    state.socket = socket;
+    state.connected = true;
+    state.telemetry = null;
+    state.receivedAt = null;
     logger.info(`Station connected: ${state.name}`);
     socket.on("message", (data, isBinary) => {
       if (!isBinary) {
@@ -109,8 +118,11 @@ export function createTelemetryServer(config, logger = console) {
       state.receivedAt = Date.now();
     });
     socket.on("close", () => {
-      const index = stationStates.indexOf(state);
-      if (index >= 0) stationStates.splice(index, 1);
+      if (state.socket !== socket) return;
+      state.socket = null;
+      state.connected = false;
+      state.telemetry = null;
+      state.receivedAt = null;
       logger.info(`Station disconnected: ${state.name}`);
     });
   });
@@ -134,7 +146,7 @@ export function createTelemetryServer(config, logger = console) {
       return httpServer.address();
     },
     async close() {
-      for (const state of [...stationStates]) state.socket.terminate();
+      for (const state of stationStates) state.socket?.terminate();
       stationServer.close();
       await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
     },

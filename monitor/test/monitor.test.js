@@ -43,6 +43,14 @@ test("uses configured station presentation and exposes telemetry to admins", asy
   const address = await server.listen();
   t.after(() => server.close());
   const httpUrl = `http://127.0.0.1:${address.port}`;
+  const initialResponse = await fetch(`${httpUrl}/api/stations`, { headers: auth });
+  const initialBody = await initialResponse.json();
+  assert.equal(initialBody.stations.length, 2);
+  assert.equal(initialBody.stations[0].name, "Red Station");
+  assert.equal(initialBody.stations[0].snapshot, null);
+  assert.equal(initialBody.stations[1].name, "Green Station");
+  assert.equal(initialBody.stations[1].snapshot, null);
+
   const station = await connect(`ws://127.0.0.1:${address.port}/ws/station`);
   t.after(() => station.terminate());
 
@@ -59,7 +67,9 @@ test("uses configured station presentation and exposes telemetry to admins", asy
   assert.equal(body.thresholds.linkRssi.goodMin, -70);
 
   station.close();
-  await waitFor(() => server.stationStates.length === 0);
+  await waitFor(() => !server.stationStates[0].connected);
+  assert.equal(server.stationStates.length, 2);
+  assert.equal(server.stationStates[0].telemetry, null);
 });
 
 test("keeps admin and station authorization separate", async (t) => {
