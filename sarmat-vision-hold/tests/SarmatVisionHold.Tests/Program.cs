@@ -1,0 +1,11 @@
+using System;using SarmatVisionHold.Core;
+class Program
+{static int Main(){try{RcThresholdDebounce();RcStale();Quality();StateMachine();Failsafe();Console.WriteLine("All SarmatVisionHold tests passed.");return 0;}catch(Exception e){Console.Error.WriteLine(e);return 1;}}
+ static void RcThresholdDebounce(){var s=new VisionHoldSettings{RcDebounceMs=100};var r=new RcSwitchListener(s);var n=DateTime.UtcNow;r.Update(1800,n);False(r.State);r.Update(1800,n.AddMilliseconds(101));True(r.State);r.Update(1500,n.AddMilliseconds(200));True(r.State);r.Update(1200,n.AddMilliseconds(201));r.Update(1200,n.AddMilliseconds(302));False(r.State);}
+ static void RcStale(){var s=new VisionHoldSettings{RcDebounceMs=0,RcStaleMs=100};var r=new RcSwitchListener(s);var n=DateTime.UtcNow;r.Update(1800,n);r.Update(1800,n.AddMilliseconds(1));True(r.State);r.CheckStale(n.AddMilliseconds(102));False(r.State);}
+ static void Quality(){var s=new VisionHoldSettings{MinimumFps=10,MinimumTrackedPoints=20,MinimumFlowQuality=.4,MaxFrameAgeMs=200};var f=new FlowSample{Fps=20,TrackedPoints=40,Quality=.8,FrameAgeMs=100};True(FlowQualityEstimator.Pass(f,s));f.FrameAgeMs=201;False(FlowQualityEstimator.Pass(f,s));f.FrameAgeMs=100;f.Quality=.2;False(FlowQualityEstimator.Pass(f,s));}
+ static HealthSnapshot H(bool requested=true,bool good=true,bool live=true)=>new HealthSnapshot{Requested=requested,StreamWorking=good,FramesFresh=good,FlowGood=good,HeightValid=good,MavlinkActive=good,LiveAllowed=live,BlockReason=good?null:"tracking lost"};
+ static void StateMachine(){var m=new VisionHoldStateMachine();for(int i=0;i<6;i++)m.Update(H());Eq(VisionHoldState.Active,m.State);m.Update(H(false));Eq(VisionHoldState.Ready,m.State);var d=new VisionHoldStateMachine();for(int i=0;i<6;i++)d.Update(H(true,true,false));Eq(VisionHoldState.Ready,d.State);}
+ static void Failsafe(){var m=new VisionHoldStateMachine();for(int i=0;i<6;i++)m.Update(H());m.Update(H(true,false));Eq(VisionHoldState.Lost,m.State);m.Stop();Eq(VisionHoldState.Lost,m.State);}
+ static void Eq<T>(T a,T b){if(!Equals(a,b))throw new Exception($"Expected {a}, got {b}");}static void True(bool v){if(!v)throw new Exception("Expected true");}static void False(bool v)=>True(!v);
+}

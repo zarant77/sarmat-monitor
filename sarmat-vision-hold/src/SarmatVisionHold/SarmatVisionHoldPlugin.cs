@@ -1,0 +1,11 @@
+using System;using System.Collections;using System.IO;using System.Linq;using System.Reflection;using System.Windows.Forms;using MissionPlanner.Plugin;using SarmatVisionHold.Core;using SarmatVisionHold.Integration;using SarmatVisionHold.UI;
+namespace SarmatVisionHold
+{
+ public sealed class SarmatVisionHoldPlugin:Plugin
+ { VisionHoldRuntime runtime;VisionHoldPanel panel;TabPage tab;TabControl tabs;IList original;string root;public override string Name=>"Sarmat Vision Hold";public override string Version=>"0.1.0";public override string Author=>"Sarmat";
+  public override bool Init(){loopratehz=2;return true;}public override bool Loaded(){try{root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Sarmat","VisionHold");var settings=VisionHoldSettings.Load(Path.Combine(root,"settings.json"));var gateway=new MissionPlannerVehicleGateway(()=>Host.cs,()=>Host.comPort);runtime=new VisionHoldRuntime(settings,gateway,Path.Combine(root,"vision-hold.log"));panel=new VisionHoldPanel(runtime);Register();runtime.Start();return true;}catch{return false;}}
+  void Register(){var main=Host.MainForm as Control;tabs=Find(main,"tabControlactions") as TabControl;if(tabs==null)throw new InvalidOperationException("FlightData tabs unavailable");tab=new TabPage("Vision Hold"){Name="tabSarmatVisionHold"};panel.Dock=DockStyle.Fill;tab.Controls.Add(panel);tabs.TabPages.Add(tab);var fd=Host.MainForm.GetType().GetProperty("FlightData",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic)?.GetValue(Host.MainForm,null);original=fd?.GetType().GetField("TabListOriginal",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic)?.GetValue(fd)as IList;original?.Add(tab);}
+  static Control Find(Control c,string n){if(c==null)return null;if(string.Equals(c.Name,n,StringComparison.OrdinalIgnoreCase))return c;foreach(Control x in c.Controls){var f=Find(x,n);if(f!=null)return f;}return null;}
+  public override bool Loop()=>true;public override bool Exit(){try{runtime?.Settings.Save(Path.Combine(root,"settings.json"));runtime?.Dispose();if(tab!=null){original?.Remove(tab);tabs?.TabPages.Remove(tab);tab.Dispose();}panel?.Dispose();return true;}catch{return false;}}
+ }
+}

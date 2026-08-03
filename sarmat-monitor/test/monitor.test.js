@@ -89,5 +89,5 @@ test("serves the login page", async (t) => {
   t.after(() => server.close());
   const page = await fetch(`http://127.0.0.1:${address.port}`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Вхід у монітор/);
+  assert.match(await page.text(), /aria-label="SARMAT"/);
 });

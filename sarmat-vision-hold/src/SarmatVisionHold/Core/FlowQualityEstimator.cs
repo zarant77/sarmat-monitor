@@ -1,0 +1,2 @@
+using System;
+namespace SarmatVisionHold.Core { public static class FlowQualityEstimator { public static double Estimate(int tracked,int detected,double medianError){ if(detected<=0||tracked<=0)return 0; var retention=Math.Min(1d,(double)tracked/detected); var error=Math.Exp(-Math.Max(0,medianError)/12d); return Math.Max(0,Math.Min(1,retention*error)); } public static bool Pass(FlowSample f,VisionHoldSettings s)=>f!=null&&f.TrackedPoints>=s.MinimumTrackedPoints&&f.Quality>=s.MinimumFlowQuality&&f.Fps>=s.MinimumFps&&f.FrameAgeMs<=s.MaxFrameAgeMs; } }

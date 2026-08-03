@@ -1,0 +1,1 @@
+namespace SarmatVisionHold.Core { public sealed class AttitudeCompensator { public void Compensate(FlowSample f,TelemetrySample t){ f.CompensatedX=f.RawX-t.PitchRate*f.Dt; f.CompensatedY=f.RawY+t.RollRate*f.Dt; } } }

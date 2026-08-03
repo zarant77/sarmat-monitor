@@ -1,0 +1,1 @@
+namespace SarmatVisionHold.Core { public sealed class GroundVelocityEstimator { public void Estimate(FlowSample f,TelemetrySample t){ if(f.Dt<=0||!t.HeightValid)return; f.VelocityX=f.CompensatedX*t.HeightMeters/f.Dt; f.VelocityY=f.CompensatedY*t.HeightMeters/f.Dt; } } }

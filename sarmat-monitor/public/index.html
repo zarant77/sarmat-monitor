@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sarmat Monitor</title>
-    <link rel="stylesheet" href="/app.css?v=3">
-    <script type="module" src="/app.js?v=3"></script>
+    <link rel="stylesheet" href="/app.css?v=5">
+    <script type="module" src="/app.js?v=4"></script>
   </head>
   <body>
     <section id="login" class="login-card">
@@ -17,14 +17,23 @@
       <p id="login-error" class="login-error" role="alert"></p>
     </section>
     <main id="dashboard" hidden>
-      <header>
+      <header id="dashboard-header">
         <h1 class="brand" aria-label="SARMAT"><span class="brand-sar">SAR</span><span class="brand-mat">MAT</span></h1>
-        <div class="connection"><span id="connection-dot"></span><span id="connection">Підключення…</span><button id="logout" class="logout">Вийти</button></div>
+        <div class="connection"><span id="connection-dot"></span><span id="connection">Підключення…</span><button id="hide-header" class="header-toggle">Приховати хедер</button><button id="logout" class="logout">Вийти</button></div>
       </header>
+      <button id="show-header" class="show-header" type="button" hidden>Показати</button>
       <section class="table-card">
+        <div class="column-controls">
+          <button id="columns-button" class="columns-button" type="button" title="Налаштувати колонки" aria-label="Налаштувати колонки" aria-expanded="false">☰</button>
+          <div id="columns-menu" class="columns-menu" hidden>
+            <div class="columns-menu-title">Колонки</div>
+            <div class="columns-menu-hint">Перетягуйте, щоб змінити порядок</div>
+            <ul id="columns-list"></ul>
+          </div>
+        </div>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Станція</th><th>Статус</th><th>Напруга</th><th>Струм</th><th>Sat</th><th>HDOP</th><th>Азимут</th><th>Висота</th><th>Зв'язок</th><th>OBS</th></tr></thead>
+            <thead><tr><th data-column="station">Станція</th><th data-column="status">Статус</th><th data-column="voltage">Напруга</th><th data-column="current">Струм</th><th data-column="satellites">Sat</th><th data-column="hdop">HDOP</th><th data-column="heading">Азимут</th><th data-column="altitude">Висота</th><th data-column="link">Зв'язок</th><th data-column="obs">OBS</th></tr></thead>
             <tbody id="stations"><tr><td colspan="10" class="empty">Очікування даних…</td></tr></tbody>
           </table>
         </div>
