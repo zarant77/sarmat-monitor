@@ -77,48 +77,51 @@ jobs:
       - name: Build plugin and run tests
         shell: pwsh
         run: |
-          .\sarmat-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
+          .\telemetry-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
 
       - name: Build plugin MSI
         shell: pwsh
         run: |
-          dotnet build .\sarmat-plugin\installer\SarmatPlugin.Installer.wixproj `
+          dotnet build .\telemetry-plugin\installer\SarmatPlugin.Installer.wixproj `
             --configuration Release `
             "-p:ProductVersion=$env:PRODUCT_VERSION" `
             "-p:OutputPath=$env:RELEASE_ARTIFACTS"
           if ($LASTEXITCODE -ne 0) { throw "Plugin MSI build failed with exit code $LASTEXITCODE." }
-          $built = Join-Path $env:RELEASE_ARTIFACTS "SarmatPlugin-$env:PRODUCT_VERSION.msi"
-          $release = Join-Path $env:RELEASE_ARTIFACTS "SarmatPlugin-$env:FILE_VERSION.msi"
+          $built = Join-Path $env:RELEASE_ARTIFACTS "SarmatTelemetry-$env:PRODUCT_VERSION.msi"
+          $release = Join-Path $env:RELEASE_ARTIFACTS "SarmatTelemetry-$env:FILE_VERSION.msi"
           if ($built -ne $release) { Move-Item -LiteralPath $built -Destination $release -Force }
           "PLUGIN_MSI=$release" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Test and package Sarmat Monitor
+      - name: Test and package Monitor
         shell: pwsh
         run: |
           corepack enable
           corepack prepare pnpm@11.9.0 --activate
-          Push-Location .\sarmat-monitor
+          Push-Location .\monitor
           pnpm install --frozen-lockfile
           pnpm test
           if ($LASTEXITCODE -ne 0) { throw "Aggregator tests failed with exit code $LASTEXITCODE." }
           Pop-Location
 
-          $stage = Join-Path $env:RUNNER_TEMP "sarmat-monitor"
+          $stage = Join-Path $env:RUNNER_TEMP "monitor"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -LiteralPath .\sarmat-monitor\src -Destination $stage -Recurse
-          Copy-Item -LiteralPath .\sarmat-monitor\public -Destination $stage -Recurse
+          Copy-Item -LiteralPath .\monitor\src -Destination $stage -Recurse
+          Copy-Item -LiteralPath .\monitor\public -Destination $stage -Recurse
+          $sharedStage = Join-Path $stage "shared"
+          New-Item -ItemType Directory -Force -Path $sharedStage | Out-Null
+          Copy-Item -LiteralPath .\shared\telemetry-thresholds.json -Destination $sharedStage
           foreach ($file in @('package.json', 'pnpm-lock.yaml', 'config.example.json',
               'README.md', 'install.cmd', 'start.cmd')) {
-            Copy-Item -LiteralPath (Join-Path .\sarmat-monitor $file) -Destination $stage
+            Copy-Item -LiteralPath (Join-Path .\monitor $file) -Destination $stage
           }
-          $archive = Join-Path $env:RELEASE_ARTIFACTS "SarmatMonitor-$env:FILE_VERSION.zip"
+          $archive = Join-Path $env:RELEASE_ARTIFACTS "Monitor-$env:FILE_VERSION.zip"
           Compress-Archive -Path "$stage\*" -DestinationPath $archive -Force
           "MONITOR_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SarmatMonitor-release-${{ github.run_number }}
+          name: Monitor-release-${{ github.run_number }}
           path: |
             ${{ env.PLUGIN_MSI }}
             ${{ env.MONITOR_ZIP }}

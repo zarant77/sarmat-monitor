@@ -1,0 +1,30 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "snapshotIntervalMs": 1000,
+    "staleAfterMs": 3000,
+    "offlineAfterMs": 10000,
+    "maxMessageBytes": 4096
+  },
+  "admins": [
+    "replace-with-admin-secret"
+  ],
+  "stations": [
+    {
+      "title": "Red Station",
+      "color": "#ff0000",
+      "secret": "replace-with-red-station-secret"
+    },
+    {
+      "title": "Green Station",
+      "color": "#00ff00",
+      "secret": "replace-with-green-station-secret"
+    },
+    {
+      "title": "Yellow Station",
+      "color": "#ffff00",
+      "secret": "replace-with-yellow-station-secret"
+    }
+  ]
+}

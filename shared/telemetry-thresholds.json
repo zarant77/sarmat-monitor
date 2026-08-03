@@ -1,0 +1,8 @@
+{
+  "voltage": { "goodMin": 44, "normalMin": 42 },
+  "current": { "goodMax": 80, "normalMax": 120 },
+  "satellites": { "goodMin": 30, "normalMin": 26 },
+  "hdop": { "goodMax": 0.6, "normalMax": 0.8 },
+  "linkRssi": { "goodMin": -70, "normalMin": -80 },
+  "distanceToHome": { "goodMax": 25, "normalMax": 50 }
+}

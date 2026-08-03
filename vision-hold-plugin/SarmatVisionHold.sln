@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold", "src\SarmatVisionHold\SarmatVisionHold.csproj", "{8D3A1E31-EB09-4B59-A65A-104E01B87610}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.Tests", "tests\SarmatVisionHold.Tests\SarmatVisionHold.Tests.csproj", "{71F225D2-A4F0-47E8-8B8D-E47AA3F18454}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.Core", "src\SarmatVisionHold.Core\SarmatVisionHold.Core.csproj", "{A6C09DA0-9D27-48D7-AF01-20996512C236}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.Vision", "src\SarmatVisionHold.Vision\SarmatVisionHold.Vision.csproj", "{945AD953-8788-4F5E-A756-B6FDDA7B3079}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.OfflineTests", "tests\SarmatVisionHold.OfflineTests\SarmatVisionHold.OfflineTests.csproj", "{44C38920-178F-41F5-A234-AE22ED038360}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.VideoAnalyzer", "tools\SarmatVisionHold.VideoAnalyzer\SarmatVisionHold.VideoAnalyzer.csproj", "{0A5BD36C-57DC-4CF8-9B8B-7A023BBC4310}"
+EndProject
+Global
+ GlobalSection(SolutionConfigurationPlatforms) = preSolution
+  Debug|Any CPU = Debug|Any CPU
+  Release|Any CPU = Release|Any CPU
+ EndGlobalSection
+ GlobalSection(ProjectConfigurationPlatforms) = postSolution
+  {8D3A1E31-EB09-4B59-A65A-104E01B87610}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {8D3A1E31-EB09-4B59-A65A-104E01B87610}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {8D3A1E31-EB09-4B59-A65A-104E01B87610}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {8D3A1E31-EB09-4B59-A65A-104E01B87610}.Release|Any CPU.Build.0 = Release|Any CPU
+  {71F225D2-A4F0-47E8-8B8D-E47AA3F18454}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {71F225D2-A4F0-47E8-8B8D-E47AA3F18454}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {71F225D2-A4F0-47E8-8B8D-E47AA3F18454}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {71F225D2-A4F0-47E8-8B8D-E47AA3F18454}.Release|Any CPU.Build.0 = Release|Any CPU
+  {A6C09DA0-9D27-48D7-AF01-20996512C236}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {A6C09DA0-9D27-48D7-AF01-20996512C236}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {A6C09DA0-9D27-48D7-AF01-20996512C236}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {A6C09DA0-9D27-48D7-AF01-20996512C236}.Release|Any CPU.Build.0 = Release|Any CPU
+  {945AD953-8788-4F5E-A756-B6FDDA7B3079}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {945AD953-8788-4F5E-A756-B6FDDA7B3079}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {945AD953-8788-4F5E-A756-B6FDDA7B3079}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {945AD953-8788-4F5E-A756-B6FDDA7B3079}.Release|Any CPU.Build.0 = Release|Any CPU
+  {44C38920-178F-41F5-A234-AE22ED038360}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {44C38920-178F-41F5-A234-AE22ED038360}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {44C38920-178F-41F5-A234-AE22ED038360}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {44C38920-178F-41F5-A234-AE22ED038360}.Release|Any CPU.Build.0 = Release|Any CPU
+  {0A5BD36C-57DC-4CF8-9B8B-7A023BBC4310}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {0A5BD36C-57DC-4CF8-9B8B-7A023BBC4310}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {0A5BD36C-57DC-4CF8-9B8B-7A023BBC4310}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {0A5BD36C-57DC-4CF8-9B8B-7A023BBC4310}.Release|Any CPU.Build.0 = Release|Any CPU
+ EndGlobalSection
+EndGlobal

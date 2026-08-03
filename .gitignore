@@ -31,7 +31,7 @@ project.nuget.cache
 node_modules/
 .pnpm-store/
 npm-debug.log*
-/sarmat-monitor/config.json
+/monitor/config.json
 
 # Test and coverage artifacts
 TestResults/
