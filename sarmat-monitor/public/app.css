@@ -53,7 +53,7 @@ td { padding: 16px 15px; border-top: 1px solid #222c3b; font-variant-numeric: ta
 tbody tr:hover { background: #151f2d; }
 .station-name { font-weight: 800; letter-spacing: .035em; }
 .status { font-weight: 650; } .status-0 { color: #47dd96; } .status-1, .waiting { color: #f3bb55; } .status-2 { color: #ff6873; }
-.armed { color: #ff6873; font-weight: 700; }
+.armed { color: #f3bb55; font-weight: 700; }
 .disarmed { color: #47dd96; font-weight: 650; }
 .good { color: #47dd96; font-weight: 700; }
 .normal { color: #f3bb55; font-weight: 700; }

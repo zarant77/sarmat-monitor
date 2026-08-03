@@ -38,6 +38,18 @@ namespace SarmatPlugin.Core
         public DateTime UpdatedUtc { get; set; }
     }
 
+    public static class WidgetStatusPolicy
+    {
+        public static WidgetStatus Obs(bool armed, ObsStatus status)
+        {
+            if (status == null || !status.Connected || !status.Recording.HasValue)
+                return WidgetStatus.Bad;
+            if (armed)
+                return status.Recording.Value ? WidgetStatus.Good : WidgetStatus.Bad;
+            return status.Recording.Value ? WidgetStatus.Normal : WidgetStatus.Good;
+        }
+    }
+
     public sealed class RuijieStatus
     {
         public bool Connected { get; set; }

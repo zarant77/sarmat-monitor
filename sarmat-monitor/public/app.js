@@ -183,8 +183,8 @@ function render({ stations, thresholds }) {
         cell(number(current, 1, " A"), maximumClass(current, thresholds.current), "current"),
         cell(satellites ?? dash, minimumClass(satellites, thresholds.satellites), "satellites"),
         cell(number(hdop, 2), maximumClass(hdop, thresholds.hdop), "hdop"),
-        cell(number(heading, 1, "°"), "", "heading"),
-        cell(number(altitude, 1, " m"), "", "altitude"),
+        cell(number(heading, 0, "°"), "", "heading"),
+        cell(number(altitude, 0, " m"), "", "altitude"),
         cell(ruijie == null ? dash : `${ruijie} dBm`, minimumClass(ruijie, thresholds.linkRssi), "link"),
         cell(recording ? "REC" : "NR", obsClass, "obs"));
     }

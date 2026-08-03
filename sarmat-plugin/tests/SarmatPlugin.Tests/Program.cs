@@ -24,6 +24,7 @@ namespace SarmatPlugin.Tests
             Run("OBS authentication matches v5 example", ObsAuthentication);
             Run("OBS recording control request envelopes", ObsRecordingRequests);
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
+            Run("OBS widget colors depend on ARMED and recording state", ObsWidgetColors);
             Run("Takeoff mode warning only checks the arming transition", TakeoffModeWarning);
             Run("Lima reacts once per RC button press", LimaEdge);
             Run("MAVLink silence watchdog requests bounded reconnects", MavlinkSilenceReconnect);
@@ -72,6 +73,15 @@ namespace SarmatPlugin.Tests
             Equal(Severity.Critical,e.Update(T(battery:45),O(),R(),s,n.AddSeconds(3)).Severity);
             var restored=e.Update(T(battery:45),O(),R(),s,n.AddSeconds(5));
             Equal(Severity.Ok,restored.Severity); True(restored.Restored);
+        }
+
+        private static void ObsWidgetColors()
+        {
+            Equal(WidgetStatus.Good, WidgetStatusPolicy.Obs(true, O(recording:true)));
+            Equal(WidgetStatus.Bad, WidgetStatusPolicy.Obs(true, O(recording:false)));
+            Equal(WidgetStatus.Normal, WidgetStatusPolicy.Obs(false, O(recording:true)));
+            Equal(WidgetStatus.Good, WidgetStatusPolicy.Obs(false, O(recording:false)));
+            Equal(WidgetStatus.Bad, WidgetStatusPolicy.Obs(false, O(connected:false)));
         }
         private static void Hysteresis()
         {

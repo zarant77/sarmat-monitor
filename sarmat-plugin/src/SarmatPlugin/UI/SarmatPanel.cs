@@ -85,7 +85,7 @@ namespace SarmatPlugin.UI
 
             SetWidget("obs", "OBS",
                 !obsStatus.Connected ? "DIS" : obsStatus.Recording == true ? "REC" : "NR",
-                obsStatus.Connected && obsStatus.Recording == true ? WidgetStatus.Good : WidgetStatus.Bad);
+                WidgetStatusPolicy.Obs(telemetry.Armed, obsStatus));
 
             SetWidget("ground_speed", "Ground Speed", telemetry.GroundSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
             SetWidget("vertical_speed", "Vertical Speed", telemetry.VerticalSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
