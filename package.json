@@ -1,0 +1,15 @@
+{
+  "name": "sarmat",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "monitor"
+  ],
+  "scripts": {
+    "start": "npm --workspace @sarmat/monitor start",
+    "test": "npm --workspace @sarmat/monitor test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
