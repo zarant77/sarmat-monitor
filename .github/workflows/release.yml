@@ -115,7 +115,7 @@ jobs:
               'README.md', 'install.cmd', 'start.cmd')) {
             Copy-Item -LiteralPath (Join-Path .\monitor $file) -Destination $stage
           }
-          $archive = Join-Path $env:RELEASE_ARTIFACTS "Monitor-$env:FILE_VERSION.zip"
+          $archive = Join-Path $env:RELEASE_ARTIFACTS "SarmatMonitor-$env:FILE_VERSION.zip"
           Compress-Archive -Path "$stage\*" -DestinationPath $archive -Force
           "MONITOR_ZIP=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 
