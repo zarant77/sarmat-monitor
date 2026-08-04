@@ -21,6 +21,7 @@
              Title="SarmatTelemetry"
              Description="Mission Planner telemetry and safety plugin."
              Level="1"
+             ConfigurableDirectory="MISSIONPLANNERDIR"
              AllowAbsent="no">
       <ComponentGroupRef Id="PluginComponents" />
     </Feature>
@@ -29,6 +30,7 @@
              Title="SarmatVisionHold (unavailable)"
              Description="Vision Hold is included for a future release and cannot be installed yet."
              Level="0"
+             ConfigurableDirectory="MISSIONPLANNERDIR"
              AllowAbsent="yes">
       <ComponentGroupRef Id="VisionHoldComponents" />
     </Feature>
@@ -37,6 +39,7 @@
              Title="SarmatTheme"
              Description="Install the Sarmat icons and cat splash screen for Mission Planner."
              Level="2"
+             ConfigurableDirectory="MISSIONPLANNERDIR"
              AllowAbsent="yes">
       <ComponentGroupRef Id="ThemeComponents" />
     </Feature>

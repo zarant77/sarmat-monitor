@@ -107,6 +107,8 @@ pass, the workflow creates a GitHub Release named after the tag and attaches
 The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Interactive
 setup always shows the Mission Planner directory screen, initially set to
 `C:\Program Files (x86)\Mission Planner`; select the exact Mission Planner copy you want to modify.
+Use **Browse** from any selected Sarmat feature to choose the shared Mission Planner root folder
+that already contains `MissionPlanner.exe`.
 The required **SarmatTelemetry** feature installs `SarmatTelemetry.dll` into the
 selected directory's `plugins` folder. **SarmatVisionHold** is included in the MSI but remains
 disabled at install level 0, so it cannot be installed yet.
