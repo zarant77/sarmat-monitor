@@ -27,18 +27,21 @@ namespace SarmatPlugin.Integration
         private readonly HttpClient http;
         private readonly SemaphoreSlim authLock = new SemaphoreSlim(1, 1);
         private string token;
+        private string baseUrl;
+        private bool? legacyQualityApi;
 
         public RuijieClient(PluginSettings settings, AppLog log)
         {
             this.settings = settings; this.log = log;
             ServicePointManager.Expect100Continue = false;
-            var handler = new HttpClientHandler { CookieContainer = cookies, UseCookies = true };
-            if (settings.RuijieAllowInsecureTls)
-                handler.ServerCertificateCustomValidationCallback = (message, certificate, chain, errors) => true;
+            var handler = new HttpClientHandler
+            {
+                CookieContainer = cookies,
+                UseCookies = true,
+                ServerCertificateCustomValidationCallback = (message, certificate, chain, errors) => true
+            };
             http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(settings.RuijieRequestTimeoutSeconds) };
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
-            if (Uri.TryCreate(BaseUrl, UriKind.Absolute, out var routerUri))
-                ServicePointManager.FindServicePoint(routerUri).Expect100Continue = false;
         }
 
         public async Task<RuijieStatus> GetStatusAsync(CancellationToken cancellationToken)
@@ -69,7 +72,7 @@ namespace SarmatPlugin.Integration
                 if (!string.IsNullOrEmpty(token)) return;
                 for (var reload = 0; reload < 2; reload++)
                 {
-                    var page = await http.GetStringAsync(BaseUrl + "/cgi-bin/luci/").ConfigureAwait(false);
+                    var page = await GetAuthPageAsync(cancellationToken).ConfigureAwait(false);
                     var parsed = ParseAuthPage(page);
                     var encrypted = RuijieCrypto.EncryptPassword(settings.RuijiePassword, parsed.Key);
                     var modern = parsed.Modern;
@@ -107,37 +110,107 @@ namespace SarmatPlugin.Integration
 
         private async Task<RuijieStatus> FetchQualityAsync(CancellationToken ct)
         {
+            if (legacyQualityApi != true)
+            {
+                var current = await FetchQualityResponseAsync("wdsLinkQuality", true, ct).ConfigureAwait(false);
+                ValidateCommand(current, "wdsLinkQuality");
+                var status = ParseCurrentQuality(current);
+                if (status != null)
+                {
+                    legacyQualityApi = false;
+                    return status;
+                }
+            }
+
+            var legacy = await FetchQualityResponseAsync("wds_list_all", false, ct).ConfigureAwait(false);
+            ValidateCommand(legacy, "wds_list_all");
+            var legacyStatus = ParseLegacyQuality(legacy);
+            if (legacyStatus == null) throw new InvalidOperationException("Ruijie remote device list is empty");
+            legacyQualityApi = true;
+            return legacyStatus;
+        }
+
+        private Task<IDictionary<string, object>> FetchQualityResponseAsync(string module, bool includeData,
+            CancellationToken ct)
+        {
             var parameters = new Dictionary<string, object>
             {
-                ["module"]="wdsLinkQuality", ["noParse"]=false, ["async"]=null, ["remoteIp"]=false, ["data"]=null, ["device"]="pc"
+                ["module"]=module, ["noParse"]=false, ["async"]=null, ["remoteIp"]=false, ["device"]="pc"
             };
-            var response = await PostAsync("/cgi-bin/luci/api/cmd", token,
-                new Dictionary<string, object> { ["method"]="devSta.get", ["params"]=parameters }, ct).ConfigureAwait(false);
+            if (includeData) parameters["data"] = null;
+            return PostAsync("/cgi-bin/luci/api/cmd", token,
+                new Dictionary<string, object> { ["method"]="devSta.get", ["params"]=parameters }, ct);
+        }
+
+        private static void ValidateCommand(IDictionary<string, object> response, string module)
+        {
             var code = MiniJson.Int(response, "code");
             if (code != 0)
             {
                 var msg = MiniJson.String(response, "msg") ?? "";
                 if (code == 401 || code == 403 || msg.IndexOf("auth", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     msg.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0) throw new RuijieAuthException(msg);
-                throw new InvalidOperationException("Ruijie devSta.get API code " + code + ": " + msg);
+                throw new InvalidOperationException("Ruijie devSta.get " + module + " API code " + code + ": " + msg);
             }
+        }
+
+        internal static RuijieStatus ParseCurrentQuality(IDictionary<string, object> response)
+        {
             var data = MiniJson.Object(response["data"]);
             var devices = data != null && data.TryGetValue("devList", out var listValue) ? listValue as IList<object> : null;
-            if (devices == null || devices.Count == 0) throw new InvalidOperationException("Ruijie remote device list is empty");
+            if (devices == null || devices.Count == 0) return null;
             var values = new List<int>();
             foreach (var item in devices)
             {
                 var device = MiniJson.Object(item);
                 foreach (var key in new[] {"uplink_rssi_h","uplink_rssi_v","downlink_rssi_h","downlink_rssi_v"})
-                    if (int.TryParse((MiniJson.String(device, key) ?? "").Trim().TrimEnd('%'),
-                        NumberStyles.Integer, CultureInfo.InvariantCulture, out var rssi)) values.Add(rssi);
+                    AddNumber(values, device, key);
             }
             if (values.Count == 0) throw new InvalidOperationException("Ruijie remote device contains no valid RSSI values");
+            return BuildStatus(values, data);
+        }
+
+        internal static RuijieStatus ParseLegacyQuality(IDictionary<string, object> response)
+        {
+            if (!response.TryGetValue("data", out var raw) || !(raw is string json) || string.IsNullOrWhiteSpace(json))
+                return null;
+            var data = MiniJson.Object(MiniJson.Parse(json));
+            var groups = data != null && data.TryGetValue("list_all", out var all) ? all as IList<object> : null;
+            if (groups == null || groups.Count == 0) return null;
+            var values = new List<int>();
+            IDictionary<string, object> qualityData = null;
+            foreach (var groupValue in groups)
+            {
+                var group = MiniJson.Object(groupValue);
+                var pairs = group != null && group.TryGetValue("list_pair", out var pairValue)
+                    ? pairValue as IList<object> : null;
+                if (pairs == null) continue;
+                foreach (var pairValueItem in pairs)
+                {
+                    var pair = MiniJson.Object(pairValueItem);
+                    if (pair == null) continue;
+                    qualityData = qualityData ?? pair;
+                    AddNumber(values, pair, "rssi");
+                    AddNumber(values, pair, "rssi_a");
+                }
+            }
+            if (values.Count == 0) return null;
+            return BuildStatus(values, qualityData);
+        }
+
+        private static void AddNumber(ICollection<int> values, IDictionary<string, object> source, string key)
+        {
+            if (int.TryParse((MiniJson.String(source, key) ?? "").Trim().TrimEnd('%'),
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)) values.Add(value);
+        }
+
+        private static RuijieStatus BuildStatus(IList<int> values, IDictionary<string, object> qualityData)
+        {
             var average = values.Sum() / values.Count;
             var score = Math.Max(0, Math.Min(100, (average + 90) * 100 / 40));
-            if (int.TryParse((MiniJson.String(data, "chutil") ?? "").TrimEnd('%'), out var utilization))
+            if (int.TryParse((MiniJson.String(qualityData, "chutil") ?? "").TrimEnd('%'), out var utilization))
                 score -= utilization > 80 ? 20 : utilization > 50 ? 10 : 0;
-            if (int.TryParse(MiniJson.String(data, "channf"), out var noise) && noise > -80) score -= 10;
+            if (int.TryParse(MiniJson.String(qualityData, "channf"), out var noise) && noise > -80) score -= 10;
             score = Math.Max(0, Math.Min(100, score));
             var quality = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Weak" : "Bad";
             return new RuijieStatus { Connected = true, Rssi = average, QualityPercent = score,
@@ -165,6 +238,58 @@ namespace SarmatPlugin.Integration
             }
         }
 
+        private async Task<string> GetAuthPageAsync(CancellationToken ct)
+        {
+            if (!string.IsNullOrEmpty(baseUrl))
+                return await GetStringAsync(baseUrl + "/cgi-bin/luci/", ct).ConfigureAwait(false);
+
+            var failures = new List<string>();
+            foreach (var scheme in new[] { "http", "https" })
+            {
+                var candidate = scheme + "://" + settings.RuijieAddress;
+                try
+                {
+                    using (var request = new HttpRequestMessage(HttpMethod.Get, candidate + "/cgi-bin/luci/"))
+                    {
+                        ConfigureLegacyRouterRequest(request);
+                        using (var response = await http.SendAsync(request, ct).ConfigureAwait(false))
+                        {
+                            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            if (!response.IsSuccessStatusCode)
+                                throw new HttpRequestException("HTTP " + (int)response.StatusCode);
+                            var resolved = response.RequestMessage.RequestUri;
+                            baseUrl = resolved.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+                            ServicePointManager.FindServicePoint(resolved).Expect100Continue = false;
+                            log.Debug("Ruijie transport selected " + resolved.Scheme.ToUpperInvariant());
+                            return body;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    failures.Add(scheme.ToUpperInvariant() + ": " + ex.Message);
+                }
+            }
+            throw new HttpRequestException("Ruijie is unreachable over HTTP and HTTPS (" +
+                string.Join("; ", failures) + ")");
+        }
+
+        private async Task<string> GetStringAsync(string url, CancellationToken ct)
+        {
+            using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+            {
+                ConfigureLegacyRouterRequest(request);
+                using (var response = await http.SendAsync(request, ct).ConfigureAwait(false))
+                {
+                    var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                        throw new HttpRequestException("Ruijie HTTP " + (int)response.StatusCode);
+                    return body;
+                }
+            }
+        }
+
         internal static void ConfigureLegacyRouterRequest(HttpRequestMessage request)
         {
             // Old Ruijie/uHTTPd firmware responds with 417 when .NET Framework
@@ -173,7 +298,7 @@ namespace SarmatPlugin.Integration
             request.Version = HttpVersion.Version11;
         }
 
-        private string BaseUrl => (settings.RuijieAddress ?? "").TrimEnd('/');
+        private string BaseUrl => baseUrl ?? throw new InvalidOperationException("Ruijie transport is not initialized");
         private string CookieToken()
         {
             foreach (Cookie c in cookies.GetCookies(new Uri(BaseUrl)))

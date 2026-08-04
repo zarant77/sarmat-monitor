@@ -81,13 +81,12 @@ namespace SarmatPlugin.Core
         [DataMember] public string ObsEndpoint { get; set; } = "ws://127.0.0.1:4455";
         [DataMember] public string ObsPassword { get; set; } = "";
         [DataMember] public double ObsReconnectSeconds { get; set; } = 2;
-        [DataMember] public string RuijieAddress { get; set; } = "https://192.168.69.252";
+        [DataMember] public string RuijieAddress { get; set; } = "10.44.77.254";
         [DataMember] public string RuijieUsername { get; set; } = "admin";
         [DataMember] public string RuijiePassword { get; set; } = "";
         [DataMember] public double RuijiePollSeconds { get; set; } = 2;
         [DataMember] public double RuijieRequestTimeoutSeconds { get; set; } = 12;
         [DataMember] public double RuijieStaleSeconds { get; set; } = 8;
-        [DataMember] public bool RuijieAllowInsecureTls { get; set; } = true;
         [DataMember] public bool AggregatorEnabled { get; set; }
         [DataMember] public string AggregatorUrl { get; set; } = "ws://127.0.0.1:8080/ws/station";
         [DataMember] public string AggregatorSecret { get; set; } = "";
@@ -123,6 +122,7 @@ namespace SarmatPlugin.Core
             RuijiePollSeconds = Math.Max(0.5, RuijiePollSeconds);
             RuijieRequestTimeoutSeconds = Math.Max(1, RuijieRequestTimeoutSeconds);
             RuijieStaleSeconds = Math.Max(RuijiePollSeconds, RuijieStaleSeconds);
+            RuijieAddress = NormalizeRouterIp(RuijieAddress);
             AggregatorUrl = string.IsNullOrWhiteSpace(AggregatorUrl)
                 ? "ws://127.0.0.1:8080/ws/station" : AggregatorUrl.Trim();
             AggregatorSecret = (AggregatorSecret ?? "").Trim();
@@ -156,6 +156,16 @@ namespace SarmatPlugin.Core
             else
                 HudElements = HudElements.Where(x => HudElementCatalog.Elements.ContainsKey(x.Key))
                     .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal static string NormalizeRouterIp(string value)
+        {
+            var text = string.IsNullOrWhiteSpace(value) ? "10.44.77.254" : value.Trim();
+            if (Uri.TryCreate(text, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                return uri.IsDefaultPort ? uri.Host : uri.Authority;
+            var slash = text.IndexOfAny(new[] {'/', '\\'});
+            return (slash >= 0 ? text.Substring(0, slash) : text).Trim().TrimEnd('/');
         }
 
         private static string Default(string value, string fallback) =>

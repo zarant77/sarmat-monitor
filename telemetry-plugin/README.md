@@ -51,8 +51,8 @@ The plugin does not open its own MAVLink connection and does not run or communic
 
 Close Mission Planner before installing or replacing the DLL.
 
-For a downloaded GitHub Release, run `SarmatPlugins-<version>.msi`. The installer defaults to the
-standard Mission Planner directory and allows selecting another folder. For a local portable
+For a downloaded GitHub Release, run `SarmatPlugins-<version>.msi`. Interactive installation always
+shows the Mission Planner directory screen so you can choose the exact installed or portable copy. For a local portable
 build, the PowerShell installer remains available in `dist`:
 
 ```powershell
@@ -104,9 +104,10 @@ pass, the workflow creates a GitHub Release named after the tag and attaches
 
 ## MSI installer
 
-The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Its setup
-screen defaults to `C:\Program Files (x86)\Mission Planner` and allows selecting another Mission
-Planner directory. The required **SarmatTelemetry** feature installs `SarmatTelemetry.dll` into the
+The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Interactive
+setup always shows the Mission Planner directory screen, initially set to
+`C:\Program Files (x86)\Mission Planner`; select the exact Mission Planner copy you want to modify.
+The required **SarmatTelemetry** feature installs `SarmatTelemetry.dll` into the
 selected directory's `plugins` folder. **SarmatVisionHold** is included in the MSI but remains
 disabled at install level 0, so it cannot be installed yet.
 
@@ -129,7 +130,8 @@ workflow**. The resulting release packages are available in the run's **Artifact
 
 ## Install
 
-Run an elevated PowerShell when Mission Planner is installed under `Program Files`:
+Run the installer and select the exact folder containing `MissionPlanner.exe`. A supplied
+`-MissionPlannerPath` is used only as the initial folder in the selector:
 
 ```powershell
 .\scripts\install.ps1 -MissionPlannerPath "C:\Program Files (x86)\Mission Planner"
@@ -170,8 +172,9 @@ that occurs while OBS is disconnected stays pending and is retried after reconne
 
 ## Ruijie setup
 
-Enter the bridge HTTPS address and administrator password. The username defaults to `admin`.
-Self-signed/legacy router certificates can be supported with **Allow insecure TLS**.
+Enter the bridge IP address and administrator password. The username defaults to `admin`.
+The plugin automatically selects HTTP or HTTPS. Router TLS certificates are accepted because the bridge is
+accessed only on the trusted local network.
 
 The adapter implements the actual Ruijie LuCI flow:
 

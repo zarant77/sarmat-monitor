@@ -31,6 +31,8 @@ namespace SarmatPlugin.Tests
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
             Run("Ruijie disables Expect 100-continue", RuijieExpectContinue);
+            Run("Ruijie ReyeeOS 1.80 quality response", RuijieLegacyQuality);
+            Run("Ruijie router IP settings migrate from URLs", RuijieRouterIp);
             Run("Aggregator telemetry uses compact MessagePack", AggregatorMessagePack);
             Run("Widget catalog defaults are valid and unique", WidgetDefaults);
             Run("Mission Planner scalar telemetry is discovered dynamically", DynamicTelemetry);
@@ -217,6 +219,22 @@ namespace SarmatPlugin.Tests
                 Equal(new Version(1, 1), request.Version);
             }
         }
+        private static void RuijieLegacyQuality()
+        {
+            var response = (IDictionary<string, object>)MiniJson.Parse(
+                "{\"data\":\"{ \\\"list_all\\\": [ { \\\"list_pair\\\": [ { \\\"rssi\\\": \\\"-48\\\", " +
+                "\\\"rssi_a\\\": \\\"-46\\\", \\\"channf\\\": \\\"-92\\\", \\\"chutil\\\": \\\"5\\\" } ] } ] }\",\"code\":0}");
+            var status = RuijieClient.ParseLegacyQuality(response);
+            Equal(true, status.Connected);
+            Equal(-47, status.Rssi);
+            Equal(100, status.QualityPercent);
+        }
+        private static void RuijieRouterIp()
+        {
+            Equal("10.44.77.254", PluginSettings.NormalizeRouterIp("http://10.44.77.254/cgi-bin/luci/"));
+            Equal("router.local:8443", PluginSettings.NormalizeRouterIp("https://router.local:8443/admin"));
+            Equal("10.44.77.254", PluginSettings.NormalizeRouterIp("10.44.77.254"));
+        }
         private static void AggregatorMessagePack()
         {
             var packet = MessagePackTelemetryEncoder.Encode(1, null, null, 2,
@@ -340,8 +358,8 @@ namespace SarmatPlugin.Tests
         }
         private static void Sanitizer()
         {
-            var value=AppLog.Sanitize("{\"password\":\"secret\",\"token\":\"abcdef\"}");
-            True(!value.Contains("secret")&&!value.Contains("abcdef"));
+            var value=AppLog.Sanitize("{\"password\":\"pass123\",\"token\":\"abcdef\",\"secret\":\"key123\",\"passwd\":\"cipher\"}");
+            True(!value.Contains("pass123")&&!value.Contains("abcdef")&&!value.Contains("key123")&&!value.Contains("cipher"));
         }
         private static void Equal<T>(T expected,T actual) { if(!EqualityComparer<T>.Default.Equals(expected,actual)) throw new Exception($"expected {expected}, got {actual}"); }
         private static void True(bool value) { if(!value) throw new Exception("condition is false"); }

@@ -62,13 +62,12 @@ namespace SarmatPlugin.UI
         private Control Ruijie()
         {
             var p = Grid();
-            TextBox(p, "Router address", "RuijieAddress", settings.RuijieAddress);
+            TextBox(p, "Router IP", "RuijieAddress", settings.RuijieAddress);
             TextBox(p, "Username", "RuijieUsername", settings.RuijieUsername);
             TextBox(p, "Password", "RuijiePassword", settings.RuijiePassword);
             Number(p, "Poll interval (s)", "RuijiePollSeconds", settings.RuijiePollSeconds, .5m, 300, 1);
             Number(p, "Request timeout (s)", "RuijieRequestTimeoutSeconds", settings.RuijieRequestTimeoutSeconds, 1, 300, 1);
             Number(p, "Stale timeout (s)", "RuijieStaleSeconds", settings.RuijieStaleSeconds, 1, 3600, 1);
-            Check(p, "Allow insecure TLS", "RuijieAllowInsecureTls", settings.RuijieAllowInsecureTls);
             TestRow(p, "Test connection", testRuijie);
             return p;
         }
@@ -207,7 +206,6 @@ namespace SarmatPlugin.UI
                 ObsReconnectSeconds=N("ObsReconnectSeconds"), RuijieAddress=T("RuijieAddress"), RuijieUsername=T("RuijieUsername"),
                 RuijiePassword=T("RuijiePassword"), RuijiePollSeconds=N("RuijiePollSeconds"),
                 RuijieRequestTimeoutSeconds=N("RuijieRequestTimeoutSeconds"), RuijieStaleSeconds=N("RuijieStaleSeconds"),
-                RuijieAllowInsecureTls=B("RuijieAllowInsecureTls"),
                 AggregatorEnabled=B("AggregatorEnabled"), AggregatorUrl=T("AggregatorUrl"),
                 AggregatorSecret=T("AggregatorSecret"),
                 AggregatorReconnectSeconds=N("AggregatorReconnectSeconds"),

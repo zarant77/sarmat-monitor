@@ -8,7 +8,7 @@ namespace SarmatPlugin.Infrastructure
     {
         private const long MaxBytes = 5 * 1024 * 1024;
         private static readonly Regex Secrets = new Regex(
-            "(?i)(password|pwd|token|sid|auth|authorization|cookie|webauth|key)([\"'\\s:=]+)([^\"'&\\s,;}]+)",
+            "(?i)(password|passwd|pwd|token|sid|secret|auth|authorization|cookie|webauth|key)([\"'\\s:=]+)([^\"'&\\s,;}]+)",
             RegexOptions.Compiled);
         private static readonly object Sync = new object();
         public bool DebugEnabled { get; set; }

@@ -1,7 +1,8 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$MissionPlannerPath,
-    [string]$SourcePath
+    [string]$SourcePath,
+    [switch]$MissionPlannerPathConfirmed
 )
 $ErrorActionPreference = 'Stop'
 
@@ -11,7 +12,7 @@ function Test-MissionPlannerDirectory {
         (Test-Path -LiteralPath (Join-Path $Path 'MissionPlanner.exe'))
 }
 
-function Find-MissionPlannerDirectory {
+function Find-MissionPlannerSuggestion {
     $candidates = New-Object System.Collections.Generic.List[string]
     $candidates.Add($PSScriptRoot)
 
@@ -48,10 +49,18 @@ function Find-MissionPlannerDirectory {
         }
     }
 
+    return $null
+}
+
+function Select-MissionPlannerDirectory {
+    param([string]$SuggestedPath)
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = 'Select the folder containing MissionPlanner.exe'
+    $dialog.Description = 'Select which Mission Planner installation should receive the Sarmat plugin (folder containing MissionPlanner.exe)'
     $dialog.ShowNewFolderButton = $false
+    if (Test-MissionPlannerDirectory $SuggestedPath) {
+        $dialog.SelectedPath = (Resolve-Path -LiteralPath $SuggestedPath).Path
+    }
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
         throw 'Mission Planner installation was not selected.'
     }
@@ -61,10 +70,15 @@ function Find-MissionPlannerDirectory {
     return (Resolve-Path -LiteralPath $dialog.SelectedPath).Path
 }
 
-if ([string]::IsNullOrWhiteSpace($MissionPlannerPath)) {
-    $MissionPlannerPath = Find-MissionPlannerDirectory
+if (-not $MissionPlannerPathConfirmed) {
+    $suggestedPath = if (Test-MissionPlannerDirectory $MissionPlannerPath) {
+        $MissionPlannerPath
+    } else {
+        Find-MissionPlannerSuggestion
+    }
+    $MissionPlannerPath = Select-MissionPlannerDirectory $suggestedPath
 } elseif (-not (Test-MissionPlannerDirectory $MissionPlannerPath)) {
-    throw "MissionPlanner.exe was not found in '$MissionPlannerPath'."
+    throw "MissionPlanner.exe was not found in the confirmed folder '$MissionPlannerPath'."
 } else {
     $MissionPlannerPath = (Resolve-Path -LiteralPath $MissionPlannerPath).Path
 }
@@ -77,7 +91,8 @@ if (-not $isAdministrator -and -not $WhatIfPreference) {
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
         '-File', ('"{0}"' -f $PSCommandPath),
-        '-MissionPlannerPath', ('"{0}"' -f $MissionPlannerPath)
+        '-MissionPlannerPath', ('"{0}"' -f $MissionPlannerPath),
+        '-MissionPlannerPathConfirmed'
     )
     if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
         $elevatedArguments += @('-SourcePath', ('"{0}"' -f $SourcePath))
