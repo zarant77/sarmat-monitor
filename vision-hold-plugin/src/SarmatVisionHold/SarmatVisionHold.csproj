@@ -3,6 +3,8 @@
  <ItemGroup>
   <ProjectReference Include="..\SarmatVisionHold.Core\SarmatVisionHold.Core.csproj" />
   <ProjectReference Include="..\SarmatVisionHold.Vision\SarmatVisionHold.Vision.csproj" />
+  <ProjectReference Include="..\SarmatVisionHold.Replay\SarmatVisionHold.Replay.csproj" />
+  <ProjectReference Include="..\SarmatVisionHold.Live\SarmatVisionHold.Live.csproj" />
   <Reference Include="MissionPlanner"><HintPath>$(MissionPlannerPath)\MissionPlanner.exe</HintPath><Private>false</Private></Reference>
   <Reference Include="MissionPlanner.ArduPilot"><HintPath>$(MissionPlannerPath)\MissionPlanner.ArduPilot.dll</HintPath><Private>false</Private></Reference>
   <Reference Include="MAVLink"><HintPath>$(MissionPlannerPath)\MAVLink.dll</HintPath><Private>false</Private></Reference>

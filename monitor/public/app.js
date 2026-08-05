@@ -173,6 +173,8 @@ function render({ stations, thresholds }) {
         cell(dash, "", "altitude"), cell(dash, "", "link"), cell(dash, "", "obs"),
       );
     } else {
+      const [status] = snapshot;
+      if (status !== 0) row.classList.add("stale-data");
       const [, , , voltage, current, satellites, hdop, heading, altitude, ruijie, flags] = snapshot;
       const vehicle = flags & 2 ? "Armed" : "Disarmed";
       const vehicleClass = flags & 2 ? "armed" : "disarmed";

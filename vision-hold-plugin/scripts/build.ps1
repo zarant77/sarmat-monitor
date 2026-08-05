@@ -4,9 +4,14 @@ dotnet restore (Join-Path $root 'SarmatVisionHold.sln') --configfile (Join-Path 
 dotnet build (Join-Path $root 'SarmatVisionHold.sln') --no-restore -c $Configuration "-p:MissionPlannerPath=$MissionPlannerPath";if($LASTEXITCODE-ne 0){throw 'build failed'}
 & (Join-Path $root "tests\SarmatVisionHold.Tests\bin\$Configuration\net472\SarmatVisionHold.Tests.exe");if($LASTEXITCODE-ne 0){throw 'tests failed'}
 & (Join-Path $root "tests\SarmatVisionHold.OfflineTests\bin\$Configuration\net472\SarmatVisionHold.OfflineTests.exe");if($LASTEXITCODE-ne 0){throw 'offline optical-flow tests failed'}
+& (Join-Path $root "tests\SarmatVisionHold.Replay.Tests\bin\$Configuration\net472\SarmatVisionHold.Replay.Tests.exe");if($LASTEXITCODE-ne 0){throw 'replay core tests failed'}
+& (Join-Path $root "tests\SarmatVisionHold.ReplayAnalyzer.Tests\bin\$Configuration\net472\SarmatVisionHold.ReplayAnalyzer.Tests.exe");if($LASTEXITCODE-ne 0){throw 'replay analyzer integration tests failed'}
+& (Join-Path $root "tests\SarmatVisionHold.Live.Tests\bin\$Configuration\net472\SarmatVisionHold.Live.Tests.exe");if($LASTEXITCODE-ne 0){throw 'live diagnostic tests failed'}
 $dist=Join-Path $root 'dist';if(Test-Path $dist){Remove-Item -LiteralPath $dist -Recurse -Force};New-Item -ItemType Directory -Path (Join-Path $dist 'plugins')|Out-Null
 Copy-Item (Join-Path $root "src\SarmatVisionHold\bin\$Configuration\net472\SarmatVisionHold.dll") (Join-Path $dist 'plugins')
 Copy-Item (Join-Path $root "src\SarmatVisionHold.Core\bin\$Configuration\net472\SarmatVisionHold.Core.dll") (Join-Path $dist 'plugins')
 Copy-Item (Join-Path $root "src\SarmatVisionHold.Vision\bin\$Configuration\net472\SarmatVisionHold.Vision.dll") (Join-Path $dist 'plugins')
+Copy-Item (Join-Path $root "src\SarmatVisionHold.Replay\bin\$Configuration\net472\SarmatVisionHold.Replay.dll") (Join-Path $dist 'plugins')
+Copy-Item (Join-Path $root "src\SarmatVisionHold.Live\bin\$Configuration\net472\SarmatVisionHold.Live.dll") (Join-Path $dist 'plugins')
 Get-ChildItem (Join-Path $root "src\SarmatVisionHold\bin\$Configuration\net472") -Filter 'OpenCvSharp*.dll' -Recurse|Copy-Item -Destination (Join-Path $dist 'plugins') -Force
 Write-Host "Distribution: $dist"

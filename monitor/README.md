@@ -21,6 +21,8 @@ corepack pnpm start
 The `admins` array contains the secrets accepted by the web interface. Each item in `stations`
 defines a permitted telemetry client and its `title`, `color`, and unique `secret`. Station titles
 and colors shown by the web interface always come from this server configuration.
+When the last telemetry packet is older than `server.staleAfterMs` (5 seconds by default), the
+station's table data is dimmed in gray to indicate that it is no longer current.
 
 The web interface is available at `http://localhost:8080/`. It refreshes connected-station data
 every second. A different configuration path can be selected with `SARMAT_CONFIG`; hosting services

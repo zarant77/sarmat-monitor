@@ -101,6 +101,7 @@ test("validates configured station presentation and identity", () => {
   assert.throws(() => validateConfig({ ...base, stations: [
     ...base.stations, { title: "Green", color: "#00ff00", secret: "station-secret" },
   ] }), /unique/);
+  assert.equal(validateConfig(base).server.staleAfterMs, 5000);
 });
 
 test("serves the login page", async (t) => {
@@ -110,4 +111,13 @@ test("serves the login page", async (t) => {
   const page = await fetch(`http://127.0.0.1:${address.port}`);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /aria-label="SARMAT"/);
+});
+
+test("web interface dims stale telemetry", async (t) => {
+  const server = createTelemetryServer(testConfig(), silentLogger);
+  const address = await server.listen();
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  assert.match(await (await fetch(`${baseUrl}/app.js`)).text(), /row\.classList\.add\("stale-data"\)/);
+  assert.match(await (await fetch(`${baseUrl}/app.css`)).text(), /tr\.stale-data td/);
 });

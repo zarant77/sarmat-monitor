@@ -1,0 +1,17 @@
+{
+  "HorizontalFovDegrees": 90,
+  "VerticalFovDegrees": 0,
+  "CameraMountRollDegrees": 0,
+  "CameraMountPitchDegrees": -90,
+  "CameraMountYawDegrees": 0,
+  "AltitudeSource": "auto",
+  "MaximumSyncErrorMilliseconds": 30,
+  "GapResetSeconds": 0.25,
+  "AutoSyncMinimumOffsetSeconds": -10,
+  "AutoSyncMaximumOffsetSeconds": 10,
+  "AutoSyncStepSeconds": 0.02,
+  "AutoSyncConfidenceThreshold": 0.35,
+  "RotationMode": 3,
+  "EmitDegraded": true,
+  "LogLevel": "info"
+}

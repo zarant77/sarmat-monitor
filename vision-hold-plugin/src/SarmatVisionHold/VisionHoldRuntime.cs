@@ -1,13 +1,43 @@
-using System;using System.IO;using System.Threading;using OpenCvSharp;using SarmatVisionHold.Core;using SarmatVisionHold.Integration;using SarmatVisionHold.Infrastructure;using SarmatVisionHold.Vision;
+using System;
+using System.Threading;
+using OpenCvSharp;
+using SarmatVisionHold.Core;
+using SarmatVisionHold.Infrastructure;
+using SarmatVisionHold.Integration;
+using SarmatVisionHold.Live;
+using SarmatVisionHold.Vision;
+
 namespace SarmatVisionHold
 {
  public sealed class VisionHoldRuntime:IDisposable
- { readonly VisionHoldSettings settings;readonly IVehicleGateway gateway;readonly CameraFrameSource camera=new CameraFrameSource();readonly OpticalFlowTracker tracker=new OpticalFlowTracker();readonly AttitudeCompensator compensator;readonly GroundVelocityEstimator velocity;readonly RcSwitchListener rc;readonly VisionHoldStateMachine machine=new VisionHoldStateMachine();readonly OpticalFlowMavlinkPublisher publisher;readonly EkfSourceController ekf;readonly VisionHoldLog log;readonly IClock clock=new SystemClock();Thread worker;volatile bool running;volatile bool manualRequested;public FlowSample LastFlow{get;private set;}public TelemetrySample LastTelemetry{get;private set;}public VisionHoldState State=>machine.State;public string Reason=>machine.Reason;public bool Requested=>manualRequested||rc.State;public VisionHoldSettings Settings=>settings;public event Action Updated;
-  public VisionHoldRuntime(VisionHoldSettings s,IVehicleGateway g,string logPath){settings=s;gateway=g;compensator=new AttitudeCompensator(s.MaximumImuRate);velocity=new GroundVelocityEstimator(s.MaximumGroundSpeed);rc=new RcSwitchListener(s,clock);publisher=new OpticalFlowMavlinkPublisher(g);ekf=new EkfSourceController(g);log=new VisionHoldLog(logPath);machine.Changed+=(st,r)=>log.Info($"State {st}: {r}");rc.StateChanged+=on=>log.Info($"RC request: {on}");}
-  public void Start(){camera.Start(settings.RtspUrl);running=true;worker=new Thread(Loop){IsBackground=true,Name="Sarmat Vision Hold"};worker.Start();}
+ {
+  readonly VisionHoldSettings settings;readonly IVehicleGateway gateway;readonly CameraFrameSource camera=new CameraFrameSource();readonly OpticalFlowTracker tracker=new OpticalFlowTracker();readonly LiveOpticalFlowDiagnosticPipeline diagnostics=new LiveOpticalFlowDiagnosticPipeline();readonly RcSwitchListener rc;readonly VisionHoldStateMachine machine=new VisionHoldStateMachine();readonly VisionHoldLog log;readonly IClock clock=new SystemClock();Thread worker;volatile bool running;volatile bool manualRequested;
+  public FlowSample LastFlow{get;private set;}public TelemetrySample LastTelemetry{get;private set;}public LiveDiagnosticResult LastDiagnostic{get;private set;}public VisionHoldState State=>machine.State;public string Reason=>machine.Reason;public bool Requested=>manualRequested||rc.State;public VisionHoldSettings Settings=>settings;public event Action Updated;
+
+  public VisionHoldRuntime(VisionHoldSettings settings,IVehicleGateway gateway,string logPath)
+  {
+   this.settings=settings??throw new ArgumentNullException(nameof(settings));this.gateway=gateway??throw new ArgumentNullException(nameof(gateway));settings.Normalize();FlightOutputSafety.DemandDiagnosticsOnly();rc=new RcSwitchListener(settings,clock);log=new VisionHoldLog(logPath);machine.Changed+=(state,reason)=>log.Info($"State {state}: {reason}");rc.StateChanged+=on=>log.Info($"RC request: {on}");
+  }
+  public void Start(){camera.Start(settings.RtspUrl);running=true;worker=new Thread(Loop){IsBackground=true,Name="Sarmat Vision Hold diagnostics"};worker.Start();}
   public void SetManual(bool on){manualRequested=on;}
-  void Loop(){while(running){try{var now=clock.UtcNow;var t=gateway.ReadTelemetry(settings.RcChannel);LastTelemetry=t;if(t.TimestampUtc!=default(DateTime))rc.Update(t.RcPwm,t.TimestampUtc.ToUniversalTime());rc.CheckStale(now);FlowSample f=null;if(camera.TryGet(out Mat frame,out var at)){using(frame){f=tracker.Process(frame,at,camera.Fps,settings.CameraFocalLengthPixels);}if(f!=null){f.FrameAgeMs=(now-at).TotalMilliseconds;compensator.Compensate(f,t);velocity.Estimate(f,t);LastFlow=f;}}var h=HealthEvaluator.Evaluate(Requested,rc.State,camera.Working,LastFlow,t,settings,clock);machine.Update(h);if(machine.State==VisionHoldState.Active){if(!ekf.Activate(settings.NonGpsEkfSourceSet,settings.ActiveMode)){machine.Fail("EKF/mode activation failed");ekf.Fallback(settings.FallbackMode);}else if(!publisher.Publish(LastFlow,t,settings)){machine.Fail("Optical flow publisher failed");ekf.Fallback(settings.FallbackMode);}}else if(machine.State==VisionHoldState.Lost||machine.State==VisionHoldState.Degraded||(!Requested&&machine.State==VisionHoldState.Ready))ekf.Fallback(settings.FallbackMode);Updated?.Invoke();}catch(Exception ex){log.Error("Pipeline",ex);machine.Fail("Pipeline exception: "+ex.GetType().Name);ekf.Fallback(settings.FallbackMode);}Thread.Sleep(20);}}
-  static string Block(HealthSnapshot h){if(!h.StreamWorking)return "RTSP unavailable";if(!h.FramesFresh)return "Frame stale";if(!h.FlowGood)return "Flow quality/FPS below minimum";if(!h.HeightValid)return "Relative height invalid";if(!h.MavlinkActive)return "MAVLink unavailable";return null;}
-  public void Dispose(){running=false;worker?.Join(1000);machine.Stop();ekf.Fallback(settings.FallbackMode);camera.Dispose();tracker.Dispose();log.Dispose();}
+  void Loop()
+  {
+   while(running)
+   {
+    try
+    {
+     var now=clock.UtcNow;var telemetry=gateway.ReadTelemetry(settings.RcChannel);LastTelemetry=telemetry;if(telemetry.TimestampUtc!=default(DateTime))rc.Update(telemetry.RcPwm,telemetry.TimestampUtc.ToUniversalTime());rc.CheckStale(now);
+     if(camera.TryGet(out Mat frame,out var capturedAt))
+     {
+      FlowSample flow;using(frame)flow=tracker.Process(frame,capturedAt,camera.Fps,settings.CameraFocalLengthPixels);
+      if(flow!=null){flow.FrameAgeMs=Math.Max(0,(now-capturedAt).TotalMilliseconds);LastFlow=flow;LastDiagnostic=diagnostics.Process(flow,telemetry,settings);}
+     }
+     var health=HealthEvaluator.Evaluate(Requested,rc.State,camera.Working,LastFlow,telemetry,settings,clock);machine.Update(health);Updated?.Invoke();
+    }
+    catch(Exception ex){log.Error("Diagnostic pipeline",ex);machine.Fail("Diagnostic pipeline exception: "+ex.GetType().Name);}
+    Thread.Sleep(20);
+   }
+  }
+  public void Dispose(){running=false;worker?.Join(1000);machine.Stop();camera.Dispose();tracker.Dispose();diagnostics.Reset();log.Dispose();}
  }
 }

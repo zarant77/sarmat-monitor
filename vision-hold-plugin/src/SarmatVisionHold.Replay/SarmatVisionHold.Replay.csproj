@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>SarmatVisionHold.Replay</AssemblyName>
+    <RootNamespace>SarmatVisionHold.Replay</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SarmatVisionHold.Core\SarmatVisionHold.Core.csproj" />
+    <ProjectReference Include="..\SarmatVisionHold.Vision\SarmatVisionHold.Vision.csproj" />
+  </ItemGroup>
+</Project>

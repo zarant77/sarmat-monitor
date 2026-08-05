@@ -1,5 +1,19 @@
 # Sarmat Vision Hold
 
+Offline recorded-flight validation is available through `tools/SarmatVisionHold.ReplayAnalyzer`; see `docs/replay-analysis.md`. It is guarded as diagnostics-only and never transmits MAVLink.
+
+## Current safety stage
+
+The Mission Planner plugin now reuses the replay coordinate and `OPTICAL_FLOW_RAD` math in a real-time **diagnostic** pipeline. This build has a compile-time flight-output lock:
+
+- no `OPTICAL_FLOW_RAD` message is transmitted;
+- no EKF source is changed;
+- no flight mode is changed;
+- no RC override is generated;
+- range comes only from Mission Planner `sonarrange`; relative/barometric altitude is not invented as AGL.
+
+`DiagnosticsOnly` is forced to `true` and `EnableLiveControl` is forced to `false` while settings are normalized. The next gate is validation with a real camera recording plus the matching Mission Planner `.tlog`; SITL transmission is intentionally not part of this build.
+
 Незалежний плагін Mission Planner, який перетворює налаштований RTSP-потік на optical flow. Він не використовує RC override і не керує roll/pitch. У live-режимі надсилає стандартний `OPTICAL_FLOW_RAD`, а стабілізацію виконує ArduPilot FlowHold/EKF.
 
 > За замовчуванням `DiagnosticsOnly=true`, а `EnableLiveControl=false`. На реальному апараті нічого не надсилається і режими не перемикаються.
@@ -81,13 +95,15 @@ dotnet run --project .\vision-hold-plugin\tools\SarmatVisionHold.VideoAnalyzer -
 
 Після першого запуску закрийте Mission Planner і відредагуйте `settings.json`: `RcChannel` (1–18), `RcEnableThreshold` (1700), `RcDisableThreshold` (1300), `RcInverted`, `RcDebounceMs` (300), `RcStaleMs` (1000). Значення лише читаються з телеметрії Mission Planner. Зміна фіксується один раз після debounce; недоступний або застарілий канал примусово дає OFF.
 
-## SITL
+## SITL (future stage — legacy instructions below are disabled)
+
+Do not enable the legacy SITL/live instructions below. `SarmatVisionHold.Live.FlightOutputSafety` and `VisionHoldSettings.MavlinkTransmissionCompiled` keep all transmission disabled until the diagnostic acceptance criteria are met.
 
 1. Залиште `DiagnosticsOnly=true`, `EnableLiveControl=false`; подайте RTSP і перевірте FPS, frame age, points, quality, raw/compensated flow та height.
 2. Перевірте RC9: вище 1700 — ON, нижче 1300 — OFF; середня зона зберігає стан.
-3. У ArduCopter SITL заздалегідь налаштуйте EKF source set без GPS XY та FlowHold. GPS фізично не вимикайте.
-4. Лише для SITL задайте `DiagnosticsOnly=false`, `EnableLiveControl=true`, `NonGpsEkfSourceSet`, `FallbackMode`, потім перезапустіть Mission Planner.
-5. `Active` можливий лише після warm-up, свіжих кадрів, достатніх FPS/quality/points, валідної висоти та MAVLink.
-6. Заморозьте RTSP, зірвіть tracking або MAVLink: публікація має припинитися, стан перейти в `Lost/Degraded`, а режим — повернутися або перейти в `AltHold`.
+3. Не змінюйте EKF source set і flight mode з плагіна: відповідного коду в цій збірці немає.
+4. Не намагайтеся виставити `DiagnosticsOnly=false` або `EnableLiveControl=true`: нормалізація налаштувань поверне безпечні значення.
+5. Перевірте, що панель показує `MAVLink transmission: COMPILE-TIME LOCKED`.
+6. SITL publisher буде доданий окремим етапом лише після успішного аналізу реального синхронного video+tlog набору.
 
-Live control експериментальний і призначений лише для SITL до окремої льотної валідації.
+Ця збірка не виконує live control навіть у SITL.

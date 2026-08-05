@@ -5,7 +5,7 @@ const DEFAULT_SERVER = Object.freeze({
   host: "0.0.0.0",
   port: 8080,
   snapshotIntervalMs: 1000,
-  staleAfterMs: 3000,
+  staleAfterMs: 5000,
   offlineAfterMs: 10000,
   maxMessageBytes: 4096,
 });

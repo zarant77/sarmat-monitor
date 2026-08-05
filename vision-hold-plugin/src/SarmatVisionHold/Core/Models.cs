@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SarmatVisionHold.Core
 {
@@ -6,13 +7,24 @@ namespace SarmatVisionHold.Core
  public sealed class TelemetrySample
  {
   public DateTime TimestampUtc; public bool LinkActive; public double RollRate; public double PitchRate; public double YawRate;
-  public double HeightMeters; public bool HeightValid; public string FlightMode; public int RcPwm;
+  public double RollRad; public double PitchRad; public double YawRad; public bool AttitudeValid; public bool GyroValid;
+  public double HeightMeters; public bool HeightValid; public DateTime HeightTimestampUtc; public string HeightSource;
+  public string FlightMode; public int RcPwm;
+ }
+ public sealed class FlowTrackSample
+ {
+  public double FromX; public double FromY; public double ToX; public double ToY;
+  public bool Accepted; public double ForwardBackwardError;
  }
  public sealed class FlowSample
  {
   public DateTime TimestampUtc; public double Dt; public double RawX; public double RawY;
   public double CompensatedX; public double CompensatedY; public double VelocityX; public double VelocityY;
-  public int TrackedPoints; public double Quality; public double Fps; public double FrameAgeMs;
+  public double RawPixelsX; public double RawPixelsY; public double CompensatedPixelsX; public double CompensatedPixelsY;
+  public int FrameWidth; public int FrameHeight; public int TrackedPoints; public int InlierCount;
+  public double MedianForwardBackwardError; public double CompensationResidualPixels;
+  public double Quality; public double Fps; public double FrameAgeMs;
+  public IReadOnlyList<FlowTrackSample> Tracks = new FlowTrackSample[0];
  }
  public sealed class HealthSnapshot
  {
