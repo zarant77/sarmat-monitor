@@ -22,6 +22,8 @@ namespace SarmatPlugin
         private IList originalTabs;
         private AppLog lifecycleLog;
         private Label takeoffModeWarning;
+        private Timer takeoffModeWarningTimer;
+        private DateTime takeoffModeWarningDeadlineUtc;
         private bool vehicleReconnectInProgress;
         private object savedVehicleBaseStream;
         private string savedVehiclePortName;
@@ -249,6 +251,9 @@ namespace SarmatPlugin
             panel = null;
             if (takeoffModeWarning != null)
             {
+                takeoffModeWarningTimer?.Stop();
+                takeoffModeWarningTimer?.Dispose();
+                takeoffModeWarningTimer = null;
                 takeoffModeWarning.Parent?.Controls.Remove(takeoffModeWarning);
                 takeoffModeWarning.Dispose();
                 takeoffModeWarning = null;
@@ -311,18 +316,19 @@ namespace SarmatPlugin
         private void InstallTakeoffWarning(Control hud)
         {
             if (hud == null) throw new InvalidOperationException("Mission Planner HUD control is unavailable");
-            takeoffModeWarning = new Label
+            takeoffModeWarning = new TranslucentWarningLabel
             {
                 Name = "SarmatTakeoffModeWarning",
                 Text = "WARNING: TAKEOFF MODE IS NOT PostHold",
-                Dock = DockStyle.Top,
+                Dock = DockStyle.Bottom,
                 Height = 48,
-                BackColor = Color.FromArgb(220, 190, 0, 0),
                 ForeColor = Color.White,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 15, FontStyle.Bold),
                 Visible = false
             };
+            takeoffModeWarningTimer = new Timer { Interval = 500 };
+            takeoffModeWarningTimer.Tick += TakeoffModeWarningTimerTick;
             hud.Controls.Add(takeoffModeWarning);
             takeoffModeWarning.BringToFront();
         }
@@ -333,9 +339,34 @@ namespace SarmatPlugin
             if (warning == null || warning.IsDisposed) return;
             OnUi(warning, () =>
             {
-                warning.Visible = visible;
-                if (visible) warning.BringToFront();
+                if (!visible)
+                {
+                    takeoffModeWarningTimer?.Stop();
+                    warning.Visible = false;
+                    return;
+                }
+
+                takeoffModeWarningDeadlineUtc = DateTime.UtcNow.AddSeconds(5);
+                ((TranslucentWarningLabel)warning).FlashOn = true;
+                warning.Visible = true;
+                warning.BringToFront();
+                takeoffModeWarningTimer?.Start();
             });
+        }
+
+        private void TakeoffModeWarningTimerTick(object sender, EventArgs e)
+        {
+            var warning = takeoffModeWarning;
+            if (warning == null || warning.IsDisposed || DateTime.UtcNow >= takeoffModeWarningDeadlineUtc)
+            {
+                takeoffModeWarningTimer?.Stop();
+                if (warning != null && !warning.IsDisposed) warning.Visible = false;
+                return;
+            }
+
+            var translucentWarning = (TranslucentWarningLabel)warning;
+            translucentWarning.FlashOn = !translucentWarning.FlashOn;
+            translucentWarning.Invalidate();
         }
 
         private void ReconnectVehicle()

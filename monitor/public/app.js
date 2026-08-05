@@ -1,6 +1,5 @@
 const dash = "—";
 const table = document.querySelector("#stations");
-const connection = document.querySelector("#connection");
 const connectionDot = document.querySelector("#connection-dot");
 const login = document.querySelector("#login");
 const dashboard = document.querySelector("#dashboard");
@@ -8,6 +7,7 @@ let secret = sessionStorage.getItem("sarmat-secret") ?? "";
 let refreshTimer;
 const dashboardHeader = document.querySelector("#dashboard-header");
 const showHeaderButton = document.querySelector("#show-header");
+const fullscreenButton = document.querySelector("#fullscreen");
 const columnsButton = document.querySelector("#columns-button");
 const columnsMenu = document.querySelector("#columns-menu");
 const columnsList = document.querySelector("#columns-list");
@@ -215,11 +215,13 @@ async function refresh() {
     if (response.status === 401) return showLogin("Сесія завершилась. Введіть секрет знову.");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     render(await response.json());
-    connection.textContent = "Дані оновлюються";
     connectionDot.className = "connected";
+    connectionDot.setAttribute("aria-label", "Дані оновлюються");
+    connectionDot.title = "Дані оновлюються";
   } catch {
-    connection.textContent = "Немає зв’язку";
     connectionDot.className = "disconnected";
+    connectionDot.setAttribute("aria-label", "Немає зв’язку");
+    connectionDot.title = "Немає зв’язку";
   }
 }
 
@@ -246,6 +248,16 @@ document.querySelector("#logout").addEventListener("click", () => {
 });
 document.querySelector("#hide-header").addEventListener("click", () => setHeaderHidden(true));
 showHeaderButton.addEventListener("click", () => setHeaderHidden(false));
+fullscreenButton.addEventListener("click", async () => {
+  if (document.fullscreenElement) await document.exitFullscreen();
+  else await document.documentElement.requestFullscreen();
+});
+document.addEventListener("fullscreenchange", () => {
+  const active = Boolean(document.fullscreenElement);
+  fullscreenButton.classList.toggle("is-fullscreen", active);
+  fullscreenButton.title = active ? "Вийти з повного екрана" : "Повний екран";
+  fullscreenButton.setAttribute("aria-label", fullscreenButton.title);
+});
 columnsButton.addEventListener("click", (event) => {
   event.stopPropagation();
   columnsMenu.hidden = !columnsMenu.hidden;

@@ -21,11 +21,18 @@ h1 { margin: 2px 0 0; font-size: 30px; letter-spacing: -.03em; }
 .brand-mat { color: #2388ff; }
 .eyebrow { margin: 0; color: #62a8ff; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
 .connection { display: flex; gap: 9px; align-items: center; color: #a9b4c3; }
-.logout, .header-toggle { padding: 7px 11px; color: #b9c4d3; background: #202b3b; }
-.header-toggle { margin-left: 10px; }
-.show-header { position: absolute; z-index: 10; top: 14px; right: 14px; padding: 7px 11px;
+.icon-button { display: inline-grid; width: 36px; height: 36px; padding: 8px; place-items: center;
+  color: #b9c4d3; background: #202b3b; }
+.icon-button:hover { color: #eef4ff; background: #2a374a; }
+.icon-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.connection .icon-button:first-of-type { margin-left: 9px; }
+.fullscreen-exit { display: none; }
+.is-fullscreen .fullscreen-enter { display: none; }
+.is-fullscreen .fullscreen-exit { display: block; }
+.show-header { position: absolute; z-index: 10; top: 14px; right: 14px;
   color: #b9c4d3; background: #202b3b; box-shadow: 0 6px 20px rgba(0, 0, 0, .28); }
-#connection-dot { width: 9px; height: 9px; border-radius: 50%; background: #e3a442; box-shadow: 0 0 12px currentColor; }
+#connection-dot { width: 16px; height: 16px; border-radius: 50%; background: #e3a442; box-shadow: 0 0 16px currentColor; }
 #connection-dot.connected { background: #39d98a; } #connection-dot.disconnected { background: #ff5c68; }
 .table-card { position: relative; border: 1px solid #263143; background: rgba(17, 24, 36, .9); border-radius: 12px; }
 .table-card { overflow: visible; box-shadow: 0 18px 55px rgba(0, 0, 0, .22); }
@@ -67,7 +74,7 @@ tbody tr.stale-data:hover { background: rgba(107, 114, 128, .13); }
   header { align-items: flex-start; gap: 18px; margin-bottom: 24px; }
   .brand { font-size: 46px; }
   .connection { flex-wrap: wrap; justify-content: flex-end; font-size: 13px; }
-  .logout, .header-toggle { margin-left: 4px; }
+  .connection .icon-button:first-of-type { margin-left: 4px; }
   .table-card { overflow: visible; border: 0; background: transparent; box-shadow: none; }
   .column-controls { position: relative; top: auto; right: auto; display: flex; justify-content: flex-end; margin-bottom: 8px; }
   .columns-menu { top: 36px; right: 0; width: min(285px, calc(100vw - 28px)); }
