@@ -36,6 +36,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.Live", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatVisionHold.Live.Tests", "tests\SarmatVisionHold.Live.Tests\SarmatVisionHold.Live.Tests.csproj", "{C10D9E3C-FDC1-4FB3-B32C-EC07D0F20106}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6F93B695-B6E3-4515-A702-3D661075838B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

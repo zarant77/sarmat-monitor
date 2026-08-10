@@ -1,0 +1,9 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.1.5</ProductVersion>
+    <OutputName>SarmatAltitudeAssist-$(ProductVersion)</OutputName>
+    <OutputPath>$(MSBuildProjectDirectory)\..\artifacts\</OutputPath>
+    <DefineConstants>ProductVersion=$(ProductVersion);PluginDist=$(MSBuildProjectDirectory)\..\dist</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="WixToolset.UI.wixext" Version="5.0.2"/></ItemGroup>
+</Project>

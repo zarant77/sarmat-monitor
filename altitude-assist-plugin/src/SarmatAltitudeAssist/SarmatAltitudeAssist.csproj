@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><TargetFramework>net472</TargetFramework><AssemblyName>SarmatAltitudeAssist</AssemblyName><RootNamespace>SarmatAltitudeAssist</RootNamespace><Version>1.1.5</Version><FileVersion>1.1.5.0</FileVersion><MissionPlannerPath Condition="'$(MissionPlannerPath)' == ''">C:\Program Files (x86)\Mission Planner</MissionPlannerPath></PropertyGroup>
+ <ItemGroup><ProjectReference Include="..\SarmatAltitudeAssist.Core\SarmatAltitudeAssist.Core.csproj"/><Reference Include="MissionPlanner"><HintPath>$(MissionPlannerPath)\MissionPlanner.exe</HintPath><Private>false</Private></Reference><Reference Include="MissionPlanner.ArduPilot"><HintPath>$(MissionPlannerPath)\MissionPlanner.ArduPilot.dll</HintPath><Private>false</Private></Reference><Reference Include="System.Windows.Forms"/><Reference Include="System.Drawing"/></ItemGroup>
+ <Target Name="ValidateMissionPlanner" BeforeTargets="ResolveReferences"><Error Condition="!Exists('$(MissionPlannerPath)\MissionPlanner.exe')" Text="MissionPlanner.exe not found. Pass -p:MissionPlannerPath=..."/></Target>
+</Project>

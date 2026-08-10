@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+ <Package Name="Sarmat Altitude Assist for Mission Planner" Manufacturer="Sarmat" Version="$(var.ProductVersion)" UpgradeCode="368DB6FC-5041-485C-B326-205710FDDB8A" Language="1033" Scope="perMachine">
+  <SummaryInformation Description="Standalone Sarmat Altitude Assist plugin (diagnostics only)"/><MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/><MediaTemplate EmbedCab="yes"/>
+  <StandardDirectory Id="ProgramFilesFolder"><Directory Id="MISSIONPLANNERDIR" Name="Mission Planner"><Directory Id="MISSIONPLANNERPLUGINSDIR" Name="plugins"/></Directory></StandardDirectory>
+  <Feature Id="AltitudeAssistFeature" Title="Sarmat Altitude Assist" Description="Altitude Assist diagnostics plugin; physical control output is locked." Level="1" ConfigurableDirectory="MISSIONPLANNERDIR" AllowAbsent="no"><ComponentGroupRef Id="AltitudeAssistComponents"/></Feature>
+  <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="MISSIONPLANNERDIR"/>
+ </Package>
+ <Fragment><ComponentGroup Id="AltitudeAssistComponents" Directory="MISSIONPLANNERPLUGINSDIR">
+  <Component Id="AltitudeAssistDll" Guid="91923D59-0941-4D5A-9A15-15D55AB10318"><RemoveFile Id="ReplaceAltitudeAssistDll" Name="SarmatAltitudeAssist.dll" On="install"/><File Id="AltitudeAssistFile" Source="$(var.PluginDist)\plugins\SarmatAltitudeAssist.dll" KeyPath="yes"/></Component>
+  <Component Id="AltitudeAssistCoreDll" Guid="DC6D3E30-5DB8-46D5-951E-A51183B3295A"><RemoveFile Id="ReplaceAltitudeAssistCoreDll" Name="SarmatAltitudeAssist.Core.dll" On="install"/><File Id="AltitudeAssistCoreFile" Source="$(var.PluginDist)\plugins\SarmatAltitudeAssist.Core.dll" KeyPath="yes"/></Component>
+ </ComponentGroup></Fragment>
+</Wix>

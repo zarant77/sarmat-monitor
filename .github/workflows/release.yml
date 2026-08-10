@@ -79,11 +79,12 @@ jobs:
         run: |
           .\telemetry-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
           .\vision-hold-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
+          .\altitude-assist-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
 
       - name: Build plugins MSI
         shell: pwsh
         run: |
-          dotnet build .\telemetry-plugin\installer\SarmatPlugin.Installer.wixproj `
+          dotnet build .\installer\SarmatPlugins.Installer.wixproj `
             --configuration Release `
             "-p:ProductVersion=$env:PRODUCT_VERSION" `
             "-p:OutputPath=$env:RELEASE_ARTIFACTS"

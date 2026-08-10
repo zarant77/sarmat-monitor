@@ -1,13 +1,15 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
   <PropertyGroup>
-    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.5.3</ProductVersion>
     <OutputName>SarmatPlugins-$(ProductVersion)</OutputName>
     <OutputPath>$(MSBuildProjectDirectory)\..\artifacts\</OutputPath>
+    <SuppressIces>ICE61</SuppressIces>
     <DefineConstants>
       ProductVersion=$(ProductVersion);
-      PluginDist=$(MSBuildProjectDirectory)\..\dist;
-      VisionDist=$(MSBuildProjectDirectory)\..\..\vision-hold-plugin\dist;
-      ThemeSource=$(MSBuildProjectDirectory)\..\..\theme
+      PluginDist=$(MSBuildProjectDirectory)\..\telemetry-plugin\dist;
+      VisionDist=$(MSBuildProjectDirectory)\..\vision-hold-plugin\dist;
+      AltitudeDist=$(MSBuildProjectDirectory)\..\altitude-assist-plugin\dist;
+      ThemeSource=$(MSBuildProjectDirectory)\..\theme
     </DefineConstants>
   </PropertyGroup>
 

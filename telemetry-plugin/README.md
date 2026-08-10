@@ -104,14 +104,14 @@ pass, the workflow creates a GitHub Release named after the tag and attaches
 
 ## MSI installer
 
-The WiX project at `installer/SarmatPlugin.Installer.wixproj` creates a per-machine MSI. Interactive
+The repository-level WiX project at `../installer/SarmatPlugins.Installer.wixproj` creates the shared per-machine MSI. Interactive
 setup always shows the Mission Planner directory screen, initially set to
 `C:\Program Files (x86)\Mission Planner`; select the exact Mission Planner copy you want to modify.
 Use **Browse** from any selected Sarmat feature to choose the shared Mission Planner root folder
 that already contains `MissionPlanner.exe`.
-The required **SarmatTelemetry** feature installs `SarmatTelemetry.dll` into the
-selected directory's `plugins` folder. **SarmatVisionHold** is included in the MSI but remains
-disabled at install level 0, so it cannot be installed yet.
+The **Sarmat Telemetry**, **Sarmat Vision Hold**, and **Sarmat Altitude Assist** features can each
+be installed or removed independently through Windows Apps → Sarmat Plugins → Modify. Uninstalling
+the complete product removes every selected plugin DLL.
 
 The optional **SarmatTheme** feature is disabled by default. When selected, it installs every
 branding asset from the repository-level `theme` directory (`icon.png`, `logo.txt`, `logo2.png`,
@@ -122,10 +122,10 @@ uninstalled so Mission Planner is not left with missing branding files.
 After creating `dist`, build an installer locally with:
 
 ```powershell
-dotnet build .\installer\SarmatPlugin.Installer.wixproj -c Release -p:ProductVersion=1.0.0
+dotnet build ..\installer\SarmatPlugins.Installer.wixproj -c Release -p:ProductVersion=1.5.3
 ```
 
-The MSI is written to `artifacts`.
+The MSI is written to the repository-level `artifacts` directory.
 
 For a build without creating a GitHub Release, open **GitHub → Actions → Release build → Run
 workflow**. The resulting release packages are available in the run's **Artifacts** section.
