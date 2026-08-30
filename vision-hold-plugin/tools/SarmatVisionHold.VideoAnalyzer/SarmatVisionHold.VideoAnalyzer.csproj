@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
- <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net472</TargetFramework><AssemblyName>SarmatVisionHold.VideoAnalyzer</AssemblyName></PropertyGroup>
- <ItemGroup>
-  <ProjectReference Include="..\..\src\SarmatVisionHold.Vision\SarmatVisionHold.Vision.csproj" />
-  <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
-  <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
-  <Reference Include="System.Runtime.Serialization" />
- </ItemGroup>
-</Project>

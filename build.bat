@@ -17,19 +17,11 @@ if not exist "!MP_PATH!\MissionPlanner.exe" (
   exit /b 2
 )
 
-echo [1/4] Building Sarmat Telemetry...
+echo [1/2] Building Sarmat Telemetry...
 call "!ROOT!telemetry-plugin\scripts\build.bat" "!MP_PATH!"
 if errorlevel 1 goto :failed
 
-echo [2/4] Building Sarmat Vision Hold...
-call "!ROOT!vision-hold-plugin\scripts\build.cmd" "!MP_PATH!"
-if errorlevel 1 goto :failed
-
-echo [3/4] Building Sarmat Altitude Assist...
-call "!ROOT!altitude-assist-plugin\scripts\build.cmd" "!MP_PATH!"
-if errorlevel 1 goto :failed
-
-echo [4/4] Building unified MSI installer...
+echo [2/2] Building MSI installer...
 dotnet build "!ROOT!installer\SarmatPlugins.Installer.wixproj" --configuration Release "-p:ProductVersion=!PRODUCT_VERSION!"
 if errorlevel 1 goto :failed
 
@@ -37,8 +29,6 @@ echo.
 echo BUILD SUCCEEDED
 echo Plugin DLL staging directories:
 echo   !ROOT!telemetry-plugin\dist\plugins
-echo   !ROOT!vision-hold-plugin\dist\plugins
-echo   !ROOT!altitude-assist-plugin\dist\plugins
 echo Unified installer:
 echo   !ROOT!artifacts\SarmatPlugins-!PRODUCT_VERSION!.msi
 exit /b 0

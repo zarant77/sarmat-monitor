@@ -2,18 +2,21 @@
   "name": "@sarmat/monitor",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "packageManager": "pnpm@10.0.0",
-  "description": "Sarmat telemetry collector and web monitor.",
+  "description": "Sarmat monitoring and battery fleet management for UAV crews",
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "start": "node src/server.js",
-    "test": "node --test"
+    "predev": "npm run build -w @sbm/shared",
+    "dev": "concurrently -n server,client -c cyan,green \"npm run dev -w @sbm/server\" \"npm run dev -w @sbm/client\"",
+    "start": "npm run start -w @sbm/server",
+    "dev:server": "npm run dev -w @sbm/server",
+    "dev:client": "npm run dev -w @sbm/client",
+    "build": "npm run build -w @sbm/shared && npm run build -w @sbm/server && npm run build -w @sbm/client",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w @sbm/server",
+    "db:generate": "npm run db:generate -w @sbm/server",
+    "db:migrate": "npm run db:migrate -w @sbm/server",
+    "db:seed": "npm run db:seed -w @sbm/server"
   },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "@msgpack/msgpack": "3.1.2",
-    "ws": "8.18.3"
-  }
+  "engines": { "node": ">=20" },
+  "devDependencies": { "concurrently": "^9.2.1", "typescript": "^5.9.3" }
 }

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+*.tsbuildinfo
+.DS_Store
+coverage/
+.vite/
+apps/client/public/og.png
+apps/client/certs/*.pem

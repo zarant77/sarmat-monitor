@@ -7,8 +7,6 @@
     <DefineConstants>
       ProductVersion=$(ProductVersion);
       PluginDist=$(MSBuildProjectDirectory)\..\telemetry-plugin\dist;
-      VisionDist=$(MSBuildProjectDirectory)\..\vision-hold-plugin\dist;
-      AltitudeDist=$(MSBuildProjectDirectory)\..\altitude-assist-plugin\dist;
       ThemeSource=$(MSBuildProjectDirectory)\..\theme
     </DefineConstants>
   </PropertyGroup>

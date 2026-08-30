@@ -3,11 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "monitor"
+    "monitor/apps/*",
+    "monitor/packages/*"
   ],
   "scripts": {
-    "start": "npm --workspace @sarmat/monitor start",
-    "test": "npm --workspace @sarmat/monitor test"
+    "start": "npm --prefix monitor start",
+    "dev": "npm --prefix monitor run dev",
+    "build": "npm --prefix monitor run build",
+    "typecheck": "npm --prefix monitor run typecheck",
+    "test": "npm --prefix monitor test",
+    "db:migrate": "npm --prefix monitor run db:migrate",
+    "db:seed": "npm --prefix monitor run db:seed"
   },
   "engines": {
     "node": ">=20"

@@ -78,8 +78,6 @@ jobs:
         shell: pwsh
         run: |
           .\telemetry-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
-          .\vision-hold-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
-          .\altitude-assist-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
 
       - name: Build plugins MSI
         shell: pwsh
@@ -97,24 +95,26 @@ jobs:
       - name: Test and package Monitor
         shell: pwsh
         run: |
-          corepack enable
-          corepack prepare pnpm@11.9.0 --activate
           Push-Location .\monitor
-          pnpm install --frozen-lockfile
-          pnpm test
-          if ($LASTEXITCODE -ne 0) { throw "Aggregator tests failed with exit code $LASTEXITCODE." }
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw "Monitor validation failed with exit code $LASTEXITCODE." }
           Pop-Location
 
           $stage = Join-Path $env:RUNNER_TEMP "monitor"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -LiteralPath .\monitor\src -Destination $stage -Recurse
-          Copy-Item -LiteralPath .\monitor\public -Destination $stage -Recurse
-          $sharedStage = Join-Path $stage "shared"
-          New-Item -ItemType Directory -Force -Path $sharedStage | Out-Null
-          Copy-Item -LiteralPath .\shared\telemetry-thresholds.json -Destination $sharedStage
-          foreach ($file in @('package.json', 'pnpm-lock.yaml', 'config.example.json',
-              'README.md', 'install.cmd', 'start.cmd')) {
+          foreach ($file in @('package.json', 'package-lock.json', '.env.example', 'README.md')) {
             Copy-Item -LiteralPath (Join-Path .\monitor $file) -Destination $stage
+          }
+          foreach ($path in @('apps\server\package.json', 'apps\server\dist', 'apps\server\drizzle',
+              'apps\client\package.json', 'apps\client\dist', 'packages\shared\package.json',
+              'packages\shared\dist')) {
+            $source = Join-Path .\monitor $path
+            $destination = Join-Path $stage $path
+            New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+            Copy-Item -LiteralPath $source -Destination $destination -Recurse
           }
           $archive = Join-Path $env:RELEASE_ARTIFACTS "SarmatMonitor-$env:FILE_VERSION.zip"
           Compress-Archive -Path "$stage\*" -DestinationPath $archive -Force

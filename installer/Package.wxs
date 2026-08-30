@@ -26,15 +26,6 @@
       <ComponentGroupRef Id="PluginComponents" />
     </Feature>
 
-    <Feature Id="SarmatVisionHoldFeature"
-             Title="Sarmat Vision Hold"
-             Description="Optical stabilization plugin and its runtime dependencies."
-             Level="1"
-             ConfigurableDirectory="MISSIONPLANNERDIR"
-             AllowAbsent="yes">
-      <ComponentGroupRef Id="VisionHoldComponents" />
-    </Feature>
-
     <Feature Id="SarmatThemeFeature"
              Title="SarmatTheme"
              Description="Install the Sarmat icons and cat splash screen for Mission Planner."
@@ -44,27 +35,9 @@
       <ComponentGroupRef Id="ThemeComponents" />
     </Feature>
 
-    <Feature Id="SarmatAltitudeAssistFeature"
-             Title="Sarmat Altitude Assist (diagnostics only)"
-             Description="Vertical assist diagnostics with physical control output locked."
-             Level="1" ConfigurableDirectory="MISSIONPLANNERDIR" AllowAbsent="yes">
-      <ComponentGroupRef Id="AltitudeAssistComponents" />
-    </Feature>
-
     <ui:WixUI Id="WixUI_FeatureTree" InstallDirectory="MISSIONPLANNERDIR" />
     <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)InstallerInfo.rtf" />
   </Package>
-
-  <Fragment>
-    <ComponentGroup Id="AltitudeAssistComponents" Directory="MISSIONPLANNERPLUGINSDIR">
-      <Component Id="SarmatAltitudeAssistDll" Guid="91923D59-0941-4D5A-9A15-15D55AB10318">
-        <File Id="SarmatAltitudeAssistFile" Source="$(var.AltitudeDist)\plugins\SarmatAltitudeAssist.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SarmatAltitudeAssistCoreDll" Guid="DC6D3E30-5DB8-46D5-951E-A51183B3295A">
-        <File Id="SarmatAltitudeAssistCoreFile" Source="$(var.AltitudeDist)\plugins\SarmatAltitudeAssist.Core.dll" KeyPath="yes" />
-      </Component>
-    </ComponentGroup>
-  </Fragment>
 
   <Fragment>
     <ComponentGroup Id="PluginComponents" Directory="MISSIONPLANNERPLUGINSDIR">
@@ -89,32 +62,6 @@
         <File Id="SarmatThemeLogoText" Source="$(var.ThemeSource)\logo.txt" />
         <File Id="SarmatThemeLogo" Source="$(var.ThemeSource)\logo2.png" />
         <File Id="SarmatThemeSplash" Source="$(var.ThemeSource)\splashbg.png" />
-      </Component>
-    </ComponentGroup>
-  </Fragment>
-
-  <Fragment>
-    <ComponentGroup Id="VisionHoldComponents" Directory="MISSIONPLANNERPLUGINSDIR">
-      <Component Id="SarmatVisionHoldDll" Guid="34E2EFD3-A39A-4B10-9787-58DB9C9C97DA">
-        <File Id="SarmatVisionHoldFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SarmatVisionHoldCoreDll" Guid="BC46C4C5-E540-45BE-A718-E234F41CA267">
-        <File Id="SarmatVisionHoldCoreFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Core.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SarmatVisionHoldVisionDll" Guid="7AA93079-3E1B-42EE-A323-D4CAEE871784">
-        <File Id="SarmatVisionHoldVisionFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Vision.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SarmatVisionHoldReplayDll" Guid="A9CC9AC3-08EB-4D0E-A9F4-B181F43D5EC9">
-        <File Id="SarmatVisionHoldReplayFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Replay.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SarmatVisionHoldLiveDll" Guid="C45B360B-C897-4164-AD20-1E8C48A3B430">
-        <File Id="SarmatVisionHoldLiveFile" Source="$(var.VisionDist)\plugins\SarmatVisionHold.Live.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="OpenCvSharpDll" Guid="831B0924-7087-43E5-8D8A-88880E214743">
-        <File Id="OpenCvSharpFile" Source="$(var.VisionDist)\plugins\OpenCvSharp.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="OpenCvSharpExternDll" Guid="2B94C14D-D723-4227-B0D4-D653244FE3C6">
-        <File Id="OpenCvSharpExternFile" Source="$(var.VisionDist)\plugins\OpenCvSharpExtern.dll" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>

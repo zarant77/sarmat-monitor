@@ -12,7 +12,7 @@ $uninstallRoots = @(
     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
 )
 $products = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
-    Where-Object { $_.DisplayName -in @('Sarmat Plugins for Mission Planner', 'Sarmat Altitude Assist for Mission Planner') } |
+    Where-Object { $_.DisplayName -eq 'Sarmat Plugins for Mission Planner' } |
     Sort-Object PSChildName -Unique
 
 foreach ($product in $products) {
