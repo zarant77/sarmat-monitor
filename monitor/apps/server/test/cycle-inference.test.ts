@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inferCycleEvents } from "../src/cycle-inference.js";
 
-const thresholds = { chargedThresholdPercent: 90, dischargedThresholdPercent: 20 };
+const thresholds = { chargedThresholdPercent: 90, dischargedThresholdPercent: 50 };
 const measurement = (id: string, chargePercent: number, minute: number) => ({ id, chargePercent, measuredAt: new Date(`2026-01-01T00:${String(minute).padStart(2, "0")}:00Z`) });
 
 describe("measurement-derived cycle history", () => {
@@ -36,6 +36,19 @@ describe("measurement-derived cycle history", () => {
     expect(inferCycleEvents(history, thresholds)).toEqual([]);
     expect(inferCycleEvents(history, { chargedThresholdPercent: 80, dischargedThresholdPercent: 30 })).toEqual([
       expect.objectContaining({ sourceMeasurementId: "second", type: "charge", cycleDelta: 1 })
+    ]);
+  });
+
+  it("infers field LiPo transitions from 99% to 31% and back", () => {
+    const events = inferCycleEvents([
+      measurement("charged-1", 100, 0), measurement("charged-2", 99, 5),
+      measurement("discharged-1", 31, 10), measurement("charged-3", 99, 15),
+      measurement("discharged-2", 31, 20)
+    ], thresholds);
+    expect(events).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "discharged-1", type: "discharge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "charged-3", type: "charge", cycleDelta: 1 }),
+      expect.objectContaining({ sourceMeasurementId: "discharged-2", type: "discharge", cycleDelta: 0 })
     ]);
   });
 });

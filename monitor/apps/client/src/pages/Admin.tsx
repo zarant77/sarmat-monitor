@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BatteryMedium, ChevronRight, Eye, EyeOff, KeyRound, Layers3, Pencil, Plus, Power, Save, Shield, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, BatteryMedium, ChevronRight, Eye, EyeOff, KeyRound, Layers3, Pencil, Plus, Power, RadioTower, Save, Shield, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import type { BatteryType, Crew, Group } from "@sbm/shared";
 import { api } from "../api";
@@ -29,6 +29,7 @@ export function AdminDashboard() {
       <Link to="/admin/batteries"><BatteryMedium/><span><strong>{t("admin.dashboard.manageBatteries")}</strong><small>{t("admin.dashboard.manageBatteriesHelp")}</small></span><ChevronRight/></Link>
       {auth.user?.role === "SUPER_ADMIN"&&<><Link to="/admin/battery-types"><Layers3/><span><strong>{t("admin.dashboard.manageBatteryTypes")}</strong><small>{t("admin.dashboard.manageBatteryTypesHelp")}</small></span><ChevronRight/></Link>
       <Link to="/admin/settings"><ShieldCheck/><span><strong>{t("admin.dashboard.globalSettings")}</strong><small>{t("admin.dashboard.globalSettingsHelp")}</small></span><ChevronRight/></Link></>}
+      <Link to="/admin/telemetry"><RadioTower/><span><strong>{t("admin.dashboard.telemetry")}</strong><small>{t("admin.dashboard.telemetryHelp")}</small></span><ChevronRight/></Link>
     </section>
   </div>;
 }

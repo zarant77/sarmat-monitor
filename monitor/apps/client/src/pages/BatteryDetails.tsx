@@ -9,7 +9,7 @@ import { BatteryForm } from "../components/Forms";
 import { HealthBadge } from "../components/HealthBadge";
 import { Modal } from "../components/Modal";
 import { CheckerCamera } from "../components/CheckerCamera";
-import { setModuleScan } from "../checker-recognition";
+import { canSaveMeasurement, setModuleScan } from "../checker-recognition";
 import { useI18n } from "../i18n";
 import { clientSettings, defaultHistoryFilter, historyEventCategories, type HistoryEventCategory, type HistoryFilterSettings } from "../client-settings";
 
@@ -27,6 +27,8 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { i
   const numericCells = cells.map(value => Number(value));
   const minCellVoltage = minVoltage / cellCount; const maxCellVoltage = maxVoltage / cellCount;
   const cellsComplete = cells.every(value => value !== "" && Number.isFinite(Number(value)) && Number(value) >= minCellVoltage && Number(value) <= maxCellVoltage);
+  const localTotalVoltage = cellsComplete ? Math.round(numericCells.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000 : null;
+  const localChargePercent = localTotalVoltage == null ? null : Math.round(Math.max(0, Math.min(100, (localTotalVoltage - minVoltage) / (maxVoltage - minVoltage) * 100)));
   const firstModuleCount = Math.ceil(cellCount / 2);
   const modules: Array<{ module: CheckerModule; start: number; end: number }> = [
     { module: "A", start: 0, end: firstModuleCount },
@@ -75,15 +77,15 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { i
         </div>
       </section>)}
       <div className="checker-calculated">
-        <span><small>{t("events.totalVoltage")}</small><strong>{combinedPreview ? combinedPreview.combinedTotalVoltage.toFixed(2) : "—"} <em>{t("common.volts")}</em></strong></span>
-        <span><small>{t("events.chargePercent")}</small><strong>{combinedPreview?.chargePercent ?? "—"}{combinedPreview?.chargePercent != null && <em>%</em>}</strong></span>
+        <span><small>{t("events.totalVoltage")}</small><strong>{combinedPreview?.combinedTotalVoltage.toFixed(2) ?? localTotalVoltage?.toFixed(2) ?? "—"} <em>{t("common.volts")}</em></strong></span>
+        <span><small>{t("events.chargePercent")}</small><strong>{combinedPreview?.chargePercent ?? localChargePercent ?? "—"}{(combinedPreview?.chargePercent != null || localChargePercent != null) && <em>%</em>}</strong></span>
       </div>
       {combinedPreview && <div className="recognition-preview"><span><small>A</small><strong>{combinedPreview.moduleATotalVoltage.toFixed(2)} {t("common.volts")}</strong></span><span><small>B</small><strong>{combinedPreview.moduleBTotalVoltage.toFixed(2)} {t("common.volts")}</strong></span><span><small>{t("recognition.minMax")}</small><strong>{combinedPreview.minCellVoltage.toFixed(2)}–{combinedPreview.maxCellVoltage.toFixed(2)}</strong></span><span><small>Δ</small><strong>{combinedPreview.cellDelta.toFixed(2)} {t("common.volts")}</strong></span><HealthBadge health={combinedPreview.health}/></div>}
       {previewError && <p className="form-error">{previewError}</p>}
     </div>}
     {type === "cycle" && <label>{t("events.eventType")}<select name="type"><option value="maintenance">{t("cycleTypes.maintenance")}</option><option value="repair">{t("cycleTypes.repair")}</option><option value="inspection">{t("cycleTypes.inspection")}</option><option value="service">{t("cycleTypes.service")}</option><option value="retirement">{t("cycleTypes.retirement")}</option><option value="note">{t("cycleTypes.note")}</option></select></label>}
     {type === "transfer" && <label className="full">{t("events.newCrew")}<select name="crewId" required><option value="">{t("events.selectCrew")}</option>{crews.data?.map(crew => <option value={crew.id} key={crew.id}>№{crew.number} · {crew.name}</option>)}</select></label>}
-    <label className="full">{t("common.notes")}<textarea name="notes"/></label>{mutation.error && <p className="form-error">{t("errors.generic")}</p>}<div className="form-actions full"><button type="button" className="button secondary" onClick={onClose}>{t("common.cancel")}</button><button className="button primary" disabled={mutation.isPending || (type === "check" && (!cellsComplete || (cellCount === 12 && !combinedPreview) || (checkInputMode === "scan" && !scansReady)))}>{t("events.save")}</button></div>
+    <label className="full">{t("common.notes")}<textarea name="notes"/></label>{mutation.error && <p className="form-error">{t("errors.generic")}</p>}<div className="form-actions full"><button type="button" className="button secondary" onClick={onClose}>{t("common.cancel")}</button><button className="button primary" disabled={type === "check" ? !canSaveMeasurement(mutation.isPending, cellsComplete, checkInputMode === "scan", scansReady) : mutation.isPending}>{t("events.save")}</button></div>
     {type === "check" && checkInputMode === "scan" && !scansReady && <p className="photo-required-note full">{t("photos.bothRequired")}</p>}
   </form>{checkInputMode === "scan" && cameraModule && <CheckerCamera module={cameraModule} minCellVoltage={minCellVoltage} maxCellVoltage={maxCellVoltage} onCancel={() => setCameraModule(null)} onConfirm={recognized => confirmScan(cameraModule, recognized)}/>}</Modal>;
 }

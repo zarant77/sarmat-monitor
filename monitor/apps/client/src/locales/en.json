@@ -18,6 +18,7 @@
     "superAdministrator": "Super administrator",
     "fullscreen": "Full screen",
     "exitFullscreen": "Exit full screen",
+    "language": "Interface language",
     "signOut": "Sign out"
   },
   "common": {
@@ -260,18 +261,18 @@
   },
   "recognition": {
     "recognized": "Recognized",
-    "previewError": "Could not validate the combined reading. Check the cell values or scan again.",
+    "previewError": "Server preview is unavailable. You can still save these cell values for server validation.",
     "minMax": "MIN–MAX"
   },
   "camera": {
     "title": "Battery {{module}} camera",
     "module": "Battery {{module}}",
-    "align": "Hold the phone parallel and fit only the LCD display inside the frame",
-    "frameLabel": "ALIGN THE DISPLAY WITH THE FRAME",
+    "align": "Place the checker display anywhere inside the scanning area",
+    "frameLabel": "PLACE DISPLAY IN SCAN AREA",
     "starting": "Starting camera…",
-    "liveHint": "Fill the frame with the LCD display and hold the phone straight and still.",
+    "liveHint": "Place the display in the scan area. Exact corner alignment is not required.",
     "stable": "Stable reading locked. Confirm it or scan again.",
-    "state": { "red": "ALIGN CHECKER", "yellow": "HOLD STEADY", "green": "READING STABLE" },
+    "state": { "red": "FINDING DISPLAY", "yellow": "HOLD STEADY", "green": "RECOGNIZED" },
     "retry": "Retry",
     "confirm": "Confirm",
     "permissionError": "Could not open the camera. Allow camera access in your browser settings."
@@ -334,7 +335,9 @@
       "manageBatteryTypes": "Battery types",
       "manageBatteryTypesHelp": "Capacity, voltage, cells, and chemistry",
       "globalSettings": "Global settings",
-      "globalSettingsHelp": "Health warning and danger thresholds"
+      "globalSettingsHelp": "Health warning and danger thresholds",
+      "telemetry": "Telemetry",
+      "telemetryHelp": "Live flight data and connection status"
     },
     "crews": {
       "title": "Crew directory",

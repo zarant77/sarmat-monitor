@@ -131,7 +131,7 @@ The client is a browser SPA with no Node-only dependencies. This keeps the UI su
 
 ### Checker camera scanning
 
-The battery-check form scans Battery A and Battery B separately with the rear browser camera. The guide matches the LCD display itself, so the operator fills the frame with only the screen. The browser crops that region to 340×600 pixels and runs the deterministic seven-segment recognizer about four times per second.
+The battery-check form scans Battery A and Battery B separately with the rear browser camera. The large guide is a forgiving search area rather than an exact template. The browser samples it at 540×800 pixels, locates the LCD inside it, estimates its rotation, normalizes the detected display, and runs the deterministic seven-segment recognizer about four times per second. A dynamic outline shows the LCD that was actually detected.
 
 Red, yellow, and green guide states indicate missing/invalid, partial/unstable, and stable readings. A result is locked only when the same six valid cell values occur in at least three of the last five attempts. The operator can retry, confirm, and edit every voltage before saving. The displayed checker Total is excluded from analysis.
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import en from "./locales/en.json";
 import uk from "./locales/uk.json";
 
@@ -22,14 +22,17 @@ function interpolate(value: string, params?: Params): string {
   return value.replace(/\{\{(\w+)\}\}/g, (_, key: string) => String(params?.[key] ?? `{{${key}}}`));
 }
 
-interface I18nValue { locale: Locale; t: (key: string, params?: Params) => string; }
+interface I18nValue { locale: Locale; setLocale: (locale: Locale) => void; t: (key: string, params?: Params) => string; }
 const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const locale = browserLocale;
+  const [locale, setLocale] = useState<Locale>(() => {
+    const savedLocale = typeof localStorage !== "undefined" ? localStorage.getItem("sarmat-locale") : null;
+    return savedLocale === "uk" || savedLocale === "en" ? savedLocale : browserLocale;
+  });
   const t = (key: string, params?: Params) => interpolate(lookup(dictionaries[locale], key) ?? lookup(en, key) ?? key, params);
-  useEffect(() => { document.documentElement.lang = locale; document.title = `${t("app.name")} — ${t("app.subtitle")}`; }, [locale]);
-  return <I18nContext.Provider value={{ locale, t }}>{children}</I18nContext.Provider>;
+  useEffect(() => { localStorage.setItem("sarmat-locale", locale); document.documentElement.lang = locale; document.title = `${t("app.name")} — ${t("app.subtitle")}`; }, [locale]);
+  return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {

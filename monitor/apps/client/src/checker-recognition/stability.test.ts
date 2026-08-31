@@ -14,6 +14,21 @@ describe("scanner stability", () => {
   });
 
   it("does not accept one isolated successful frame", () => {
-    expect(evaluateStability([missing, complete(), partial, missing, partial])).toMatchObject({ state: "yellow", stableCells: null, matches: 1 });
+    expect(evaluateStability([missing, complete(), partial, missing, partial])).toMatchObject({ state: "yellow", stableCells: null });
+  });
+
+  it("stabilizes independently blinking rows without requiring one perfect frame", () => {
+    const values = [3.4, 3.35, 3.41, 3.38, 3.34, 3.37];
+    const frame = (visible: boolean[]): CheckerRecognitionResult => ({
+      cells: values.map((value, index) => visible[index] ? value : null), confidence: .8,
+      warnings: [], lcdDetected: true, complete: visible.every(Boolean)
+    });
+    const history = [
+      frame([true, false, true, false, true, true]), frame([true, true, false, true, true, false]),
+      frame([true, true, true, true, false, true]), frame([false, true, true, true, true, true]),
+      frame([true, false, true, true, true, true])
+    ];
+    expect(history.some(result => result.complete)).toBe(false);
+    expect(evaluateStability(history)).toMatchObject({ state: "green", matches: 3, stableCells: values });
   });
 });

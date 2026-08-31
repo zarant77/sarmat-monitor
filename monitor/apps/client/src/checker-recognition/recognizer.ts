@@ -1,7 +1,11 @@
 import { grayscale, percentile, type BrowserImageData } from "./image-utils";
 import { thresholdMask } from "./masks";
 import { readCellRows } from "./seven-segment";
+import { detectLcd, normalizeLcd, type DetectedLcd } from "./lcd-detection";
 import type { CellVoltageLimits, CheckerRecognitionResult, RecognitionWarning } from "./types";
+
+export interface RecognitionDebugData { detected: DetectedLcd | null; normalizedLcd?: BrowserImageData; result: CheckerRecognitionResult }
+export interface RecognitionOptions { onDebug?: (data: RecognitionDebugData) => void }
 
 export function recognitionFromCells(readings: Array<{ voltage: number | null; score: number }>, limits: CellVoltageLimits, lcdDetected = true): CheckerRecognitionResult {
   const warnings: RecognitionWarning[] = [];
@@ -15,16 +19,26 @@ export function recognitionFromCells(readings: Array<{ voltage: number | null; s
   return { cells, confidence: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length * 1000) / 1000 : 0, warnings, lcdDetected, complete: cells.every(value => value != null) && warnings.length === 0 };
 }
 
-export function recognizeCheckerImage(image: BrowserImageData, limits: CellVoltageLimits): CheckerRecognitionResult {
-  if (image.width < 180 || image.height < 280 || image.width / image.height < .48 || image.width / image.height > .68) {
-    return { cells: Array(6).fill(null), confidence: 0, warnings: [{ code: "poor_geometry" }], lcdDetected: false, complete: false };
+export function recognizeCheckerImage(image: BrowserImageData, limits: CellVoltageLimits, options: RecognitionOptions = {}): CheckerRecognitionResult {
+  if (image.width < 240 || image.height < 360 || image.width / image.height < .58 || image.width / image.height > .76) {
+    const result: CheckerRecognitionResult = { cells: Array(6).fill(null), confidence: 0, warnings: [{ code: "poor_geometry" }], lcdDetected: false, complete: false };
+    options.onDebug?.({ detected: null, result }); return result;
   }
-  const lcd = grayscale(image); const width = image.width; const height = image.height;
+  const detected = detectLcd(image);
+  if (!detected) {
+    const result: CheckerRecognitionResult = { cells: Array(6).fill(null), confidence: 0, warnings: [{ code: "lcd_not_detected" }], lcdDetected: false, complete: false };
+    options.onDebug?.({ detected: null, result }); return result;
+  }
+  const normalizedLcd = normalizeLcd(image, detected); const lcd = grayscale(normalizedLcd); const width = normalizedLcd.width; const height = normalizedLcd.height;
   const low = percentile(lcd, .08); const high = percentile(lcd, .88);
   const threshold = Math.min(155, Math.max(45, percentile(lcd, .22)));
   const mask = thresholdMask(lcd, threshold);
   const inkRatio = mask.reduce((sum, value) => sum + value, 0) / mask.length;
   const lcdDetected = high - low >= 28 && inkRatio >= .01 && inkRatio <= .45;
-  if (!lcdDetected) return { cells: Array(6).fill(null), confidence: 0, warnings: [{ code: "lcd_not_detected" }], lcdDetected: false, complete: false };
-  return recognitionFromCells(readCellRows(mask, width, height), limits, true);
+  if (!lcdDetected) {
+    const result: CheckerRecognitionResult = { cells: Array(6).fill(null), confidence: 0, warnings: [{ code: "unreadable_digit" }], lcdDetected: true, complete: false, lcdBounds: detected.bounds, lcdQuad: detected.quad };
+    options.onDebug?.({ detected, normalizedLcd, result }); return result;
+  }
+  const result = { ...recognitionFromCells(readCellRows(mask, width, height), limits, true), lcdBounds: detected.bounds, lcdQuad: detected.quad };
+  options.onDebug?.({ detected, normalizedLcd, result }); return result;
 }

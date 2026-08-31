@@ -125,6 +125,6 @@ export const settings = pgTable("settings", {
   warningCellDeltaV: numeric("warning_cell_delta_v", { precision: 6, scale: 3 }).default("0.100").notNull(),
   dangerCellDeltaV: numeric("danger_cell_delta_v", { precision: 6, scale: 3 }).default("0.200").notNull(),
   chargedThresholdPercent: integer("charged_threshold_percent").default(90).notNull(),
-  dischargedThresholdPercent: integer("discharged_threshold_percent").default(20).notNull(),
+  dischargedThresholdPercent: integer("discharged_threshold_percent").default(50).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });

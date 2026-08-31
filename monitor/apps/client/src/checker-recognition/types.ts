@@ -9,7 +9,12 @@ export interface CheckerRecognitionResult {
   warnings: RecognitionWarning[];
   lcdDetected: boolean;
   complete: boolean;
+  lcdBounds?: NormalizedBounds;
+  lcdQuad?: NormalizedPoint[];
 }
+
+export interface NormalizedPoint { x: number; y: number }
+export interface NormalizedBounds extends NormalizedPoint { width: number; height: number }
 
 export interface CellVoltageLimits {
   min: number;
@@ -17,4 +22,3 @@ export interface CellVoltageLimits {
 }
 
 export type ScannerState = "red" | "yellow" | "green";
-

@@ -6,3 +6,5 @@ export const setModuleScan = (state: ModuleScans, module: CheckerModule, cells: 
 export const clearModuleScan = (state: ModuleScans, module: CheckerModule): ModuleScans => ({ ...state, [module]: undefined });
 export const combinedScans = (state: ModuleScans) => state.A?.length === 6 && state.B?.length === 6 ? [...state.A, ...state.B] : null;
 export const correctCombinedCell = (cells: number[], index: number, voltage: number) => cells.map((value, cellIndex) => cellIndex === index ? voltage : value);
+export const canSaveMeasurement = (pending: boolean, cellsComplete: boolean, scanMode: boolean, scansReady: boolean) =>
+  !pending && cellsComplete && (!scanMode || scansReady);

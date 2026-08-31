@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearModuleScan, combinedScans, correctCombinedCell, setModuleScan } from "./scan-session";
+import { canSaveMeasurement, clearModuleScan, combinedScans, correctCombinedCell, setModuleScan } from "./scan-session";
 
 describe("Battery A/B scan session", () => {
   it("keeps modules independent and combines them in A then B order", () => {
@@ -13,5 +13,11 @@ describe("Battery A/B scan session", () => {
     const state = setModuleScan(setModuleScan({}, "A", Array(6).fill(4.1)), "B", Array(6).fill(4.2));
     expect(clearModuleScan(state, "A").B).toEqual(Array(6).fill(4.2));
     expect(correctCombinedCell(combinedScans(state)!, 0, 4.15)[0]).toBe(4.15);
+  });
+
+  it("allows saving complete A+B cells without depending on a preview response", () => {
+    expect(canSaveMeasurement(false, true, true, true)).toBe(true);
+    expect(canSaveMeasurement(false, true, true, false)).toBe(false);
+    expect(canSaveMeasurement(true, true, true, true)).toBe(false);
   });
 });
