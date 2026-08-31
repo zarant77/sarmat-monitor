@@ -248,43 +248,33 @@
     "saveCorrection": "Save correction"
   },
   "photos": {
-    "title": "Checker display photos",
-    "description": "Capture separate images for the physical A and B modules.",
     "battery": "Battery {{module}}",
-    "required": "Photo not added yet",
-    "added": "Photo added",
-    "take": "Photo {{module}}",
-    "replace": "Replace",
-    "retry": "Retry",
-    "preview": "Battery {{module}} checker photo",
-    "bothRequired": "Add both photo A and photo B to complete the check."
+    "required": "Not scanned yet",
+    "scan": "Scan {{module}}",
+    "rescan": "Scan again",
+    "bothRequired": "Scan both Battery A and Battery B to complete the check.",
+    "inputMode": "Voltage input method",
+    "scanMode": "Camera scan",
+    "manualMode": "Manual",
+    "manualHelp": "Enter every cell voltage. The camera is not required for a manual record."
   },
   "recognition": {
-    "processing": "Photo is being processed",
-    "processingShort": "Processing…",
-    "backgroundHelp": "Recognition continues in the background. You can add the other module photo now.",
     "recognized": "Recognized",
-    "partial": "{{count}} uncertain · check marked cells",
-    "retry": "The display could not be read reliably. Align it carefully and retry the photo.",
-    "previewError": "Could not validate the combined reading. Check the cell values or retry a photo.",
+    "previewError": "Could not validate the combined reading. Check the cell values or scan again.",
     "minMax": "MIN–MAX"
   },
   "camera": {
     "title": "Battery {{module}} camera",
     "module": "Battery {{module}}",
-    "align": "Hold the phone parallel and fit the checker body inside the frame",
-    "frameLabel": "ALIGN THE CHECKER WITH THE FRAME",
+    "align": "Hold the phone parallel and fit only the LCD display inside the frame",
+    "frameLabel": "ALIGN THE DISPLAY WITH THE FRAME",
     "starting": "Starting camera…",
-    "hint": "Checker {{module}} · keep it straight, parallel to the camera, and fill the outer frame",
-    "capture": "Capture photo {{module}}",
-    "preview": "Cropped battery {{module}} image",
-    "review": "Check display sharpness and alignment",
+    "liveHint": "Fill the frame with the LCD display and hold the phone straight and still.",
+    "stable": "Stable reading locked. Confirm it or scan again.",
+    "state": { "red": "ALIGN CHECKER", "yellow": "HOLD STEADY", "green": "READING STABLE" },
     "retry": "Retry",
     "confirm": "Confirm",
-    "uploading": "Uploading…",
-    "permissionError": "Could not open the camera. Allow camera access in your browser settings.",
-    "captureError": "Could not capture the image. Try again.",
-    "uploadError": "Could not upload the photo. Check your connection and retry."
+    "permissionError": "Could not open the camera. Allow camera access in your browser settings."
   },
   "batteryTypes": {
     "eyebrow": "Battery catalog",

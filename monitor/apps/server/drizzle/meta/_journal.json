@@ -15,6 +15,13 @@
       "when": 1788090113922,
       "tag": "0001_slippery_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788157629956,
+      "tag": "0002_milky_power_man",
+      "breakpoints": true
     }
   ]
 }

@@ -1,15 +1,10 @@
 import { sql } from "drizzle-orm";
-import { boolean, customType, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const batteryStateEnum = pgEnum("battery_state", ["ready", "charging", "in_use", "storage", "service", "retired"]);
 export const healthStateEnum = pgEnum("health_state", ["good", "warning", "danger"]);
 export const cycleEventTypeEnum = pgEnum("cycle_event_type", ["cycle", "charge", "discharge", "maintenance", "repair", "inspection", "service", "retirement", "note"]);
 export const userRoleEnum = pgEnum("user_role", ["SUPER_ADMIN", "GROUP_ADMIN", "CREW"]);
-export const checkerModuleEnum = pgEnum("checker_module", ["A", "B"]);
-
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => "bytea"
-});
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -85,34 +80,9 @@ export const batteries = pgTable("batteries", {
   ...timestamps
 }, table => [index("batteries_type_idx").on(table.typeId)]);
 
-export const checkerPhotoSets = pgTable("checker_photo_sets", {
-  id: uuid("id").primaryKey(),
-  batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
-  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
-}, table => [index("checker_photo_sets_battery_idx").on(table.batteryId)]);
-
-export const checkerImages = pgTable("checker_images", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  photoSetId: uuid("photo_set_id").references(() => checkerPhotoSets.id, { onDelete: "cascade" }).notNull(),
-  batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
-  module: checkerModuleEnum("module").notNull(),
-  mimeType: varchar("mime_type", { length: 50 }).notNull(),
-  byteSize: integer("byte_size").notNull(),
-  width: integer("width").notNull(),
-  height: integer("height").notNull(),
-  imageData: bytea("image_data").notNull(),
-  uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
-  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull()
-}, table => [
-  uniqueIndex("checker_images_set_module_idx").on(table.photoSetId, table.module),
-  index("checker_images_battery_idx").on(table.batteryId)
-]);
-
 export const measurements = pgTable("measurements", {
   id: uuid("id").defaultRandom().primaryKey(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
-  photoSetId: uuid("photo_set_id").references(() => checkerPhotoSets.id, { onDelete: "set null" }),
   totalVoltage: numeric("total_voltage", { precision: 8, scale: 3 }).notNull(),
   cellVoltages: jsonb("cell_voltages").$type<number[]>().notNull(),
   minCellVoltage: numeric("min_cell_voltage", { precision: 6, scale: 3 }).notNull(),
@@ -127,7 +97,7 @@ export const measurements = pgTable("measurements", {
   correctedAt: timestamp("corrected_at", { withTimezone: true }),
   correctedByUserId: uuid("corrected_by_user_id").references(() => users.id),
   measuredAt: timestamp("measured_at", { withTimezone: true }).defaultNow().notNull()
-}, table => [index("measurements_photo_set_idx").on(table.photoSetId)]);
+});
 
 export const cycleEvents = pgTable("cycle_events", {
   id: uuid("id").defaultRandom().primaryKey(),

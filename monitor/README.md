@@ -15,13 +15,13 @@ Sarmat Monitor is a local-first operational web application for monitoring UAV s
 - Live MissionPlanner telemetry for group-scoped administrators over an authenticated WebSocket endpoint
 - Reusable battery-type catalog for capacity, voltage range, cell count, and chemistry
 - Automatic English/Ukrainian client localization based on the browser locale, with English fallback
-- Guided mobile checker-photo capture for physical battery modules A and B
-- Local Ollama/Qwen checker recognition with a confirm/correct step before saving
+- Realtime, browser-side checker scanning for physical battery modules A and B
+- Deterministic seven-segment recognition with a confirm/correct step before saving
 - Demo data and server-side tests for battery health and authorization rules
 
 ## Local setup on macOS
 
-Requirements: Node.js 20+, npm 10+, a native PostgreSQL 17 installation, and [Ollama](https://ollama.com/) with `qwen2.5vl:7b`. Docker is not used by this project.
+Requirements: Node.js 20+, npm 10+, and a native PostgreSQL 17 installation. Docker is not used by this project.
 
 ### 1. Install PostgreSQL
 
@@ -69,15 +69,7 @@ Verify the connection expected by the application:
 psql postgresql://sbm:sbm@localhost:5432/sbm -c "select 1;"
 ```
 
-### 3. Install the local vision model
-
-Start Ollama and download the checker-recognition model once:
-
-```bash
-ollama pull qwen2.5vl:7b
-```
-
-### 4. Configure and start SBM
+### 3. Configure and start SBM
 
 ```bash
 cp .env.example .env
@@ -137,44 +129,15 @@ Battery specifications are normalized into reusable battery types. A type owns i
 
 The client is a browser SPA with no Node-only dependencies. This keeps the UI suitable for a later Capacitor Android wrapper; native packaging and hardware checker integration are intentionally outside this iteration.
 
-### Checker photo capture
+### Checker camera scanning
 
-The battery-check form guides an operator through separate `Фото A` and `Фото B` captures using the rear browser camera. A portrait 9:14 overlay matches the physical checker body, with an additional LCD guide inside it. The operator must hold the phone parallel to the checker and align the straight device edges with the outer frame. The client crops only that framed area to a normalized 900×1400 JPEG before showing a confirmation preview and uploading it. The flow uses standard browser camera APIs, so it works in Android browsers/PWA and iOS Safari/PWA and can later be reused in a Capacitor shell.
+The battery-check form scans Battery A and Battery B separately with the rear browser camera. The guide matches the LCD display itself, so the operator fills the frame with only the screen. The browser crops that region to 340×600 pixels and runs the deterministic seven-segment recognizer about four times per second.
 
-Browser camera access requires a secure context: use HTTPS on deployed/mobile devices (`localhost` remains permitted for desktop development).
+Red, yellow, and green guide states indicate missing/invalid, partial/unstable, and stable readings. A result is locked only when the same six valid cell values occur in at least three of the last five attempts. The operator can retry, confirm, and edit every voltage before saving. The displayed checker Total is excluded from analysis.
 
-Each upload is processed locally through Ollama using the vision model `qwen2.5vl:7b`; no cloud AI or external vision API is used. After an operator confirms a capture, the camera closes immediately and that module card displays a processing state. Replacing the same module photo is disabled until recognition completes, while the other module can be photographed and uploaded immediately. A and B recognition requests may therefore run concurrently, and their cell values appear independently as results arrive. The shared photo-set creation is atomic so parallel A/B uploads cannot conflict.
+Recognition uses only TypeScript, Canvas, and ImageData in the browser. It works without a server connection and never uploads or stores camera frames. Browser camera access requires a secure context: use HTTPS on deployed/mobile devices (`localhost` remains permitted for desktop development).
 
-The client crop is sent directly to Ollama as its original color image bytes. The server does not detect the display, deskew, convert to grayscale, sharpen, threshold, binarize, or otherwise preprocess/re-encode the image. The client canvas already normalizes camera orientation and creates a reasonably sized 900×1400 JPEG, so another server-side resize is unnecessary.
-
-The server uses Ollama JSON mode and a short checker-specific prompt that requires only the six cell rows in top-to-bottom order, without calculating or guessing. The physical checker's displayed `Total` is explicitly ignored and is never parsed or validated. JSON mode is intentionally used instead of a complex nullable schema because it is more stable with `qwen2.5vl:7b` on the checker LCD. The parsed result still has to pass the complete SBM server-side structure and physical validation. Ollama remains isolated behind the checker-recognition service boundary.
-
-Impossible voltages, incomplete responses, and unreadable values are rejected rather than guessed or silently corrected. Cell limits are derived from the configured battery type. The operator is asked to retry the photo. Nothing is saved as a measurement until both complete model results pass server validation and the operator confirms or corrects the recognized values.
-
-After both images pass validation, the server combines them in `A1…A6, B1…B6` order and calculates both module voltages and the complete pack voltage exclusively from those 12 cells. It returns a 12S preview containing the calculated module totals, combined voltage, min/max cell voltage, delta, charge, and the current server-side health state. The operator can correct individual recognized cells; the preview is revalidated and recalculated on the server, and the measurement is saved only after explicit confirmation. The images remain stored in PostgreSQL as one photo set associated with the confirmed measurement. Upload, preview, and save all use the existing crew-isolated battery lookup.
-
-Recognition limits can be adjusted without code changes:
-
-```env
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5vl:7b
-OLLAMA_TIMEOUT_MS=120000
-OLLAMA_RECOGNITION_LOG=false
-OLLAMA_DEBUG_SAVE_IMAGES=false
-OLLAMA_DEBUG_DIR=build/ollama-debug
-CHECKER_CELL_MIN_VOLTAGE=2.5
-CHECKER_CELL_MAX_VOLTAGE=4.5
-```
-
-Install [Ollama](https://ollama.com/), start it locally, and download the model before using checker photos:
-
-```bash
-ollama pull qwen2.5vl:7b
-```
-
-SBM does not bundle the model. If Ollama is unreachable or the configured model is missing, the upload returns a controlled recognition error and the server continues running. There is no CV/OCR fallback in the production recognition path.
-
-Set `OLLAMA_RECOGNITION_LOG=true` for structured recognition-stage logs. During local development, `OLLAMA_DEBUG_SAVE_IMAGES=true` writes each exact, unmodified image buffer sent to Ollama below `OLLAMA_DEBUG_DIR` (default `build/ollama-debug/<request-id>/ollama-input-A.jpg`). The same directory contains request metadata without the base64 payload. The saved image can be passed directly to `ollama run qwen2.5vl:7b` to compare SBM recognition with a manual run. Debug filesystem paths are logged locally and are never returned to client users.
+The server receives only cell voltages. It independently validates the count and battery-type range, then recalculates totals, min/max, delta, charge, health, and inferred charge/discharge transitions before persisting the measurement.
 
 ## Authentication and authorization
 
@@ -235,8 +198,7 @@ The React client detects Ukrainian browser locales (`uk` and `uk-*`) automatical
 - `GET/POST /api/battery-types`, `PATCH/DELETE /api/battery-types/:id` (admin)
 - `POST /api/batteries/:id/transfer` (same-group for `GROUP_ADMIN`; cross-group for `SUPER_ADMIN`)
 - `POST /api/batteries/:id/measurements`
-- `POST /api/batteries/:id/checker-images/:module?photoSetId=…` (`module` is `A` or `B`)
-- `POST /api/batteries/:id/checker-preview`
+- `POST /api/batteries/:id/measurement-preview` (structured A/B cell values only)
 - `POST /api/batteries/:id/cycles` (manual maintenance/repair/inspection/service/retirement/note events only)
 - `PATCH /api/admin/measurements/:id` (admin correction)
 - `POST /api/admin/batteries/:id/archive|restore`

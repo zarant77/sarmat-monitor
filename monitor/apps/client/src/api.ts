@@ -1,4 +1,4 @@
-import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, CheckerCombinedPreview, CheckerImageUploadResult, CheckerModule, CheckerPreviewInput, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, CycleEventInput, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
+import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, CycleEventInput, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, MeasurementPreview, MeasurementPreviewInput, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "";
 export class ApiError extends Error {
@@ -14,18 +14,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
-
-async function uploadCheckerImage(batteryId: string, photoSetId: string, module: CheckerModule, blob: Blob, width: number, height: number): Promise<CheckerImageUploadResult> {
-  const response = await fetch(`${BASE}/api/batteries/${batteryId}/checker-images/${module}?photoSetId=${encodeURIComponent(photoSetId)}`, {
-    method: "POST", credentials: "include", body: blob,
-    headers: { "Content-Type": blob.type || "image/jpeg", "X-Image-Width": String(width), "X-Image-Height": String(height) }
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: response.statusText }));
-    throw new ApiError(body.error ?? response.statusText, body.code, body.issues ?? body.partial);
-  }
-  return response.json();
-}
 
 export const api = {
   login: (username: string, password: string) => request<AuthUser>("/api/auth/login", json("POST", { username, password })),
@@ -56,8 +44,7 @@ export const api = {
   updateBattery: (id: string, data: BatteryUpdate) => request<Battery>(`/api/batteries/${id}`, json("PATCH", data)),
   transfer: (id: string, crewId: string, notes = "") => request(`/api/batteries/${id}/transfer`, json("POST", { crewId, notes })),
   measurement: (id: string, data: MeasurementInput) => request(`/api/batteries/${id}/measurements`, json("POST", data)),
-  uploadCheckerImage,
-  checkerPreview: (id: string, data: CheckerPreviewInput) => request<CheckerCombinedPreview>(`/api/batteries/${id}/checker-preview`, json("POST", data)),
+  measurementPreview: (id: string, data: MeasurementPreviewInput) => request<MeasurementPreview>(`/api/batteries/${id}/measurement-preview`, json("POST", data)),
   cycle: (id: string, data: CycleEventInput) => request(`/api/batteries/${id}/cycles`, json("POST", data)),
   correctMeasurement: (id: string, data: Partial<MeasurementInput>) => request(`/api/admin/measurements/${id}`, json("PATCH", data)),
   archiveBattery: (id: string) => request(`/api/admin/batteries/${id}/archive`, json("POST", {})),

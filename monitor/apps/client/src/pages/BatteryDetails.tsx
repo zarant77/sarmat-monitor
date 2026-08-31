@@ -1,39 +1,32 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowLeft, ArrowRightLeft, BatteryCharging, BatteryLow, BatteryMedium, CalendarClock, Camera, Check, ClipboardPlus, Gauge, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, SearchCheck, SlidersHorizontal, Wrench } from "lucide-react";
+import { Archive, ArrowLeft, ArrowRightLeft, BatteryCharging, BatteryLow, BatteryMedium, CalendarClock, Camera, Check, ClipboardPlus, Gauge, MessageSquare, Pencil, Plus, RotateCcw, SearchCheck, SlidersHorizontal, Wrench } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import type { CheckerCombinedPreview, CheckerModule, CheckerModuleRecognition, Measurement } from "@sbm/shared";
-import { ApiError, api } from "../api";
+import type { CheckerModule, Measurement, MeasurementPreview } from "@sbm/shared";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { BatteryForm } from "../components/Forms";
 import { HealthBadge } from "../components/HealthBadge";
 import { Modal } from "../components/Modal";
-import { CheckerCamera, type CapturedCheckerImage } from "../components/CheckerCamera";
+import { CheckerCamera } from "../components/CheckerCamera";
+import { setModuleScan } from "../checker-recognition";
 import { useI18n } from "../i18n";
 import { clientSettings, defaultHistoryFilter, historyEventCategories, type HistoryEventCategory, type HistoryFilterSettings } from "../client-settings";
 
-const createPhotoSetId = () => {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = [...bytes].map(value => value.toString(16).padStart(2, "0"));
-  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
-};
-
-function EventForm({ id, cellCount, type, onClose }: { id: string; cellCount: number; type: "check" | "cycle" | "transfer"; onClose: () => void }) {
+function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { id: string; cellCount: number; minVoltage: number; maxVoltage: number; type: "check" | "cycle" | "transfer"; onClose: () => void }) {
   const { t } = useI18n(); const qc = useQueryClient();
   const crews = useQuery({ queryKey: ["crews"], queryFn: () => api.crews(), enabled: type === "transfer" });
   const mutation = useMutation({ mutationFn: (data: any) => type === "check" ? api.measurement(id, data) : type === "cycle" ? api.cycle(id, data) : api.transfer(id, data.crewId, data.notes), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery", id] }); qc.invalidateQueries({ queryKey: ["batteries"] }); qc.invalidateQueries({ queryKey: ["crews"] }); onClose(); } });
   const [cells, setCells] = useState(Array.from({ length: cellCount }, () => ""));
-  type PhotoState = { previewUrl: string; status: "processing" | "ready" | "error"; recognition?: CheckerModuleRecognition; error?: string };
-  const [photoSetId] = useState(createPhotoSetId); const [cameraModule, setCameraModule] = useState<CheckerModule | null>(null); const [photos, setPhotos] = useState<Partial<Record<CheckerModule, PhotoState>>>({}); const photoUrls = useRef<string[]>([]);
-  const [combinedPreview, setCombinedPreview] = useState<CheckerCombinedPreview | null>(null);
+  const [checkInputMode, setCheckInputMode] = useState<"scan" | "manual">(cellCount === 12 ? "scan" : "manual");
+  const [cameraModule, setCameraModule] = useState<CheckerModule | null>(null);
+  const [scanResults, setScanResults] = useState<Partial<Record<CheckerModule, number[]>>>({});
+  const [combinedPreview, setCombinedPreview] = useState<MeasurementPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
-  const [correctedCells, setCorrectedCells] = useState<Set<number>>(() => new Set());
-  const photosReady = photos.A?.status === "ready" && photos.B?.status === "ready";
-  const anyPhotoProcessing = photos.A?.status === "processing" || photos.B?.status === "processing";
+  const scansReady = scanResults.A?.length === 6 && scanResults.B?.length === 6;
   const numericCells = cells.map(value => Number(value));
-  const cellsComplete = cells.every(value => value !== "" && Number.isFinite(Number(value)) && Number(value) > 0);
+  const minCellVoltage = minVoltage / cellCount; const maxCellVoltage = maxVoltage / cellCount;
+  const cellsComplete = cells.every(value => value !== "" && Number.isFinite(Number(value)) && Number(value) >= minCellVoltage && Number(value) <= maxCellVoltage);
   const firstModuleCount = Math.ceil(cellCount / 2);
   const modules: Array<{ module: CheckerModule; start: number; end: number }> = [
     { module: "A", start: 0, end: firstModuleCount },
@@ -41,66 +34,44 @@ function EventForm({ id, cellCount, type, onClose }: { id: string; cellCount: nu
   ];
   const updateCell = (index: number, value: string) => {
     setCombinedPreview(null);
-    setCorrectedCells(current => new Set(current).add(index));
     setCells(items => items.map((item, itemIndex) => itemIndex === index ? value : item));
   };
-  useEffect(() => () => { photoUrls.current.forEach(url => URL.revokeObjectURL(url)); }, []);
   useEffect(() => {
-    if (type !== "check" || !photosReady || !cellsComplete || cellCount !== 12) { setCombinedPreview(null); return; }
+    if (type !== "check" || !cellsComplete || cellCount !== 12 || (checkInputMode === "scan" && !scansReady)) { setCombinedPreview(null); return; }
     const timer = window.setTimeout(() => {
-      void api.checkerPreview(id, { photoSetId, A: { cells: numericCells.slice(0, 6) }, B: { cells: numericCells.slice(6, 12) } })
+      void api.measurementPreview(id, { A: { cells: numericCells.slice(0, 6) }, B: { cells: numericCells.slice(6, 12) } })
         .then(result => { setCombinedPreview(result); setPreviewError(""); })
         .catch(() => { setCombinedPreview(null); setPreviewError(t("recognition.previewError")); });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [type, photosReady, cellsComplete, cellCount, id, photoSetId, cells.join("|"), t]);
-  const recognitionErrorMessage = (error: unknown) => {
-    if (error instanceof ApiError && error.code === "CHECKER_RECOGNITION_FAILED") {
-      const issues = Array.isArray(error.details) ? error.details as Array<{ code?: string }> : [];
-      if (issues.some(issue => issue.code === "provider_unavailable" || issue.code === "model_unavailable")) return error.message;
-      return t("recognition.retry");
-    }
-    return error instanceof Error ? error.message : t("camera.uploadError");
-  };
-  const queuePhoto = (module: CheckerModule, image: CapturedCheckerImage) => {
-    const previewUrl = URL.createObjectURL(image.blob);
-    photoUrls.current.push(previewUrl);
-    setPhotos(current => {
-      if (current[module]) {
-        URL.revokeObjectURL(current[module]!.previewUrl);
-        photoUrls.current = photoUrls.current.filter(url => url !== current[module]!.previewUrl);
-      }
-      return { ...current, [module]: { previewUrl, status: "processing" } };
-    });
-    setCameraModule(null);
+  }, [type, checkInputMode, scansReady, cellsComplete, cellCount, id, cells.join("|"), t]);
+  const confirmScan = (module: CheckerModule, recognized: number[]) => {
+    setScanResults(current => setModuleScan(current, module, recognized)); setCameraModule(null);
     const start = module === "A" ? 0 : 6;
-    setCombinedPreview(null);
-    setPreviewError("");
-    void api.uploadCheckerImage(id, photoSetId, module, image.blob, image.width, image.height).then(uploaded => {
-      setPhotos(current => current[module]?.previewUrl === previewUrl ? { ...current, [module]: { previewUrl, status: "ready", recognition: uploaded.recognition } } : current);
-      setCorrectedCells(current => { const next = new Set(current); for (let index = start; index < start + 6; index += 1) next.delete(index); return next; });
-      setCells(current => current.map((value, index) => {
-        if (index < start || index >= start + 6) return value;
-        const recognized = uploaded.recognition.cells[index - start].voltage;
-        return recognized == null ? "" : recognized.toFixed(2);
-      }));
-    }).catch(error => {
-      const message = recognitionErrorMessage(error);
-      setPhotos(current => current[module]?.previewUrl === previewUrl ? { ...current, [module]: { previewUrl, status: "error", error: message } } : current);
-    });
+    setCombinedPreview(null); setPreviewError("");
+    setCells(current => current.map((value, index) => index >= start && index < start + 6 ? recognized[index - start].toFixed(2) : value));
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); if (type === "check") mutation.mutate({ cellVoltages: cells.map(Number), notes: data.get("notes"), photoSetId }); else if (type === "cycle") mutation.mutate({ type: data.get("type"), notes: data.get("notes") }); else mutation.mutate({ crewId: data.get("crewId"), notes: data.get("notes") }); };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); const data = new FormData(event.currentTarget);
+    if (type === "check") mutation.mutate({ cellVoltages: cells.map(Number), notes: data.get("notes") });
+    else if (type === "cycle") mutation.mutate({ type: data.get("type"), notes: data.get("notes") }); else mutation.mutate({ crewId: data.get("crewId"), notes: data.get("notes") });
+  };
   const title = type === "check" ? t("events.recordCheck") : type === "cycle" ? t("events.addUsage") : t("events.transferBattery");
   return <Modal title={title} eyebrow={t("events.history")} onClose={onClose}><form onSubmit={submit} className="form-grid">
     {type === "check" && <div className="checker-check-layout full">
+      <div className="check-input-mode" role="group" aria-label={t("photos.inputMode")}>
+        <button type="button" className={`button compact ${checkInputMode === "scan" ? "active" : "secondary"}`} disabled={cellCount !== 12} onClick={() => { setCheckInputMode("scan"); setCombinedPreview(null); setPreviewError(""); }}><Camera/>{t("photos.scanMode")}</button>
+        <button type="button" className={`button compact ${checkInputMode === "manual" ? "active" : "secondary"}`} onClick={() => { setCheckInputMode("manual"); setCombinedPreview(null); setPreviewError(""); }}><Pencil/>{t("photos.manualMode")}</button>
+      </div>
+      {checkInputMode === "manual" && <p className="manual-input-help">{t("photos.manualHelp")}</p>}
       {modules.map(({ module, start, end }) => <section className="checker-module" key={module}>
-        <article className={`checker-photo-card ${photos[module]?.status ?? ""} ${photos[module] ? "added" : ""}`}>
-          {photos[module] ? <img src={photos[module]!.previewUrl} alt={t("photos.preview", { module })}/> : <span className="checker-photo-placeholder"><Camera/></span>}
-          <div><strong>{t("photos.battery", { module })}</strong><small>{photos[module]?.status === "processing" ? <><LoaderCircle className="spin"/> {t("recognition.processing")}</> : photos[module]?.status === "error" ? <span className="recognition-error">{photos[module]!.error}</span> : photos[module]?.recognition ? <><Check/> {photos[module]!.recognition!.complete ? t("recognition.recognized") : t("recognition.partial", { count: photos[module]!.recognition!.cells.filter(cell => cell.voltage == null).length })}</> : t("photos.required")}</small></div>
-          <button type="button" disabled={photos[module]?.status === "processing"} className={`button ${photos[module] ? "secondary" : "primary"}`} onClick={() => setCameraModule(module)}>{photos[module]?.status === "processing" ? <LoaderCircle className="spin"/> : <Camera/>} {photos[module]?.status === "processing" ? t("recognition.processingShort") : photos[module]?.status === "error" ? t("photos.retry") : photos[module] ? t("photos.replace") : t("photos.take", { module })}</button>
-        </article>
+        {checkInputMode === "scan" && <article className={`checker-photo-card ${scanResults[module] ? "added" : ""}`}>
+          <span className="checker-photo-placeholder">{scanResults[module] ? <Check/> : <Camera/>}</span>
+          <div><strong>{t("photos.battery", { module })}</strong><small>{scanResults[module] ? t("recognition.recognized") : t("photos.required")}</small></div>
+          <button type="button" className={`button ${scanResults[module] ? "secondary" : "primary"}`} onClick={() => setCameraModule(module)}><Camera/> {scanResults[module] ? t("photos.rescan") : t("photos.scan", { module })}</button>
+        </article>}
         <div className="checker-cell-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, end - start)}, minmax(0, 1fr))` }}>
-          {cells.slice(start, end).map((value, offset) => { const index = start + offset; const recognition = photos[module]?.recognition?.cells[offset]; const uncertain = Boolean(recognition && (recognition.voltage == null || recognition.confidence !== "high") && !correctedCells.has(index)); return <label className={uncertain ? "uncertain" : ""} key={index}><span>{index + 1}{uncertain ? " !" : ""}</span><input aria-label={`${t("common.cell")} ${index + 1}`} disabled={photos[module]?.status === "processing"} inputMode="decimal" type="number" step="0.01" min="0" placeholder={photos[module]?.status === "processing" ? "…" : uncertain ? "?" : undefined} value={value} required onChange={event => updateCell(index, event.target.value)}/></label>; })}
+          {cells.slice(start, end).map((value, offset) => { const index = start + offset; return <label key={index}><span>{index + 1}</span><input aria-label={`${t("common.cell")} ${index + 1}`} inputMode="decimal" type="number" step="0.01" min={minCellVoltage} max={maxCellVoltage} value={value} required onChange={event => updateCell(index, event.target.value)}/></label>; })}
         </div>
       </section>)}
       <div className="checker-calculated">
@@ -112,10 +83,9 @@ function EventForm({ id, cellCount, type, onClose }: { id: string; cellCount: nu
     </div>}
     {type === "cycle" && <label>{t("events.eventType")}<select name="type"><option value="maintenance">{t("cycleTypes.maintenance")}</option><option value="repair">{t("cycleTypes.repair")}</option><option value="inspection">{t("cycleTypes.inspection")}</option><option value="service">{t("cycleTypes.service")}</option><option value="retirement">{t("cycleTypes.retirement")}</option><option value="note">{t("cycleTypes.note")}</option></select></label>}
     {type === "transfer" && <label className="full">{t("events.newCrew")}<select name="crewId" required><option value="">{t("events.selectCrew")}</option>{crews.data?.map(crew => <option value={crew.id} key={crew.id}>№{crew.number} · {crew.name}</option>)}</select></label>}
-    <label className="full">{t("common.notes")}<textarea name="notes"/></label>{mutation.error && <p className="form-error">{t("errors.generic")}</p>}<div className="form-actions full"><button type="button" className="button secondary" onClick={onClose}>{t("common.cancel")}</button><button className="button primary" disabled={mutation.isPending || (type === "check" && (!photosReady || !combinedPreview))}>{t("events.save")}</button></div>
-    {type === "check" && anyPhotoProcessing && <p className="photo-processing-note full"><LoaderCircle className="spin"/>{t("recognition.backgroundHelp")}</p>}
-    {type === "check" && !anyPhotoProcessing && !photosReady && <p className="photo-required-note full">{t("photos.bothRequired")}</p>}
-  </form>{cameraModule && <CheckerCamera module={cameraModule} onCancel={() => setCameraModule(null)} onConfirm={image => queuePhoto(cameraModule, image)}/>}</Modal>;
+    <label className="full">{t("common.notes")}<textarea name="notes"/></label>{mutation.error && <p className="form-error">{t("errors.generic")}</p>}<div className="form-actions full"><button type="button" className="button secondary" onClick={onClose}>{t("common.cancel")}</button><button className="button primary" disabled={mutation.isPending || (type === "check" && (!cellsComplete || (cellCount === 12 && !combinedPreview) || (checkInputMode === "scan" && !scansReady)))}>{t("events.save")}</button></div>
+    {type === "check" && checkInputMode === "scan" && !scansReady && <p className="photo-required-note full">{t("photos.bothRequired")}</p>}
+  </form>{checkInputMode === "scan" && cameraModule && <CheckerCamera module={cameraModule} minCellVoltage={minCellVoltage} maxCellVoltage={maxCellVoltage} onCancel={() => setCameraModule(null)} onConfirm={recognized => confirmScan(cameraModule, recognized)}/>}</Modal>;
 }
 
 function CorrectionForm({ measurement, minVoltage, maxVoltage, onClose }: { measurement: Measurement; minVoltage: number; maxVoltage: number; onClose: () => void }) {
@@ -174,6 +144,6 @@ export function BatteryDetails() {
       if (entry.kind === "transfer") { const item = entry.item; return <article className="history-entry transfer" key={`transfer-${item.id}`}><span className="history-icon"><ArrowRightLeft/></span><div className="history-body"><strong>{t("battery.history.transfer")}</strong><p>{item.fromCrewName ?? "—"} → {item.toCrewName}</p><small>{formatDate(item.transferredAt)} {item.notes && `· ${item.notes}`}</small></div></article>; }
       const item = entry.item; const source = item.sourceMeasurementId ? measurementsById.get(item.sourceMeasurementId) : undefined; const icon = item.type === "charge" ? <BatteryCharging/> : item.type === "discharge" ? <BatteryLow/> : item.type === "repair" || item.type === "maintenance" || item.type === "service" ? <Wrench/> : item.type === "inspection" ? <SearchCheck/> : item.type === "note" ? <MessageSquare/> : <CalendarClock/>; return <article className={`history-entry event ${item.type}`} key={`event-${item.id}`}><span className="history-icon">{icon}</span><div className="history-body"><strong>{t(`cycleTypes.${item.type}`)}</strong>{source && <p>{source.totalVoltage.toFixed(2)} {t("common.volts")} · {source.chargePercent != null ? `${source.chargePercent}%` : "—"}</p>}<small>{formatDate(item.occurredAt)} {item.type === "charge" && item.inferred && `· ${t("battery.history.cycleCompleted", { count: cycleNumbers.get(item.id) ?? battery.cycleCount })}`} {item.type === "discharge" && item.inferred && `· ${t("battery.history.usageRecorded")}`} {item.flightMinutes ? `· ${item.flightMinutes} ${t("common.minutesShort")}` : ""} {item.notes && `· ${item.notes}`}</small></div></article>;
     })}{!historyItems.length ? <div className="empty">{t("battery.history.empty")}</div> : !filteredHistoryItems.length && <div className="empty">{t("battery.history.filter.empty")}</div>}</div></section>
-    {form === "edit" && <BatteryForm battery={battery} onClose={() => setForm(null)}/>} {form && form !== "edit" && <EventForm id={battery.id} cellCount={battery.cellCount} type={form} onClose={() => setForm(null)}/>} {correction && <CorrectionForm measurement={correction} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setCorrection(null)}/>} 
+    {form === "edit" && <BatteryForm battery={battery} onClose={() => setForm(null)}/>} {form && form !== "edit" && <EventForm id={battery.id} cellCount={battery.cellCount} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} type={form} onClose={() => setForm(null)}/>} {correction && <CorrectionForm measurement={correction} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setCorrection(null)}/>}
   </div>;
 }

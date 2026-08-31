@@ -5,17 +5,15 @@ import websocket from "@fastify/websocket";
 import { compare, hash } from "bcryptjs";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import {
-  batteryInputSchema, batteryTypeInputSchema, batteryTypeUpdateSchema, batteryUpdateSchema, checkerImageUploadSchema, checkerPreviewInputSchema, crewInputSchema, crewUpdateSchema, cycleEventInputSchema,
+  batteryInputSchema, batteryTypeInputSchema, batteryTypeUpdateSchema, batteryUpdateSchema, measurementPreviewInputSchema, crewInputSchema, crewUpdateSchema, cycleEventInputSchema,
   credentialInputSchema, credentialUpdateSchema, groupAdminCredentialInputSchema, groupInputSchema, groupUpdateSchema, loginInputSchema, measurementCorrectionSchema,
   measurementInputSchema, thresholdInputSchema, transferInputSchema
 } from "@sbm/shared";
 import { ZodError } from "zod";
 import { db } from "./db/index.js";
-import { batteries, batteryTypes, checkerImages, checkerPhotoSets, crews, cycleEvents, groups, measurements, sessions, settings, transfers, users } from "./db/schema.js";
+import { batteries, batteryTypes, crews, cycleEvents, groups, measurements, sessions, settings, transfers, users } from "./db/schema.js";
 import { calculateCellHealth } from "./health.js";
-import { MAX_CHECKER_IMAGE_BYTES, validateCheckerImage } from "./checker-images.js";
-import { CheckerRecognitionError, combineCheckerReadings, type CheckerRecognizer } from "./checker-recognition.js";
-import { createCheckerRecognizer } from "./ollama-checker-recognition.js";
+import { calculateMeasurementPreview } from "./measurement-preview.js";
 import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertGroupAdministrator, assertSuperAdmin, assertTransferAccess, createSession, effectiveCrewId, isAccountEnabled, loadActor, publicActor, revokeSession, type Actor } from "./auth.js";
 import { rebuildInferredCycleEvents, type ChargeStateThresholds } from "./cycle-inference.js";
 import { TELEMETRY_THRESHOLDS, TelemetryHub, type TelemetryCrew } from "./telemetry.js";
@@ -25,12 +23,18 @@ declare module "fastify" { interface FastifyRequest { telemetryCrew: TelemetryCr
 const number = (value: string | number | null) => value === null ? null : Number(value);
 const iso = (value: Date) => value.toISOString();
 const sumCellVoltages = (cells: number[]) => Math.round(cells.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000;
+const validateCellVoltageRange = (cells: number[], packMinVoltage: number, packMaxVoltage: number, cellCount: number) => {
+  const minCellVoltage = packMinVoltage / cellCount; const maxCellVoltage = packMaxVoltage / cellCount;
+  if (cells.some(voltage => !Number.isFinite(voltage) || voltage < minCellVoltage || voltage > maxCellVoltage)) {
+    throw Object.assign(new Error("One or more cell voltages are outside the battery type voltage range"), { statusCode: 400 });
+  }
+};
 const calculateChargePercent = (totalVoltage: number, minVoltage: number, maxVoltage: number) =>
   Math.round(Math.max(0, Math.min(100, (totalVoltage - minVoltage) / (maxVoltage - minVoltage) * 100)));
 
 function mapMeasurement(row: typeof measurements.$inferSelect) {
   return {
-    id: row.id, batteryId: row.batteryId, photoSetId: row.photoSetId, totalVoltage: Number(row.totalVoltage),
+    id: row.id, batteryId: row.batteryId, totalVoltage: Number(row.totalVoltage),
     cellVoltages: row.cellVoltages, minCellVoltage: Number(row.minCellVoltage),
     maxCellVoltage: Number(row.maxCellVoltage), cellDelta: Number(row.cellDelta),
     chargePercent: row.chargePercent, temperatureC: number(row.temperatureC), health: row.health,
@@ -49,14 +53,12 @@ async function requireBattery(id: string, actor: Actor) {
   return { ...row.battery, groupId: row.crew.groupId, groupName: row.group.name, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry };
 }
 
-export async function buildApp(options: { checkerRecognizer?: CheckerRecognizer; rebuildCycleHistory?: (batteryId: string, thresholds: ChargeStateThresholds) => Promise<void> } = {}): Promise<FastifyInstance> {
+export async function buildApp(options: { rebuildCycleHistory?: (batteryId: string, thresholds: ChargeStateThresholds) => Promise<void> } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
-  const checkerRecognizer = options.checkerRecognizer ?? createCheckerRecognizer();
   const rebuildCycleHistory = options.rebuildCycleHistory ?? rebuildInferredCycleEvents;
   await app.register(cors, { origin: process.env.CLIENT_ORIGIN?.split(",") ?? ["http://localhost:5173"], credentials: true });
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 4096 } });
-  app.addContentTypeParser(["image/jpeg", "image/png", "image/webp"], { parseAs: "buffer", bodyLimit: MAX_CHECKER_IMAGE_BYTES }, (_request, body, done) => done(null, body));
   app.decorateRequest("actor", null);
   app.decorateRequest("telemetryCrew", null);
   const telemetry = new TelemetryHub();
@@ -64,7 +66,6 @@ export async function buildApp(options: { checkerRecognizer?: CheckerRecognizer;
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) return reply.status(400).send({ error: "Validation failed", issues: error.issues });
-    if (error instanceof CheckerRecognitionError) return reply.status(error.statusCode).send({ error: error.message, code: error.code, issues: error.issues, partial: error.partial });
     const code = (error as { code?: string }).code;
     if (code === "23505") return reply.status(409).send({ error: "A record with that unique value already exists" });
     const status = (error as { statusCode?: number }).statusCode ?? 500;
@@ -398,15 +399,9 @@ export async function buildApp(options: { checkerRecognizer?: CheckerRecognizer;
     const result = calculateCellHealth(data.cellVoltages, warning, danger);
     const totalVoltage = sumCellVoltages(data.cellVoltages);
     const chargePercent = calculateChargePercent(totalVoltage, battery.minVoltage, battery.maxVoltage);
-    if (data.photoSetId) {
-      const [photoSet] = await db.select().from(checkerPhotoSets).where(and(eq(checkerPhotoSets.id, data.photoSetId), eq(checkerPhotoSets.batteryId, battery.id)));
-      if (!photoSet) throw Object.assign(new Error("Checker photo set does not belong to this battery"), { statusCode: 400 });
-      const [photoCount] = await db.select({ count: sql<number>`count(*)::int` }).from(checkerImages).where(eq(checkerImages.photoSetId, data.photoSetId));
-      if (photoCount.count !== 2) throw Object.assign(new Error("Both checker photos A and B are required"), { statusCode: 400 });
-      if (battery.cellCount === 12) combineCheckerReadings(data.photoSetId, data.cellVoltages.slice(0, 6), data.cellVoltages.slice(6, 12), warning, danger, battery.minVoltage, battery.maxVoltage);
-    }
+    validateCellVoltageRange(data.cellVoltages, battery.minVoltage, battery.maxVoltage, battery.cellCount);
     const [measurement] = await db.insert(measurements).values({
-      batteryId: battery.id, photoSetId: data.photoSetId, totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
+      batteryId: battery.id, totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
       minCellVoltage: result.minCellVoltage.toString(), maxCellVoltage: result.maxCellVoltage.toString(),
       cellDelta: result.cellDelta.toString(), chargePercent,
       temperatureC: null, health: result.health,
@@ -416,56 +411,12 @@ export async function buildApp(options: { checkerRecognizer?: CheckerRecognizer;
     return reply.status(201).send(mapMeasurement(measurement));
   });
 
-  app.post<{ Params: { id: string; module: string }; Querystring: { photoSetId?: string }; Headers: { "x-image-width"?: string; "x-image-height"?: string } }>("/api/batteries/:id/checker-images/:module", async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/batteries/:id/measurement-preview", async request => {
+    const data = measurementPreviewInputSchema.parse(request.body);
     const battery = await requireBattery(request.params.id, request.actor!);
-    if (battery.archivedAt) throw Object.assign(new Error("Archived batteries cannot receive checker images"), { statusCode: 409 });
-    const mimeType = String(request.headers["content-type"] ?? "").split(";")[0].toLowerCase();
-    const metadata = checkerImageUploadSchema.parse({
-      photoSetId: request.query.photoSetId,
-      module: request.params.module,
-      width: request.headers["x-image-width"],
-      height: request.headers["x-image-height"]
-    });
-    const imageData = validateCheckerImage(request.body, mimeType);
-    const recognition = await checkerRecognizer.recognize(imageData, metadata.module, {
-      minCellVoltage: battery.minVoltage / battery.cellCount,
-      maxCellVoltage: battery.maxVoltage / battery.cellCount
-    });
-
-    const saved = await db.transaction(async tx => {
-      await tx.insert(checkerPhotoSets).values({ id: metadata.photoSetId, batteryId: battery.id, createdByUserId: request.actor!.userId })
-        .onConflictDoNothing({ target: checkerPhotoSets.id });
-      const [photoSet] = await tx.select().from(checkerPhotoSets).where(eq(checkerPhotoSets.id, metadata.photoSetId));
-      if (!photoSet || photoSet.batteryId !== battery.id) {
-        throw Object.assign(new Error("Checker photo set belongs to another battery"), { statusCode: 409 });
-      }
-      const [image] = await tx.insert(checkerImages).values({
-        photoSetId: metadata.photoSetId, batteryId: battery.id, module: metadata.module,
-        mimeType, byteSize: imageData.length, width: metadata.width, height: metadata.height,
-        imageData, uploadedByUserId: request.actor!.userId
-      }).onConflictDoUpdate({
-        target: [checkerImages.photoSetId, checkerImages.module],
-        set: { mimeType, byteSize: imageData.length, width: metadata.width, height: metadata.height, imageData, uploadedByUserId: request.actor!.userId, uploadedAt: new Date() }
-      }).returning();
-      return image;
-    });
-    return reply.status(201).send({
-      id: saved.id, batteryId: saved.batteryId, photoSetId: saved.photoSetId, module: saved.module,
-      mimeType: saved.mimeType, byteSize: saved.byteSize, width: saved.width, height: saved.height,
-      uploadedAt: iso(saved.uploadedAt), recognition
-    });
-  });
-
-  app.post<{ Params: { id: string } }>("/api/batteries/:id/checker-preview", async request => {
-    const data = checkerPreviewInputSchema.parse(request.body);
-    const battery = await requireBattery(request.params.id, request.actor!);
-    if (battery.cellCount !== 12) throw Object.assign(new Error("Checker A/B recognition is available only for 12-cell battery types"), { statusCode: 400 });
-    const [photoSet] = await db.select().from(checkerPhotoSets).where(and(eq(checkerPhotoSets.id, data.photoSetId), eq(checkerPhotoSets.batteryId, battery.id)));
-    if (!photoSet) throw Object.assign(new Error("Checker photo set does not belong to this battery"), { statusCode: 400 });
-    const [photoCount] = await db.select({ count: sql<number>`count(*)::int` }).from(checkerImages).where(eq(checkerImages.photoSetId, data.photoSetId));
-    if (photoCount.count !== 2) throw Object.assign(new Error("Both checker photos A and B are required"), { statusCode: 400 });
+    if (battery.cellCount !== 12) throw Object.assign(new Error("A/B measurement preview is available only for 12-cell battery types"), { statusCode: 400 });
     const [configuration] = await db.select().from(settings).where(eq(settings.id, 1));
-    return combineCheckerReadings(data.photoSetId, data.A.cells, data.B.cells, Number(configuration.warningCellDeltaV), Number(configuration.dangerCellDeltaV), battery.minVoltage, battery.maxVoltage);
+    return calculateMeasurementPreview(data.A.cells, data.B.cells, Number(configuration.warningCellDeltaV), Number(configuration.dangerCellDeltaV), battery.minVoltage, battery.maxVoltage);
   });
 
   app.post<{ Params: { id: string } }>("/api/batteries/:id/cycles", async (request, reply) => {
@@ -484,6 +435,7 @@ export async function buildApp(options: { checkerRecognizer?: CheckerRecognizer;
     const cells = data.cellVoltages ?? current.cellVoltages;
     const battery = await requireBattery(current.batteryId, request.actor!);
     if (cells.length !== battery.cellCount) throw Object.assign(new Error(`Expected ${battery.cellCount} cell voltages, received ${cells.length}`), { statusCode: 400 });
+    validateCellVoltageRange(cells, battery.minVoltage, battery.maxVoltage, battery.cellCount);
     const warning = Number(current.warningThresholdV);
     const danger = Number(current.dangerThresholdV);
     const result = calculateCellHealth(cells, warning, danger);
