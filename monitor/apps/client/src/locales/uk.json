@@ -100,6 +100,9 @@
     "requiresAction": "ПОТРЕБУЮТЬ УВАГИ",
     "dangerousImbalance": "Небезпечний дисбаланс комірок",
     "noCritical": "Критичних проблем немає",
+    "filterAttention": "Показати проблемні батареї",
+    "showAll": "Показати всі батареї",
+    "noAttention": "Зараз жодна батарея не потребує уваги.",
     "batteryFleet": "Батареї",
     "allAssigned": "Усі призначені батареї",
     "editCrew": "Редагувати вибраний екіпаж",
@@ -172,6 +175,8 @@
       "latestCheck": "Остання перевірка",
       "charge": "ЗАРЯД",
       "totalVoltage": "ЗАГАЛЬНА НАПРУГА",
+      "balance": "БАЛАНС КОМІРОК",
+      "operational": "Основні оперативні показники батареї",
       "noChecks": "Перевірок немає",
       "cycleCount": "КІЛЬКІСТЬ ЦИКЛІВ",
       "recordedEvents": "Записаних подій: {{count}}"
@@ -209,6 +214,8 @@
       "usageRecorded": "Зафіксовано використання батареї",
       "empty": "Історія батареї ще порожня.",
       "visible": "показано {{visible}} із {{total}}",
+      "cycleNumber": "Цикл №{{number}}",
+      "allEvents": "Усі вимірювання та події",
       "filter": {
         "title": "Фільтр історії",
         "reset": "Скинути",
@@ -337,7 +344,18 @@
       "globalSettings": "Глобальні налаштування",
       "globalSettingsHelp": "Попереджувальні та небезпечні пороги",
       "telemetry": "Телеметрія",
-      "telemetryHelp": "Поточні польотні дані та стан зв’язку"
+      "telemetryHelp": "Поточні польотні дані та стан зв’язку",
+      "operationalOverview": "Оперативний огляд екіпажів",
+      "liveStatus": "Поточний стан",
+      "crewReadiness": "Готовність екіпажів",
+      "crewNumber": "Екіпаж {{number}}",
+      "ready": "Готовий",
+      "batteryReadiness": "Батарей: {{total}} · готові: {{ready}}",
+      "attentionCount": "потребують уваги: {{count}}",
+      "telemetryStatus": "Телеметрія",
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "onlineCount": "онлайн {{online}}/{{total}}"
     },
     "crews": {
       "title": "Каталог екіпажів",
@@ -349,7 +367,8 @@
       "deleteConfirm": "Видалити {{name}}? Це можливо лише без батарей та облікових записів.",
       "delete": "Видалити екіпаж",
       "enable": "Увімкнути екіпаж",
-      "disable": "Вимкнути екіпаж"
+      "disable": "Вимкнути екіпаж",
+      "moreActions": "Інші дії з екіпажем"
     },
     "credentials": {
       "title": "Облікові дані: {{name}}",
@@ -398,7 +417,14 @@
     "armed": "Armed",
     "disarmed": "Disarmed",
     "age": "Оновлено {{seconds}} с тому",
+    "noSignal": "Немає актуального сигналу телеметрії",
+    "tableView": "Детальна таблиця",
     "columns": { "crew": "Екіпаж", "status": "Статус", "voltage": "Напруга", "current": "Струм", "heading": "Азимут", "altitude": "Висота", "link": "Зв’язок" }
+  },
+  "status": {
+    "systemOk": "Система в нормі",
+    "issues": "Проблем: {{count}}",
+    "issueBreakdown": "Проблем батарей: {{batteries}} · екіпажів офлайн: {{crews}}"
   },
   "errors": {
     "generic": "Щось пішло не так. Спробуйте ще раз.",

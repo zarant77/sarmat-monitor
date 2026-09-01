@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BatteryMedium, ChevronRight, Eye, EyeOff, KeyRound, Layers3, Pencil, Plus, Power, RadioTower, Save, Shield, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, BatteryMedium, ChevronRight, Eye, EyeOff, KeyRound, Layers3, MoreHorizontal, Pencil, Plus, Power, RadioTower, Save, Shield, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import type { BatteryType, Crew, Group } from "@sbm/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { CrewForm } from "../components/Forms";
 import { Modal } from "../components/Modal";
+import { CrewIdentity } from "../components/CrewIdentity";
 import { useI18n } from "../i18n";
 
 export function AdminDashboard() {
@@ -14,6 +15,7 @@ export function AdminDashboard() {
   const groups = useQuery({ queryKey: ["groups"], queryFn: api.groups });
   const crews = useQuery({ queryKey: ["crews", auth.user?.groupId], queryFn: () => api.crews() });
   const batteries = useQuery({ queryKey: ["batteries", "admin-summary"], queryFn: () => api.batteries() });
+  const telemetry = useQuery({ queryKey: ["telemetry", auth.user?.groupId], queryFn: () => api.telemetry(auth.user?.groupId ?? undefined), enabled: Boolean(auth.user?.groupId), refetchInterval: 5000 });
   const danger = batteries.data?.filter(b => b.latestMeasurement?.health === "danger").length ?? 0;
   return <div className="page">
     <section className="hero-row"><div><span className="eyebrow">{t("admin.eyebrow")}</span><h1>{auth.user?.role === "GROUP_ADMIN" ? auth.user.groupName : t("admin.dashboard.title")}</h1><p>{auth.user?.role === "GROUP_ADMIN" ? t("admin.dashboard.groupDescription") : t("admin.dashboard.description")}</p></div></section>
@@ -22,6 +24,20 @@ export function AdminDashboard() {
       <article><span className="metric-icon"><Users/></span><div><small>{t("admin.dashboard.activeCrews")}</small><strong>{crews.data?.filter(c => c.enabled).length ?? "—"}</strong><p>{t("admin.dashboard.totalCrews", { count: crews.data?.length ?? 0 })}</p></div></article>
       <article><span className="metric-icon"><BatteryMedium/></span><div><small>{t("admin.dashboard.activePacks")}</small><strong>{batteries.data?.length ?? "—"}</strong><p>{t("admin.dashboard.allAssignments")}</p></div></article>
       <article className={danger ? "danger-metric" : ""}><span className="metric-icon"><AlertTriangle/></span><div><small>{t("admin.dashboard.criticalHealth")}</small><strong>{danger}</strong><p>{t("admin.dashboard.requiresAction")}</p></div></article>
+    </section>
+    <section className="operational-overview" aria-label={t("admin.dashboard.operationalOverview")}>
+      <div className="section-heading"><div><span className="eyebrow">{t("admin.dashboard.liveStatus")}</span><h2>{t("admin.dashboard.crewReadiness")}</h2></div><span className="telemetry-connection"><i/>{t("telemetry.updating")}</span></div>
+      <div className="operational-crew-grid">{crews.data?.map(crew => {
+        const crewBatteries = batteries.data?.filter(battery => battery.crewId === crew.id) ?? [];
+        const ready = crewBatteries.filter(battery => battery.state === "ready").length;
+        const attention = crewBatteries.filter(battery => battery.latestMeasurement && battery.latestMeasurement.health !== "good").length;
+        const live = telemetry.data?.crews.find(item => item.id === crew.id); const online = Boolean(live?.snapshot && live.snapshot[0] === 0);
+        return <Link to={`/admin/crews/${crew.id}`} className={`operational-crew-card ${attention ? "needs-attention" : ""}`} style={{ "--crew-color": crew.color } as CSSProperties} key={crew.id}>
+          <div className="operational-crew-head"><CrewIdentity number={crew.number} name={crew.name} color={crew.color}/><strong className={crew.enabled ? "ready" : "offline"}>{crew.enabled ? t("admin.dashboard.ready") : t("common.disabled")}</strong></div>
+          <p>{t("admin.dashboard.batteryReadiness", { total: crewBatteries.length, ready })}{attention ? <b> · {t("admin.dashboard.attentionCount", { count: attention })}</b> : null}</p>
+          <div className={`operational-link ${online ? "online" : "offline"}`}><RadioTower/>{t("admin.dashboard.telemetryStatus")}: <strong>{online ? t("admin.dashboard.online") : t("admin.dashboard.offline")}</strong><i/></div>
+        </Link>;
+      })}</div>
     </section>
     <section className="admin-shortcuts">
       {auth.user?.role === "SUPER_ADMIN"&&<Link to="/admin/groups"><Shield/><span><strong>{t("admin.dashboard.manageGroups")}</strong><small>{t("admin.dashboard.manageGroupsHelp")}</small></span><ChevronRight/></Link>}
@@ -63,7 +79,7 @@ export function AdminGroups() {
 export function AdminGroupDetails() {
   const { groupId="" }=useParams(); const {t}=useI18n(); const group=useQuery({queryKey:["group",groupId],queryFn:()=>api.group(groupId)}); const crews=useQuery({queryKey:["crews",groupId],queryFn:()=>api.crews(groupId)}); const batteries=useQuery({queryKey:["batteries","group",groupId],queryFn:()=>api.batteries(undefined,true,groupId)});
   if(!group.data) return <div className="page"><div className="empty">{t("dashboard.loading")}</div></div>;
-  return <div className="page"><section className="hero-row"><div><span className="eyebrow">{group.data.code}</span><h1>{group.data.name}</h1><p>{group.data.notes}</p></div></section><section className="metrics-grid"><article><span className="metric-icon"><Users/></span><div><small>{t("nav.crews")}</small><strong>{crews.data?.length??0}</strong></div></article><article><span className="metric-icon"><BatteryMedium/></span><div><small>{t("nav.batteries")}</small><strong>{batteries.data?.length??0}</strong></div></article><article><span className="metric-icon"><AlertTriangle/></span><div><small>{t("groups.warnings")}</small><strong>{batteries.data?.filter(b=>b.latestMeasurement?.health!=="good").length??0}</strong></div></article></section><section className="panel"><div className="panel-head"><div><h2>{t("nav.crews")}</h2><p>{t("groups.crewsHelp")}</p></div></div><div className="admin-crew-list">{crews.data?.map(crew=><article key={crew.id}><span className="crew-color-marker" style={{backgroundColor:crew.color}}>{crew.number}</span><div className="crew-main"><strong>{crew.name}{crew.reserve?` · ${t("groups.reserve")}`:""}</strong><small>{t("admin.crews.summary",{batteries:crew.batteryCount,credentials:crew.userCount??0})}</small></div><Link className="icon-button" to={`/admin/crews/${crew.id}`}><BatteryMedium/></Link></article>)}</div></section><GroupAdministrators group={group.data}/></div>;
+  return <div className="page"><section className="hero-row"><div><span className="eyebrow">{group.data.code}</span><h1>{group.data.name}</h1><p>{group.data.notes}</p></div></section><section className="metrics-grid"><article><span className="metric-icon"><Users/></span><div><small>{t("nav.crews")}</small><strong>{crews.data?.length??0}</strong></div></article><article><span className="metric-icon"><BatteryMedium/></span><div><small>{t("nav.batteries")}</small><strong>{batteries.data?.length??0}</strong></div></article><article><span className="metric-icon"><AlertTriangle/></span><div><small>{t("groups.warnings")}</small><strong>{batteries.data?.filter(b=>b.latestMeasurement?.health!=="good").length??0}</strong></div></article></section><section className="panel"><div className="panel-head"><div><h2>{t("nav.crews")}</h2><p>{t("groups.crewsHelp")}</p></div></div><div className="admin-crew-list">{crews.data?.map(crew=><article key={crew.id}><div className="crew-list-main"><CrewIdentity number={crew.number} name={crew.name} color={crew.color} size="large" suffix={crew.reserve ? <small className="crew-identity-suffix">· {t("groups.reserve")}</small> : undefined}/><small>{t("admin.crews.summary",{batteries:crew.batteryCount,credentials:crew.userCount??0})}</small></div><Link className="icon-button" to={`/admin/crews/${crew.id}`}><BatteryMedium/></Link></article>)}</div></section><GroupAdministrators group={group.data}/></div>;
 }
 
 function Credentials({ crew, onClose }: { crew: Crew; onClose: () => void }) {
@@ -97,8 +113,8 @@ export function AdminCrews() {
   return <div className="page">
     <section className="hero-row"><div><span className="eyebrow">{t("admin.eyebrow")}</span><h1>{t("admin.crews.title")}</h1><p>{t("admin.crews.description")}</p></div><div className="hero-actions">{auth.user?.role==="SUPER_ADMIN"&&<select value={effectiveGroupId??""} onChange={event=>setSelectedGroupId(event.target.value)} aria-label={t("groups.select")}>{groups.data?.map(group=><option value={group.id} key={group.id}>{group.name}</option>)}</select>}<button className="button primary" disabled={!effectiveGroupId} onClick={() => setEdit("new")}><Plus/> {t("admin.crews.new")}</button></div></section>
     <section className="panel"><div className="admin-crew-list">{query.data?.map(crew => <article key={crew.id} className={!crew.enabled ? "disabled-row" : ""}>
-      <span className="crew-color-marker" style={{ backgroundColor: crew.color }}>{crew.number}</span><div className="crew-main"><strong>{crew.name}</strong><small>{t("admin.crews.summary", { batteries: crew.batteryCount, credentials: crew.userCount ?? 0 })}</small></div>
-      <div className="crew-actions"><Link className="icon-button" to={`/admin/crews/${crew.id}`} aria-label={t("admin.crews.openFleet")} data-tooltip={t("admin.crews.openFleet")}><BatteryMedium/></Link><button className="icon-button" onClick={() => setCredentials(crew)} aria-label={t("admin.crews.credentials")} data-tooltip={t("admin.crews.credentials")}><KeyRound/></button><button className="icon-button" onClick={() => setEdit(crew)} aria-label={t("common.edit")} data-tooltip={t("common.edit")}><Pencil/></button><button className="icon-button" onClick={() => status.mutate({ crew, enabled: !crew.enabled })} aria-label={crew.enabled ? t("admin.crews.disable") : t("admin.crews.enable")} data-tooltip={crew.enabled ? t("admin.crews.disable") : t("admin.crews.enable")}><Power/></button><button className="icon-button destructive" onClick={() => confirm(t("admin.crews.deleteConfirm", { name: crew.name })) && remove.mutate(crew.id)} aria-label={t("admin.crews.delete")} data-tooltip={t("admin.crews.delete")}><Trash2/></button></div>
+      <div className="crew-list-main"><CrewIdentity number={crew.number} name={crew.name} color={crew.color} size="large"/><small>{t("admin.crews.summary", { batteries: crew.batteryCount, credentials: crew.userCount ?? 0 })}</small></div>
+      <div className="crew-actions"><Link className="button compact crew-primary-action" to={`/admin/crews/${crew.id}`}><BatteryMedium/>{t("common.open")}</Link><details className="row-overflow"><summary className="icon-button" aria-label={t("admin.crews.moreActions")}><MoreHorizontal/></summary><div className="row-overflow-menu"><button onClick={() => setCredentials(crew)}><KeyRound/>{t("admin.crews.credentials")}</button><button onClick={() => setEdit(crew)}><Pencil/>{t("common.edit")}</button><button onClick={() => status.mutate({ crew, enabled: !crew.enabled })}><Power/>{crew.enabled ? t("admin.crews.disable") : t("admin.crews.enable")}</button><button className="destructive" onClick={() => confirm(t("admin.crews.deleteConfirm", { name: crew.name })) && remove.mutate(crew.id)}><Trash2/>{t("admin.crews.delete")}</button></div></details></div>
     </article>)}</div>{(status.error || remove.error) && <p className="admin-error">{t("errors.generic")}</p>}</section>
     {edit && <CrewForm groupId={effectiveGroupId} crew={edit === "new" ? undefined : edit} onClose={() => setEdit(null)}/>} {credentials && <Credentials crew={credentials} onClose={() => setCredentials(null)}/>} 
   </div>;

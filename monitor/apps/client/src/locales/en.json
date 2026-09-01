@@ -100,6 +100,9 @@
     "requiresAction": "REQUIRES ACTION",
     "dangerousImbalance": "Dangerous cell imbalance",
     "noCritical": "No critical findings",
+    "filterAttention": "Show affected batteries",
+    "showAll": "Show all batteries",
+    "noAttention": "No batteries currently need attention.",
     "batteryFleet": "Batteries",
     "allAssigned": "All assigned battery packs",
     "editCrew": "Edit selected crew",
@@ -172,6 +175,8 @@
       "latestCheck": "Latest check",
       "charge": "CHARGE",
       "totalVoltage": "TOTAL VOLTAGE",
+      "balance": "CELL BALANCE",
+      "operational": "Primary operational battery metrics",
       "noChecks": "No checks",
       "cycleCount": "CYCLE COUNT",
       "recordedEvents": "{{count}} recorded events"
@@ -209,6 +214,8 @@
       "usageRecorded": "Battery usage recorded",
       "empty": "Battery history is empty.",
       "visible": "showing {{visible}} of {{total}}",
+      "cycleNumber": "Cycle #{{number}}",
+      "allEvents": "All measurements and events",
       "filter": {
         "title": "History filter",
         "reset": "Reset",
@@ -337,7 +344,18 @@
       "globalSettings": "Global settings",
       "globalSettingsHelp": "Health warning and danger thresholds",
       "telemetry": "Telemetry",
-      "telemetryHelp": "Live flight data and connection status"
+      "telemetryHelp": "Live flight data and connection status",
+      "operationalOverview": "Operational crew overview",
+      "liveStatus": "Live status",
+      "crewReadiness": "Crew readiness",
+      "crewNumber": "Crew {{number}}",
+      "ready": "Ready",
+      "batteryReadiness": "{{total}} batteries · {{ready}} ready",
+      "attentionCount": "{{count}} need attention",
+      "telemetryStatus": "Telemetry",
+      "online": "Online",
+      "offline": "Offline",
+      "onlineCount": "{{online}}/{{total}} online"
     },
     "crews": {
       "title": "Crew directory",
@@ -349,7 +367,8 @@
       "deleteConfirm": "Delete {{name}}? This only succeeds when it has no batteries or credentials.",
       "delete": "Delete crew",
       "enable": "Enable crew",
-      "disable": "Disable crew"
+      "disable": "Disable crew",
+      "moreActions": "More crew actions"
     },
     "credentials": {
       "title": "{{name}} credentials",
@@ -398,7 +417,14 @@
     "armed": "Armed",
     "disarmed": "Disarmed",
     "age": "Updated {{seconds}}s ago",
+    "noSignal": "No current telemetry signal",
+    "tableView": "Detailed table view",
     "columns": { "crew": "Crew", "status": "Status", "voltage": "Voltage", "current": "Current", "heading": "Heading", "altitude": "Altitude", "link": "Link" }
+  },
+  "status": {
+    "systemOk": "System OK",
+    "issues": "{{count}} issues",
+    "issueBreakdown": "{{batteries}} battery issues · {{crews}} crews offline"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
