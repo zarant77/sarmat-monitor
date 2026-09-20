@@ -19,6 +19,7 @@ publish/
 
 # NuGet
 packages/
+!monitor/packages/
 *.nupkg
 *.snupkg
 project.assets.json
