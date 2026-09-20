@@ -10,7 +10,7 @@ import { HealthBadge } from "../components/HealthBadge";
 import { Modal } from "../components/Modal";
 import { CheckerCamera } from "../components/CheckerCamera";
 import { CrewIdentity } from "../components/CrewIdentity";
-import { canSaveMeasurement, setModuleScan } from "../checker-recognition";
+import { canSaveMeasurement } from "../checker-recognition";
 import { useI18n } from "../i18n";
 import { clientSettings, defaultHistoryFilter, historyEventCategories, type HistoryEventCategory, type HistoryFilterSettings } from "../client-settings";
 
@@ -21,10 +21,10 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { i
   const [cells, setCells] = useState(Array.from({ length: cellCount }, () => ""));
   const [checkInputMode, setCheckInputMode] = useState<"scan" | "manual">(cellCount === 12 ? "scan" : "manual");
   const [cameraModule, setCameraModule] = useState<CheckerModule | null>(null);
-  const [scanResults, setScanResults] = useState<Partial<Record<CheckerModule, number[]>>>({});
+  const [scannedModules, setScannedModules] = useState<Partial<Record<CheckerModule, boolean>>>({});
   const [combinedPreview, setCombinedPreview] = useState<MeasurementPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
-  const scansReady = scanResults.A?.length === 6 && scanResults.B?.length === 6;
+  const scansReady = Boolean(scannedModules.A && scannedModules.B);
   const numericCells = cells.map(value => Number(value));
   const minCellVoltage = minVoltage / cellCount; const maxCellVoltage = maxVoltage / cellCount;
   const cellsComplete = cells.every(value => value !== "" && Number.isFinite(Number(value)) && Number(value) >= minCellVoltage && Number(value) <= maxCellVoltage);
@@ -48,11 +48,15 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { i
     }, 250);
     return () => window.clearTimeout(timer);
   }, [type, checkInputMode, scansReady, cellsComplete, cellCount, id, cells.join("|"), t]);
-  const confirmScan = (module: CheckerModule, recognized: number[]) => {
-    setScanResults(current => setModuleScan(current, module, recognized)); setCameraModule(null);
+  const confirmScan = (module: CheckerModule, recognized: Array<number | null>) => {
+    setScannedModules(current => ({ ...current, [module]: true })); setCameraModule(null);
     const start = module === "A" ? 0 : 6;
     setCombinedPreview(null); setPreviewError("");
-    setCells(current => current.map((value, index) => index >= start && index < start + 6 ? recognized[index - start].toFixed(2) : value));
+    setCells(current => current.map((value, index) => {
+      if (index < start || index >= start + 6) return value;
+      const recognizedValue = recognized[index - start];
+      return recognizedValue == null ? value : recognizedValue.toFixed(2);
+    }));
   };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); const data = new FormData(event.currentTarget);
@@ -68,10 +72,10 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, type, onClose }: { i
       </div>
       {checkInputMode === "manual" && <p className="manual-input-help">{t("photos.manualHelp")}</p>}
       {modules.map(({ module, start, end }) => <section className="checker-module" key={module}>
-        {checkInputMode === "scan" && <article className={`checker-photo-card ${scanResults[module] ? "added" : ""}`}>
-          <span className="checker-photo-placeholder">{scanResults[module] ? <Check/> : <Camera/>}</span>
-          <div><strong>{t("photos.battery", { module })}</strong><small>{scanResults[module] ? t("recognition.recognized") : t("photos.required")}</small></div>
-          <button type="button" className={`button ${scanResults[module] ? "secondary" : "primary"}`} onClick={() => setCameraModule(module)}><Camera/> {scanResults[module] ? t("photos.rescan") : t("photos.scan", { module })}</button>
+        {checkInputMode === "scan" && <article className={`checker-photo-card ${scannedModules[module] ? "added" : ""}`}>
+          <span className="checker-photo-placeholder">{scannedModules[module] ? <Check/> : <Camera/>}</span>
+          <div><strong>{t("photos.battery", { module })}</strong><small>{scannedModules[module] ? t("recognition.recognized") : t("photos.required")}</small></div>
+          <button type="button" className={`button ${scannedModules[module] ? "secondary" : "primary"}`} onClick={() => setCameraModule(module)}><Camera/> {scannedModules[module] ? t("photos.rescan") : t("photos.scan", { module })}</button>
         </article>}
         <div className="checker-cell-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, end - start)}, minmax(0, 1fr))` }}>
           {cells.slice(start, end).map((value, offset) => { const index = start + offset; return <label key={index}><span>{index + 1}</span><input aria-label={`${t("common.cell")} ${index + 1}`} inputMode="decimal" type="number" step="0.01" min={minCellVoltage} max={maxCellVoltage} value={value} required onChange={event => updateCell(index, event.target.value)}/></label>; })}

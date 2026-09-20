@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, RefreshCw, X } from "lucide-react";
 import type { CheckerModule } from "@sbm/shared";
-import { evaluateStability, recognizeCheckerImage, type CheckerRecognitionResult, type ScannerState } from "../checker-recognition";
+import { cellsReadyForReview, evaluateStability, recognizeCheckerImage, type CheckerRecognitionResult, type ScannerState } from "../checker-recognition";
 import { useI18n } from "../i18n";
 
 const ANALYSIS_WIDTH = 540;
@@ -13,7 +13,7 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
   minCellVoltage: number;
   maxCellVoltage: number;
   onCancel: () => void;
-  onConfirm: (cells: number[]) => void;
+  onConfirm: (cells: Array<number | null>) => void;
 }) {
   const { t } = useI18n();
   const debugEnabled = import.meta.env.DEV && new URLSearchParams(window.location.search).has("scannerDebug");
@@ -21,7 +21,8 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
   const canvasRef = useRef<HTMLCanvasElement>(null); const streamRef = useRef<MediaStream | null>(null); const historyRef = useRef<CheckerRecognitionResult[]>([]);
   const [ready, setReady] = useState(false); const [error, setError] = useState("");
   const [scannerState, setScannerState] = useState<ScannerState>("red");
-  const [latest, setLatest] = useState<CheckerRecognitionResult | null>(null); const [observedCells, setObservedCells] = useState<Array<number | null> | null>(null); const [lockedCells, setLockedCells] = useState<number[] | null>(null);
+  const [latest, setLatest] = useState<CheckerRecognitionResult | null>(null); const [observedCells, setObservedCells] = useState<Array<number | null> | null>(null);
+  const [reviewCells, setReviewCells] = useState<number[] | null>(null); const [lockedCells, setLockedCells] = useState<number[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -38,7 +39,7 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
   }, [t]);
 
   useEffect(() => {
-    if (!ready || lockedCells || error) return;
+    if (!ready || lockedCells || reviewCells || error) return;
     let cancelled = false; let frameId = 0; let lastAttempt = 0;
     const analyze = (now: number) => {
       if (cancelled) return;
@@ -59,12 +60,18 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
             context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
             const sampledRoi = context.getImageData(0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
             const result = recognizeCheckerImage(sampledRoi, { min: minCellVoltage, max: maxCellVoltage }, debugEnabled ? {
-              onDebug: debug => { (window as unknown as { __checkerScannerDebug: unknown }).__checkerScannerDebug = { sampledRoi, ...debug, state: evaluateStability([...historyRef.current.slice(-4), debug.result]).state }; }
+              onDebug: debug => { (window as unknown as { __checkerScannerDebug: unknown }).__checkerScannerDebug = { sampledRoi, ...debug, state: evaluateStability([...historyRef.current, debug.result]).state }; }
             } : undefined);
-            historyRef.current = [...historyRef.current.slice(-4), result];
+            // Keep evidence for the whole scan. Different LCD rows can become
+            // readable several seconds apart, especially on multiplexed displays.
+            historyRef.current.push(result);
             const stability = evaluateStability(historyRef.current);
             setLatest(result); setObservedCells(stability.observedCells); setScannerState(stability.state);
             if (stability.stableCells) { setLockedCells(stability.stableCells); video.pause(); }
+            else {
+              const reviewable = cellsReadyForReview(stability, historyRef.current.length);
+              if (reviewable) { setReviewCells(reviewable); setScannerState("green"); video.pause(); }
+            }
           }
         }
       }
@@ -72,10 +79,12 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
     };
     frameId = requestAnimationFrame(analyze);
     return () => { cancelled = true; cancelAnimationFrame(frameId); };
-  }, [ready, lockedCells, error, minCellVoltage, maxCellVoltage, debugEnabled]);
+  }, [ready, lockedCells, reviewCells, error, minCellVoltage, maxCellVoltage, debugEnabled]);
 
-  const retry = () => { historyRef.current = []; setLatest(null); setObservedCells(null); setLockedCells(null); setScannerState("red"); setError(""); void videoRef.current?.play(); };
-  const visibleCells = lockedCells ?? observedCells ?? latest?.cells ?? Array(6).fill(null);
+  const retry = () => { historyRef.current = []; setLatest(null); setObservedCells(null); setReviewCells(null); setLockedCells(null); setScannerState("red"); setError(""); void videoRef.current?.play(); };
+  const acceptedCells = lockedCells ?? reviewCells;
+  const visibleCells = acceptedCells ?? observedCells ?? latest?.cells ?? Array(6).fill(null);
+  const hasObservedCells = visibleCells.some(cell => cell != null);
 
   return <div className="camera-overlay" role="dialog" aria-modal="true" aria-label={t("camera.title", { module })}>
     <header className="camera-header"><button type="button" className="camera-close" onClick={onCancel} aria-label={t("common.cancel")}><X/></button><div><strong>{t("camera.module", { module })}</strong><small>{t("camera.align")}</small></div></header>
@@ -85,8 +94,8 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
       {!ready && !error && <div className="camera-loading">{t("camera.starting")}</div>}
     </div>
     <footer className="camera-controls">
-      {error ? <p className="camera-error">{error}</p> : <><p>{lockedCells ? t("camera.stable") : t("camera.liveHint")}</p><div className="camera-recognized-cells">{visibleCells.map((cell, index) => <span key={index}><small>{index + 1}</small><strong>{cell == null ? "—" : cell.toFixed(2)}</strong></span>)}</div></>}
-      {lockedCells ? <div className="camera-review-actions"><button type="button" className="button secondary" onClick={retry}><RefreshCw/> {t("camera.retry")}</button><button type="button" className="button primary" onClick={() => onConfirm(lockedCells)}><Check/> {t("camera.confirm")}</button></div> : <button type="button" className="camera-text-button" onClick={onCancel}>{t("common.cancel")}</button>}
+      {error ? <p className="camera-error">{error}</p> : <><p>{lockedCells ? t("camera.stable") : reviewCells ? t("camera.reviewHint") : t("camera.liveHint")}</p><div className="camera-recognized-cells">{visibleCells.map((cell, index) => <span key={index}><small>{index + 1}</small><strong>{cell == null ? "—" : cell.toFixed(2)}</strong></span>)}</div></>}
+      {acceptedCells ? <div className="camera-review-actions"><button type="button" className="button secondary" onClick={retry}><RefreshCw/> {t("camera.retry")}</button><button type="button" className="button primary" onClick={() => onConfirm(acceptedCells)}><Check/> {lockedCells ? t("camera.confirm") : t("camera.reviewValues")}</button></div> : hasObservedCells ? <div className="camera-review-actions"><button type="button" className="button secondary" onClick={onCancel}>{t("common.cancel")}</button><button type="button" className="button primary" onClick={() => onConfirm(visibleCells)}><Check/> {t("camera.useCurrent")}</button></div> : <button type="button" className="camera-text-button" onClick={onCancel}>{t("common.cancel")}</button>}
     </footer>
   </div>;
 }

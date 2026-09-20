@@ -279,9 +279,12 @@
     "starting": "Starting camera…",
     "liveHint": "Place the display in the scan area. Exact corner alignment is not required.",
     "stable": "Stable reading locked. Confirm it or scan again.",
+    "reviewHint": "All values were found. Review them before continuing.",
     "state": { "red": "FINDING DISPLAY", "yellow": "HOLD STEADY", "green": "RECOGNIZED" },
     "retry": "Retry",
     "confirm": "Confirm",
+    "reviewValues": "Review values",
+    "useCurrent": "Use current values",
     "permissionError": "Could not open the camera. Allow camera access in your browser settings."
   },
   "batteryTypes": {
