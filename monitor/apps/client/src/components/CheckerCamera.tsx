@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, RefreshCw, X } from "lucide-react";
 import type { CheckerModule } from "@sbm/shared";
-import { cellsReadyForReview, evaluateStability, recognizeCheckerImage, type CheckerRecognitionResult, type ScannerState } from "../checker-recognition";
+import { cellsReadyForReview, evaluateStability, TemporalCheckerRecognizer, type CheckerRecognitionResult, type ScannerState } from "../checker-recognition";
 import { useI18n } from "../i18n";
 
 const ANALYSIS_WIDTH = 540;
@@ -19,6 +19,7 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
   const debugEnabled = import.meta.env.DEV && new URLSearchParams(window.location.search).has("scannerDebug");
   const videoRef = useRef<HTMLVideoElement>(null); const stageRef = useRef<HTMLDivElement>(null); const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); const streamRef = useRef<MediaStream | null>(null); const historyRef = useRef<CheckerRecognitionResult[]>([]);
+  const recognizerRef = useRef(new TemporalCheckerRecognizer());
   const [ready, setReady] = useState(false); const [error, setError] = useState("");
   const [scannerState, setScannerState] = useState<ScannerState>("red");
   const [latest, setLatest] = useState<CheckerRecognitionResult | null>(null); const [observedCells, setObservedCells] = useState<Array<number | null> | null>(null);
@@ -59,7 +60,7 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
           if (context && sourceWidth > 0 && sourceHeight > 0) {
             context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
             const sampledRoi = context.getImageData(0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
-            const result = recognizeCheckerImage(sampledRoi, { min: minCellVoltage, max: maxCellVoltage }, debugEnabled ? {
+            const result = recognizerRef.current.recognize(sampledRoi, { min: minCellVoltage, max: maxCellVoltage }, debugEnabled ? {
               onDebug: debug => { (window as unknown as { __checkerScannerDebug: unknown }).__checkerScannerDebug = { sampledRoi, ...debug, state: evaluateStability([...historyRef.current, debug.result]).state }; }
             } : undefined);
             // Keep evidence for the whole scan. Different LCD rows can become
@@ -81,7 +82,7 @@ export function CheckerCamera({ module, minCellVoltage, maxCellVoltage, onCancel
     return () => { cancelled = true; cancelAnimationFrame(frameId); };
   }, [ready, lockedCells, reviewCells, error, minCellVoltage, maxCellVoltage, debugEnabled]);
 
-  const retry = () => { historyRef.current = []; setLatest(null); setObservedCells(null); setReviewCells(null); setLockedCells(null); setScannerState("red"); setError(""); void videoRef.current?.play(); };
+  const retry = () => { historyRef.current = []; recognizerRef.current.reset(); setLatest(null); setObservedCells(null); setReviewCells(null); setLockedCells(null); setScannerState("red"); setError(""); void videoRef.current?.play(); };
   const acceptedCells = lockedCells ?? reviewCells;
   const visibleCells = acceptedCells ?? observedCells ?? latest?.cells ?? Array(6).fill(null);
   const hasObservedCells = visibleCells.some(cell => cell != null);

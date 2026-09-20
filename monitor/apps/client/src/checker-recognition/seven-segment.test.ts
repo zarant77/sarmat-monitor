@@ -21,9 +21,10 @@ function drawDigit(mask: Uint8Array, canvasWidth: number, x: number, y: number, 
   if (digit === 1) for (let offset = 0; offset < 9; offset += 1) mask[(y + 5 + offset) * canvasWidth + x + width - thickness - offset] = 1;
 }
 
-function checkerMask(includeFirstDecimal = true) {
+function checkerMask(includeFirstDecimal = true, visibleRows = Array(6).fill(true)) {
   const width = 340; const height = 600; const mask = new Uint8Array(width * height);
   for (let row = 0; row < 6; row += 1) {
+    if (!visibleRows[row]) continue;
     // Mirrors the photographed checker: lower rows drift upward relative to a
     // simplistic seven-equal-bands layout, so row locations must be detected.
     const top = Math.round((.07 + row * .136) * height - 28);
@@ -44,5 +45,10 @@ describe("seven-segment row layout", () => {
     const { mask, width, height } = checkerMask(false); const cells = readCellRows(mask, width, height);
     expect(cells[0].voltage).toBe(4.2);
     expect(cells[0].score).toBe(cells[2].score);
+  });
+
+  it("does not shift later cell numbers when one row is invisible", () => {
+    const { mask, width, height } = checkerMask(true, [true, false, true, true, true, true]);
+    expect(readCellRows(mask, width, height).map(cell => cell.voltage)).toEqual([4.2, null, 4.2, 4.2, 4.2, 4.2]);
   });
 });

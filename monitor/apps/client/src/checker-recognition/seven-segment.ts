@@ -36,10 +36,21 @@ export function readCellRows(lcdMask: Uint8Array, width: number, height: number)
     .filter(run => {
       const rowHeight = run.end - run.start + 1;
       return rowHeight >= height * .025 && rowHeight <= height * .14 && run.end < height * .86;
-    }).sort((a, b) => a.start - b.start).slice(0, 6);
+    }).sort((a, b) => a.start - b.start);
+  // The checker has a fixed six-row layout. Assign every detected band to its
+  // expected slot instead of shifting all following cells when one row is faint.
+  const assignedRows: Array<typeof detectedRows[number] | null> = Array(6).fill(null);
+  const assignedDistances = Array(6).fill(Number.POSITIVE_INFINITY);
+  detectedRows.forEach(row => {
+    const center = (row.start + row.end) / 2 / height;
+    const slot = Math.round((center - .072) / .136);
+    if (slot < 0 || slot >= 6) return;
+    const distance = Math.abs(center - (.072 + slot * .136));
+    if (distance <= .065 && distance < assignedDistances[slot]) { assignedRows[slot] = row; assignedDistances[slot] = distance; }
+  });
 
   for (let rowIndex = 0; rowIndex < 6; rowIndex += 1) {
-    const detectedRow = detectedRows.length === 6 ? detectedRows[rowIndex] : null;
+    const detectedRow = assignedRows[rowIndex];
     const padding = detectedRow ? Math.max(2, Math.round((detectedRow.end - detectedRow.start + 1) * .08)) : 0;
     const top = detectedRow ? Math.max(0, detectedRow.start - padding) : Math.round((.012 + rowIndex * .136) * height);
     const bottom = detectedRow ? Math.min(height, detectedRow.end + padding + 1) : Math.round((.132 + rowIndex * .136) * height);
