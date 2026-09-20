@@ -6,6 +6,13 @@ import { crews, groups, sessions, users } from "./db/schema.js";
 
 export const SESSION_COOKIE = "sbm_session";
 const SESSION_DAYS = 7;
+const production = process.env.NODE_ENV === "production";
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: production ? "none" as const : "strict" as const,
+  secure: production,
+  path: "/"
+};
 export type UserRole = "SUPER_ADMIN" | "GROUP_ADMIN" | "CREW";
 
 export interface Actor {
@@ -101,13 +108,13 @@ export async function createSession(userId: string, reply: FastifyReply): Promis
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   await db.insert(sessions).values({ userId, tokenHash: hashSessionToken(token), expiresAt });
-  reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", expires: expiresAt });
+  reply.setCookie(SESSION_COOKIE, token, { ...sessionCookieOptions, expires: expiresAt });
 }
 
 export async function revokeSession(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const token = request.cookies[SESSION_COOKIE];
   if (token) await db.delete(sessions).where(eq(sessions.tokenHash, hashSessionToken(token)));
-  reply.clearCookie(SESSION_COOKIE, { path: "/" });
+  reply.clearCookie(SESSION_COOKIE, sessionCookieOptions);
 }
 
 export function publicActor(actor: Actor) {

@@ -56,7 +56,8 @@ async function requireBattery(id: string, actor: Actor) {
 export async function buildApp(options: { rebuildCycleHistory?: (batteryId: string, thresholds: ChargeStateThresholds) => Promise<void> } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
   const rebuildCycleHistory = options.rebuildCycleHistory ?? rebuildInferredCycleEvents;
-  await app.register(cors, { origin: process.env.CLIENT_ORIGIN?.split(",") ?? ["http://localhost:5173"], credentials: true });
+  const clientOrigins = process.env.CLIENT_ORIGIN?.split(",").map(origin => origin.trim()).filter(Boolean) ?? ["http://localhost:5173", "https://localhost:5173"];
+  await app.register(cors, { origin: clientOrigins, credentials: true });
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 4096 } });
   app.decorateRequest("actor", null);

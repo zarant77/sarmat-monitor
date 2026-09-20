@@ -8,14 +8,24 @@
   ],
   "scripts": {
     "start": "npm --prefix monitor start",
+    "start:server": "npm --prefix monitor start",
+    "start:client": "serve -s monitor/apps/client/dist -l ${PORT:-3000}",
     "dev": "npm --prefix monitor run dev",
+    "dev:server": "npm --prefix monitor run dev:server",
+    "dev:client": "npm --prefix monitor run dev:client",
     "build": "npm --prefix monitor run build",
+    "build:server": "npm --prefix monitor run build -w @sbm/shared && npm --prefix monitor run build -w @sbm/server",
+    "build:client": "npm --prefix monitor run build -w @sbm/shared && npm --prefix monitor run build -w @sbm/client",
     "typecheck": "npm --prefix monitor run typecheck",
     "test": "npm --prefix monitor test",
+    "db:generate": "npm --prefix monitor run db:generate",
     "db:migrate": "npm --prefix monitor run db:migrate",
     "db:seed": "npm --prefix monitor run db:seed"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "serve": "^14.2.6"
   }
 }
