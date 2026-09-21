@@ -13,9 +13,17 @@ const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  const me = useQuery({ queryKey: ["auth", "me"], queryFn: api.me, retry: false });
+  const me = useQuery({ queryKey: ["auth", "me"], queryFn: async () => {
+    const user = await api.me();
+    if (user.role === "CREW") { await api.logout(); throw new Error("Crew accounts use Sarmat Crew"); }
+    return user;
+  }, retry: false });
   const loginMutation = useMutation({ mutationFn: ({ username, password }: { username: string; password: string }) => api.login(username, password) });
-  const login = async (username: string, password: string) => { const user = await loginMutation.mutateAsync({ username, password }); qc.setQueryData(["auth", "me"], user); return user; };
+  const login = async (username: string, password: string) => {
+    const user = await loginMutation.mutateAsync({ username, password });
+    if (user.role === "CREW") { await api.logout(); throw new Error("Crew accounts use Sarmat Crew"); }
+    qc.setQueryData(["auth", "me"], user); return user;
+  };
   const logout = async () => { await api.logout(); qc.clear(); window.location.assign("/login"); };
   return <AuthContext.Provider value={{ user: me.data ?? null, loading: me.isLoading, login, logout }}>{children}</AuthContext.Provider>;
 }

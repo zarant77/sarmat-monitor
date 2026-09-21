@@ -15,8 +15,8 @@ Sarmat Monitor is a local-first operational web application for monitoring UAV s
 - Live MissionPlanner telemetry for group-scoped administrators over an authenticated WebSocket endpoint
 - Reusable battery-type catalog for capacity, voltage range, cell count, and chemistry
 - Automatic English/Ukrainian client localization based on the browser locale, with English fallback
-- Realtime, browser-side checker scanning for physical battery modules A and B
-- Deterministic seven-segment recognition with a confirm/correct step before saving
+- Admin-only web interface; crew accounts use the native Sarmat Crew Android app
+- Native checker scanning and measurement recording from Sarmat Crew
 - Demo data and server-side tests for battery health and authorization rules
 
 ## Local setup on macOS
@@ -127,15 +127,13 @@ The battery page merges measurements, inferred charge/discharge transitions, man
 
 Battery specifications are normalized into reusable battery types. A type owns its name, capacity, minimum/maximum pack voltage, cell count, and chemistry. Individual batteries keep only their field name, serial number, selected type, operational state, notes, and crew assignment. Types that are already assigned to batteries cannot be deleted.
 
-The client is a browser SPA with no Node-only dependencies. This keeps the UI suitable for a later Capacitor Android wrapper; native packaging and hardware checker integration are intentionally outside this iteration.
+The browser client is an administrator-only SPA. `SUPER_ADMIN` and `GROUP_ADMIN` accounts manage the organization, battery fleet, corrections, telemetry and settings. Crew accounts are rejected by the web login and use the native Sarmat Crew Android application.
 
 ### Checker camera scanning
 
-The battery-check form scans Battery A and Battery B separately with the rear browser camera. The large guide is a forgiving search area rather than an exact template. The browser samples it at 540×800 pixels, locates the LCD inside it, estimates its rotation, normalizes the detected display, and runs the deterministic seven-segment recognizer about four times per second. A dynamic outline shows the LCD that was actually detected.
+Operational checker scanning has moved to `../sarmat-crew`. The Android application signs in with a crew account, loads only that crew's active batteries, scans physical modules A and B, allows every recognized voltage to be corrected, and submits the resulting cell array to the same measurement API. The displayed checker Total is excluded from analysis.
 
-Red, yellow, and green guide states indicate missing/invalid, partial/unstable, and stable readings. A result is locked only when the same six valid cell values occur in at least three of the last five attempts. The operator can retry, confirm, and edit every voltage before saving. The displayed checker Total is excluded from analysis.
-
-Recognition uses only TypeScript, Canvas, and ImageData in the browser. It works without a server connection and never uploads or stores camera frames. Browser camera access requires a secure context: use HTTPS on deployed/mobile devices (`localhost` remains permitted for desktop development).
+The web application no longer exposes fleet or measurement-entry screens to crew accounts. Administrators retain battery overview, history, correction, transfer and configuration tools.
 
 The server receives only cell voltages. It independently validates the count and battery-type range, then recalculates totals, min/max, delta, charge, health, and inferred charge/discharge transitions before persisting the measurement.
 
@@ -149,7 +147,7 @@ The server derives scope from the authenticated session—client-supplied group 
 
 - `SUPER_ADMIN` is global and manages groups, group administrators, all crews, all batteries, cross-group transfers, battery types, and global settings.
 - `GROUP_ADMIN` is assigned to one group and can manage that group's crews, reserve designation, crew credentials, batteries, measurements, and transfers between crews in that same group.
-- `CREW` is assigned to one crew and only sees that crew's operational batteries, checker workflow, measurements, and history.
+- `CREW` is assigned to one crew and accesses only that crew's operational batteries and measurement endpoints through Sarmat Crew; it cannot enter the browser UI.
 
 All direct resource lookups resolve the owning crew and group before returning data. Cross-group access through altered REST IDs is returned as not found. A group administrator cannot transfer a battery outside their group; a super administrator can. Transfers only change the battery's current crew and append a transfer record, so measurements, cycles, checker data, and previous transfers remain intact. Disabled users, crews, and groups are checked both during login and on protected requests.
 
@@ -165,7 +163,7 @@ Administrators can use `/admin` to:
 - correct measurements while retaining correction metadata;
 - edit global health and charged/discharged state thresholds (`SUPER_ADMIN` only).
 
-Crew users are sent directly to their own operational fleet. They do not see or supply a crew selector.
+Crew users are rejected by the browser client after authentication and the session is immediately revoked. Their operational workflow is available only in Sarmat Crew.
 
 ## MissionPlanner telemetry
 

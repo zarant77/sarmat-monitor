@@ -44,6 +44,13 @@ coverage.*
 .idea/
 .vscode/
 *.code-workspace
+*.iml
+
+# Android / Gradle
+.gradle/
+local.properties
+captures/
+**/build/
 
 # OS and temporary files
 .DS_Store
