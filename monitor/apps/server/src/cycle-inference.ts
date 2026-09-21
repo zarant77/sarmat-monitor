@@ -5,6 +5,8 @@ import { cycleEvents, measurements } from "./db/schema.js";
 export interface ChargeStateThresholds {
   chargedThresholdPercent: number;
   dischargedThresholdPercent: number;
+  /** Minimum consecutive-measurement change that represents a real event. */
+  chargeEventDeadbandPercent?: number;
 }
 
 export interface ChargeMeasurement {
@@ -31,13 +33,21 @@ function stableState(chargePercent: number | null, thresholds: ChargeStateThresh
 
 export function inferCycleEvents(history: ChargeMeasurement[], thresholds: ChargeStateThresholds): InferredCycleEvent[] {
   const inferred: InferredCycleEvent[] = [];
+  const ordered = [...history].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime());
+  const deadband = thresholds.chargeEventDeadbandPercent ?? 2;
   let previousStable: StableChargeState | null = null;
-  for (const measurement of [...history].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime())) {
-    const current = stableState(measurement.chargePercent, thresholds);
-    if (!current) continue;
-    if (previousStable === "charged" && current === "discharged") inferred.push({ sourceMeasurementId: measurement.id, type: "discharge", cycleDelta: 0, occurredAt: measurement.measuredAt });
-    if (previousStable === "discharged" && current === "charged") inferred.push({ sourceMeasurementId: measurement.id, type: "charge", cycleDelta: 1, occurredAt: measurement.measuredAt });
-    previousStable = current;
+  let previous: ChargeMeasurement | null = null;
+  for (const measurement of ordered) {
+    const currentStable = stableState(measurement.chargePercent, thresholds);
+    if (previous?.chargePercent != null && measurement.chargePercent != null) {
+      const change = measurement.chargePercent - previous.chargePercent;
+      if (Math.abs(change) >= deadband) {
+        const completesCycle = change > 0 && previousStable === "discharged" && currentStable === "charged";
+        inferred.push({ sourceMeasurementId: measurement.id, type: change > 0 ? "charge" : "discharge", cycleDelta: completesCycle ? 1 : 0, occurredAt: measurement.measuredAt });
+      }
+    }
+    if (currentStable) previousStable = currentStable;
+    previous = measurement;
   }
   return inferred;
 }

@@ -16,6 +16,7 @@ import { calculateCellHealth } from "./health.js";
 import { calculateMeasurementPreview } from "./measurement-preview.js";
 import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertGroupAdministrator, assertSuperAdmin, assertTransferAccess, createSession, effectiveCrewId, isAccountEnabled, loadActor, publicActor, revokeSession, type Actor } from "./auth.js";
 import { rebuildInferredCycleEvents, type ChargeStateThresholds } from "./cycle-inference.js";
+import { nextActiveBatteryId } from "./active-battery.js";
 import { TELEMETRY_THRESHOLDS, TelemetryHub, type TelemetryCrew } from "./telemetry.js";
 
 declare module "fastify" { interface FastifyRequest { telemetryCrew: TelemetryCrew | null } }
@@ -363,6 +364,24 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     };
   });
 
+  app.post<{ Params: { id: string } }>("/api/batteries/:id/toggle-active", async request => {
+    const target = await requireBattery(request.params.id, request.actor!);
+    return db.transaction(async tx => {
+      // Serialize toggles for this crew; the partial unique index is the final invariant guard.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${target.crewId}))`);
+      const [current] = await tx.select({ id: batteries.id }).from(batteries)
+        .where(and(eq(batteries.crewId, target.crewId), sql`${batteries.activeSince} is not null`)).limit(1);
+      const nextId = nextActiveBatteryId(current?.id ?? null, target.id);
+      await tx.update(batteries).set({ activeSince: null }).where(eq(batteries.crewId, target.crewId));
+      let activeSince: Date | null = null;
+      if (nextId) {
+        activeSince = new Date();
+        await tx.update(batteries).set({ activeSince }).where(eq(batteries.id, nextId));
+      }
+      return { activeBatteryId: nextId, activeSince: activeSince ? iso(activeSince) : null };
+    });
+  });
+
   app.patch<{ Params: { id: string } }>("/api/batteries/:id", async request => {
     assertGroupAdministrator(request.actor);
     await requireBattery(request.params.id, request.actor!);
@@ -386,7 +405,7 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     assertTransferAccess(request.actor!, current.groupId, targetCrew.groupId);
     if (current.crewId === data.crewId) throw Object.assign(new Error("Battery already belongs to this crew"), { statusCode: 400 });
     return db.transaction(async tx => {
-      await tx.update(batteries).set({ crewId: data.crewId, updatedAt: new Date() }).where(eq(batteries.id, current.id));
+      await tx.update(batteries).set({ crewId: data.crewId, activeSince: null, updatedAt: new Date() }).where(eq(batteries.id, current.id));
       const [event] = await tx.insert(transfers).values({ batteryId: current.id, fromCrewId: current.crewId, toCrewId: data.crewId, notes: data.notes ?? "" }).returning();
       return { ...event, transferredAt: iso(event.transferredAt) };
     });
@@ -412,7 +431,7 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
       temperatureC: null, health: result.health,
       warningThresholdV: warning.toString(), dangerThresholdV: danger.toString(), notes: data.notes
     }).returning();
-    await rebuildCycleHistory(battery.id, { chargedThresholdPercent: configuration.chargedThresholdPercent, dischargedThresholdPercent: configuration.dischargedThresholdPercent });
+    await rebuildCycleHistory(battery.id, { chargedThresholdPercent: configuration.chargedThresholdPercent, dischargedThresholdPercent: configuration.dischargedThresholdPercent, chargeEventDeadbandPercent: configuration.chargeEventDeadbandPercent });
     return reply.status(201).send(mapMeasurement(measurement));
   });
 
@@ -454,14 +473,14 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
       correctedAt: new Date(), correctedByUserId: request.actor!.userId
     }).where(eq(measurements.id, current.id)).returning();
     const [configuration] = await db.select().from(settings).where(eq(settings.id, 1));
-    await rebuildCycleHistory(battery.id, { chargedThresholdPercent: configuration.chargedThresholdPercent, dischargedThresholdPercent: configuration.dischargedThresholdPercent });
+    await rebuildCycleHistory(battery.id, { chargedThresholdPercent: configuration.chargedThresholdPercent, dischargedThresholdPercent: configuration.dischargedThresholdPercent, chargeEventDeadbandPercent: configuration.chargeEventDeadbandPercent });
     return mapMeasurement(updated);
   });
 
   app.post<{ Params: { id: string } }>("/api/admin/batteries/:id/archive", async request => {
     assertGroupAdministrator(request.actor);
     const battery = await requireBattery(request.params.id, request.actor!);
-    const [updated] = await db.update(batteries).set({ state: "retired", archivedAt: new Date(), updatedAt: new Date() }).where(eq(batteries.id, battery.id)).returning();
+    const [updated] = await db.update(batteries).set({ state: "retired", activeSince: null, archivedAt: new Date(), updatedAt: new Date() }).where(eq(batteries.id, battery.id)).returning();
     return { ...updated, createdAt: iso(updated.createdAt), updatedAt: iso(updated.updatedAt), archivedAt: updated.archivedAt ? iso(updated.archivedAt) : null };
   });
 
@@ -474,16 +493,16 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
 
   app.get("/api/settings/thresholds", async () => {
     const [row] = await db.select().from(settings).where(eq(settings.id, 1));
-    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent };
+    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
   });
 
   app.put("/api/settings/thresholds", async request => {
     assertSuperAdmin(request.actor);
     const data = thresholdInputSchema.parse(request.body);
-    const [row] = await db.update(settings).set({ warningCellDeltaV: data.warningCellDeltaV.toString(), dangerCellDeltaV: data.dangerCellDeltaV.toString(), chargedThresholdPercent: data.chargedThresholdPercent, dischargedThresholdPercent: data.dischargedThresholdPercent, updatedAt: new Date() }).where(eq(settings.id, 1)).returning();
+    const [row] = await db.update(settings).set({ warningCellDeltaV: data.warningCellDeltaV.toString(), dangerCellDeltaV: data.dangerCellDeltaV.toString(), chargedThresholdPercent: data.chargedThresholdPercent, dischargedThresholdPercent: data.dischargedThresholdPercent, chargeEventDeadbandPercent: data.chargeEventDeadbandPercent, updatedAt: new Date() }).where(eq(settings.id, 1)).returning();
     const batteryRows = await db.select({ id: batteries.id }).from(batteries);
-    for (const battery of batteryRows) await rebuildCycleHistory(battery.id, { chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent });
-    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent };
+    for (const battery of batteryRows) await rebuildCycleHistory(battery.id, { chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent });
+    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
   });
 
   return app;

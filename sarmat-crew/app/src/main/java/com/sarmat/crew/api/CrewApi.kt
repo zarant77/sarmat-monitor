@@ -62,13 +62,34 @@ class CrewApi(private val preferences: SharedPreferences) {
                 maxVoltage = item.getDouble("maxVoltage"),
                 cellCount = item.getInt("cellCount"),
                 state = item.getString("state"),
+                chemistry = item.getString("chemistry"),
                 cycleCount = item.getInt("cycleCount"),
+                activeSince = item.optStringOrNull("activeSince"),
+                latestMeasuredAt = latest?.optStringOrNull("measuredAt"),
+                latestCells = latest?.optJSONArray("cellVoltages")?.let { cells -> (0 until cells.length()).map(cells::getDouble) },
                 latestTotalVoltage = latest?.optDoubleOrNull("totalVoltage"),
                 latestChargePercent = latest?.optIntOrNull("chargePercent"),
                 latestDelta = latest?.optDoubleOrNull("cellDelta"),
                 latestHealth = latest?.optString("health"),
             )
         }
+    }
+
+    fun toggleActive(batteryId: String) {
+        requestObject("POST", "/api/batteries/$batteryId/toggle-active", JSONObject())
+    }
+
+    fun previewMeasurement(batteryId: String, cells: List<Double>): MeasurementPreview {
+        val module = { values: List<Double> -> JSONObject().put("cells", JSONArray().also { array -> values.forEach(array::put) }) }
+        val json = requestObject("POST", "/api/batteries/$batteryId/measurement-preview", JSONObject().put("A", module(cells.take(6))).put("B", module(cells.drop(6))))
+        return MeasurementPreview(
+            totalVoltage = json.getDouble("combinedTotalVoltage"),
+            minCellVoltage = json.getDouble("minCellVoltage"),
+            maxCellVoltage = json.getDouble("maxCellVoltage"),
+            cellDelta = json.getDouble("cellDelta"),
+            chargePercent = json.getInt("chargePercent"),
+            health = json.getString("health"),
+        )
     }
 
     fun saveMeasurement(batteryId: String, cells: List<Double>, notes: String) {
@@ -135,6 +156,7 @@ class CrewApi(private val preferences: SharedPreferences) {
 
     private fun JSONObject.optDoubleOrNull(name: String): Double? = if (isNull(name) || !has(name)) null else getDouble(name)
     private fun JSONObject.optIntOrNull(name: String): Int? = if (isNull(name) || !has(name)) null else getInt(name)
+    private fun JSONObject.optStringOrNull(name: String): String? = if (isNull(name) || !has(name)) null else getString(name)
 
     companion object {
         private const val KEY_BASE_URL = "server_url"

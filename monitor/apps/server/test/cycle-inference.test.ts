@@ -21,19 +21,44 @@ describe("measurement-derived cycle history", () => {
     expect(inferCycleEvents([
       measurement("charged-1", 94, 0), measurement("charged-2", 99, 5),
       measurement("discharged-1", 19, 10), measurement("discharged-2", 12, 15)
-    ], thresholds)).toEqual([expect.objectContaining({ sourceMeasurementId: "discharged-1", type: "discharge" })]);
+    ], thresholds)).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "charged-2", type: "charge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "discharged-1", type: "discharge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "discharged-2", type: "discharge", cycleDelta: 0 })
+    ]);
+  });
+
+  it("records top-ups and partial discharges from consecutive measurements", () => {
+    expect(inferCycleEvents([
+      measurement("before-top-up", 98, 0), measurement("after-top-up", 100, 5), measurement("after-flight", 70, 10)
+    ], thresholds)).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "after-top-up", type: "charge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "after-flight", type: "discharge", cycleDelta: 0 })
+    ]);
+  });
+
+  it("ignores measurement noise below the configured deadband", () => {
+    const noisy = [measurement("a", 98, 0), measurement("b", 99, 5), measurement("c", 98, 10)];
+    expect(inferCycleEvents(noisy, { ...thresholds, chargeEventDeadbandPercent: 2 })).toEqual([]);
   });
 
   it("ignores intermediate readings without losing the last stable state", () => {
     const events = inferCycleEvents([
       measurement("discharged", 10, 0), measurement("partial-1", 35, 5), measurement("partial-2", 72, 10), measurement("charged", 92, 15), measurement("charged-again", 96, 20)
     ], thresholds);
-    expect(events).toEqual([expect.objectContaining({ sourceMeasurementId: "charged", type: "charge", cycleDelta: 1 })]);
+    expect(events).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "partial-1", type: "charge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "partial-2", type: "charge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "charged", type: "charge", cycleDelta: 1 }),
+      expect.objectContaining({ sourceMeasurementId: "charged-again", type: "charge", cycleDelta: 0 })
+    ]);
   });
 
   it("uses configurable boundaries", () => {
     const history = [measurement("first", 25, 0), measurement("second", 85, 10)];
-    expect(inferCycleEvents(history, thresholds)).toEqual([]);
+    expect(inferCycleEvents(history, thresholds)).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "second", type: "charge", cycleDelta: 0 })
+    ]);
     expect(inferCycleEvents(history, { chargedThresholdPercent: 80, dischargedThresholdPercent: 30 })).toEqual([
       expect.objectContaining({ sourceMeasurementId: "second", type: "charge", cycleDelta: 1 })
     ]);

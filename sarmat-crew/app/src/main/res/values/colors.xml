@@ -3,6 +3,8 @@
     <color name="black">#020705</color>
     <color name="surface">#07110D</color>
     <color name="surface_raised">#0D1914</color>
+    <color name="surface_active">#18311E</color>
+    <color name="lime_dark">#20390F</color>
     <color name="line">#2C4037</color>
     <color name="lime">#B9F451</color>
     <color name="text_primary">#EDF7F2</color>

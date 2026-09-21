@@ -7,11 +7,12 @@
     <string name="username">Логін</string>
     <string name="password">Пароль</string>
     <string name="sign_in">Увійти</string>
-    <string name="batteries_title">МОЇ БАТАРЕЇ</string>
+    <string name="batteries_title">SARMAT CREW</string>
     <string name="refresh">Оновити</string>
     <string name="sign_out">Вийти</string>
     <string name="record_measurement">Записати вимірювання</string>
     <string name="scan_module">Сканувати модуль %1$s</string>
+    <string name="manual_entry">Ввести вручну</string>
     <string name="save_measurement">Зберегти вимірювання</string>
     <string name="notes">Примітка</string>
     <string name="use_values">Використати значення</string>

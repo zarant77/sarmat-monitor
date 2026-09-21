@@ -318,6 +318,8 @@
     "chargedHelp": "At or above this percentage the battery is considered fully charged",
     "discharged": "Battery discharged",
     "dischargedHelp": "At or below this percentage battery usage is detected",
+    "deadband": "Minimum charge change",
+    "deadbandHelp": "Smaller changes between measurements are treated as noise",
     "historyNote": "Charge thresholds rebuild automatically inferred cycles without changing measurements.",
     "saved": "Saved",
     "save": "Save thresholds"

@@ -75,10 +75,14 @@ export const batteries = pgTable("batteries", {
   serialNumber: varchar("serial_number", { length: 100 }).notNull().unique(),
   label: varchar("label", { length: 100 }).notNull(),
   state: batteryStateEnum("state").default("ready").notNull(),
+  activeSince: timestamp("active_since", { withTimezone: true }),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   notes: text("notes").default("").notNull(),
   ...timestamps
-}, table => [index("batteries_type_idx").on(table.typeId)]);
+}, table => [
+  index("batteries_type_idx").on(table.typeId),
+  uniqueIndex("batteries_one_active_per_crew").on(table.crewId).where(sql`${table.activeSince} is not null`)
+]);
 
 export const measurements = pgTable("measurements", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -126,5 +130,6 @@ export const settings = pgTable("settings", {
   dangerCellDeltaV: numeric("danger_cell_delta_v", { precision: 6, scale: 3 }).default("0.200").notNull(),
   chargedThresholdPercent: integer("charged_threshold_percent").default(90).notNull(),
   dischargedThresholdPercent: integer("discharged_threshold_percent").default(50).notNull(),
+  chargeEventDeadbandPercent: integer("charge_event_deadband_percent").default(2).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });

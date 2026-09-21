@@ -100,7 +100,8 @@ export const thresholdInputSchema = z.object({
   warningCellDeltaV: z.coerce.number().positive().max(2),
   dangerCellDeltaV: z.coerce.number().positive().max(3),
   chargedThresholdPercent: z.coerce.number().int().min(51).max(100),
-  dischargedThresholdPercent: z.coerce.number().int().min(0).max(50)
+  dischargedThresholdPercent: z.coerce.number().int().min(0).max(50),
+  chargeEventDeadbandPercent: z.coerce.number().int().min(1).max(20)
 }).superRefine((value, context) => {
   if (value.dangerCellDeltaV <= value.warningCellDeltaV) context.addIssue({ code: "custom", message: "Danger threshold must be greater than warning threshold", path: ["dangerCellDeltaV"] });
   if (value.chargedThresholdPercent <= value.dischargedThresholdPercent) context.addIssue({ code: "custom", message: "Charged threshold must be greater than discharged threshold", path: ["chargedThresholdPercent"] });
@@ -190,12 +191,13 @@ export interface Battery {
   id: string; crewId: string; groupId: string; groupName: string; crewNumber: number; crewName: string; crewColor: string; typeId: string; typeName: string; serialNumber: string;
   label: string; capacityAh: number; minVoltage: number; maxVoltage: number; cellCount: number; chemistry: string; state: BatteryState;
   notes: string; cycleCount: number; latestMeasurement: Measurement | null;
+  activeSince: string | null;
   archivedAt?: string | null; createdAt: string; updatedAt: string;
 }
 export interface BatteryDetail extends Battery {
   measurements: Measurement[]; cycleEvents: CycleEvent[]; transfers: TransferEvent[];
 }
-export interface Thresholds { warningCellDeltaV: number; dangerCellDeltaV: number; chargedThresholdPercent: number; dischargedThresholdPercent: number }
+export interface Thresholds { warningCellDeltaV: number; dangerCellDeltaV: number; chargedThresholdPercent: number; dischargedThresholdPercent: number; chargeEventDeadbandPercent: number }
 export type TelemetrySnapshot = [status: number, ageMs: number, sequence: number, voltage: number | null, current: number | null, satellites: number | null, hdop: number | null, heading: number | null, altitude: number | null, linkRssi: number | null, flags: number];
 export interface TelemetryThresholds {
   voltage: { goodMin: number; normalMin: number };

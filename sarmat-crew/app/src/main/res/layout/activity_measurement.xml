@@ -1,97 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/black">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="18dp">
-
-        <Button
-            android:id="@+id/backToBatteriesButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="@string/back" />
-
-        <TextView
-            android:id="@+id/batteryTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/lime"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/batteryMeta"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="18dp"
-            android:textColor="@color/text_muted" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/scanAButton"
-                android:layout_width="0dp"
-                android:layout_height="52dp"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:text="@string/scan_module" />
-
-            <Button
-                android:id="@+id/scanBButton"
-                android:layout_width="0dp"
-                android:layout_height="52dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:text="@string/scan_module" />
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/black" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+        <TextView android:id="@+id/backToBatteriesButton" android:layout_width="56dp" android:layout_height="48dp" android:gravity="center_vertical" android:text="←" android:textColor="@color/text_primary" android:textSize="28sp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <TextView android:id="@+id/batteryTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@color/text_primary" android:textSize="28sp" android:textStyle="bold" />
+            <TextView android:id="@+id/detailCharge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/lime" android:textSize="28sp" android:textStyle="bold" />
         </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/measurementCells"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="vertical" />
-
-        <TextView
-            android:id="@+id/measurementSummary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="@color/text_primary"
-            android:textSize="17sp" />
-
-        <EditText
-            android:id="@+id/notesInput"
-            android:layout_width="match_parent"
-            android:layout_height="96dp"
-            android:layout_marginTop="14dp"
-            android:gravity="top"
-            android:hint="@string/notes"
-            android:inputType="textMultiLine"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_muted" />
-
-        <TextView
-            android:id="@+id/measurementError"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:textColor="@color/scanner_red" />
-
-        <Button
-            android:id="@+id/saveMeasurementButton"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="14dp"
-            android:text="@string/save_measurement" />
+        <TextView android:id="@+id/batteryStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/text_primary" android:textSize="17sp" />
+        <TextView android:id="@+id/batteryMeta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="20dp" android:textColor="@color/text_muted" android:textSize="14sp" />
+        <Button android:id="@+id/scanAButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/scan_module" />
+        <Button android:id="@+id/scanBButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="8dp" android:text="@string/scan_module" />
+        <Button android:id="@+id/manualEntryButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="8dp" android:text="@string/manual_entry" />
+        <LinearLayout android:id="@+id/measurementCells" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:orientation="vertical" />
+        <LinearLayout android:id="@+id/manualEditor" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/cell_background" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+            <TextView android:id="@+id/selectedCellTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="@color/text_muted" android:textSize="14sp" />
+            <TextView android:id="@+id/selectedCellValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:paddingVertical="8dp" android:textColor="@color/text_primary" android:textSize="30sp" android:textStyle="bold" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <Button android:id="@+id/decreaseVoltage" android:layout_width="52dp" android:layout_height="52dp" android:text="−" android:textSize="22sp" />
+                <SeekBar android:id="@+id/voltageSlider" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" />
+                <Button android:id="@+id/increaseVoltage" android:layout_width="52dp" android:layout_height="52dp" android:text="+" android:textSize="22sp" />
+            </LinearLayout>
+        </LinearLayout>
+        <TextView android:id="@+id/measurementSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/cell_background" android:padding="16dp" android:textColor="@color/text_primary" android:textSize="16sp" android:lineSpacingExtra="4dp" />
+        <EditText android:id="@+id/notesInput" android:layout_width="match_parent" android:layout_height="64dp" android:layout_marginTop="10dp" android:hint="@string/notes" android:inputType="text" android:textColor="@color/text_primary" android:textColorHint="@color/text_muted" />
+        <TextView android:id="@+id/measurementError" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/scanner_red" />
+        <Button android:id="@+id/saveMeasurementButton" android:layout_width="match_parent" android:layout_height="60dp" android:layout_marginTop="10dp" android:text="@string/save_measurement" />
     </LinearLayout>
 </ScrollView>
