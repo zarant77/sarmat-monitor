@@ -16,6 +16,7 @@ namespace SarmatPlugin
     {
         private PluginRuntime runtime;
         private object flightData;
+        private object sarmatVideoStream;
         private SarmatPlugin.UI.SarmatPanel panel;
         private TabControl hostTabs;
         private TabPage sarmatTab;
@@ -86,6 +87,7 @@ namespace SarmatPlugin
                 runtime = new PluginRuntime(() => Host.cs, () => Host.comPort?.packetcount);
                 runtime.TakeoffWarningChanged += SetTakeoffWarningVisible;
                 runtime.VehicleConnected += RestoreVideoOnConnect;
+                runtime.CameraSettingsChanged += ApplyCameraSettings;
                 runtime.VehicleConnected += ReconnectJoystickOnConnect;
                 runtime.VehicleConnected += SaveVehicleConnectionOnConnect;
                 runtime.VehicleReconnectRequested += ReconnectVehicle;
@@ -272,6 +274,7 @@ namespace SarmatPlugin
             {
                 runtime.TakeoffWarningChanged -= SetTakeoffWarningVisible;
                 runtime.VehicleConnected -= RestoreVideoOnConnect;
+                runtime.CameraSettingsChanged -= ApplyCameraSettings;
                 runtime.VehicleConnected -= ReconnectJoystickOnConnect;
                 runtime.VehicleConnected -= SaveVehicleConnectionOnConnect;
                 runtime.VehicleReconnectRequested -= ReconnectVehicle;
@@ -475,8 +478,22 @@ namespace SarmatPlugin
                 target.GetType().GetField(name, flags)?.GetValue(target);
         }
 
+        private void ApplyCameraSettings()
+        {
+            if (runtime?.CurrentSettings.CameraEnabled == true) return;
+            if (sarmatVideoStream == null) return;
+            try
+            {
+                sarmatVideoStream.GetType().GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)
+                    ?.Invoke(sarmatVideoStream, null);
+                sarmatVideoStream = null;
+            }
+            catch (Exception ex) { TryLog("Unable to stop Sarmat camera", ex); }
+        }
+
         private void StartSarmatVideo()
         {
+            if (runtime?.CurrentSettings.CameraEnabled != true) return;
             try
             {
                 var pipeline = GStreamerPipelineBuilder.Build(runtime?.CurrentSettings);
@@ -497,6 +514,7 @@ namespace SarmatPlugin
                 type.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)?.Invoke(stream, null);
                 type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance)?.Invoke(
                     stream, new object[] { pipeline });
+                sarmatVideoStream = stream;
                 SetHudSixteenByNine();
                 runtime?.MarkGStreamerStarted();
             }

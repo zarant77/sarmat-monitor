@@ -53,15 +53,18 @@ namespace SarmatPlugin.UI
         private Control Obs()
         {
             var p = Grid();
+            Check(p, "Enabled", "ObsEnabled", settings.ObsEnabled);
             TextBox(p, "WebSocket endpoint", "ObsEndpoint", settings.ObsEndpoint);
             TextBox(p, "Password", "ObsPassword", settings.ObsPassword);
             Number(p, "Reconnect interval (s)", "ObsReconnectSeconds", settings.ObsReconnectSeconds, 1, 300, 1);
             TestRow(p, "Test connection", testObs);
+            BindFeatureControls(p, "ObsEnabled");
             return p;
         }
         private Control Ruijie()
         {
             var p = Grid();
+            Check(p, "Enabled", "RuijieEnabled", settings.RuijieEnabled);
             TextBox(p, "Router IP", "RuijieAddress", settings.RuijieAddress);
             TextBox(p, "Username", "RuijieUsername", settings.RuijieUsername);
             TextBox(p, "Password", "RuijiePassword", settings.RuijiePassword);
@@ -69,6 +72,7 @@ namespace SarmatPlugin.UI
             Number(p, "Request timeout (s)", "RuijieRequestTimeoutSeconds", settings.RuijieRequestTimeoutSeconds, 1, 300, 1);
             Number(p, "Stale timeout (s)", "RuijieStaleSeconds", settings.RuijieStaleSeconds, 1, 3600, 1);
             TestRow(p, "Test connection", testRuijie);
+            BindFeatureControls(p, "RuijieEnabled");
             return p;
         }
         private Control Aggregator()
@@ -117,6 +121,7 @@ namespace SarmatPlugin.UI
         private Control Camera()
         {
             var p = Grid();
+            Check(p, "Enabled", "CameraEnabled", settings.CameraEnabled);
             TextBox(p, "RTSP URL", "CameraUrl", settings.CameraUrl);
             Combo(p, "Protocol", "CameraProtocol", settings.CameraProtocol,
                 new[] { "tcp", "udp", "udp-mcast", "http" });
@@ -133,6 +138,7 @@ namespace SarmatPlugin.UI
                 new[] { "BGRA", "BGRx", "RGBA", "RGBx" });
             TextBox(p, "App sink name", "CameraAppSinkName", settings.CameraAppSinkName);
             Check(p, "Synchronize appsink", "CameraSync", settings.CameraSync);
+            BindFeatureControls(p, "CameraEnabled");
             return p;
         }
         private Control General()
@@ -202,6 +208,7 @@ namespace SarmatPlugin.UI
         {
             return new PluginSettings
             {
+                ObsEnabled=B("ObsEnabled"), RuijieEnabled=B("RuijieEnabled"), CameraEnabled=B("CameraEnabled"),
                 ObsEndpoint=T("ObsEndpoint"), ObsPassword=T("ObsPassword"),
                 ObsReconnectSeconds=N("ObsReconnectSeconds"), RuijieAddress=T("RuijieAddress"), RuijieUsername=T("RuijieUsername"),
                 RuijiePassword=T("RuijiePassword"), RuijiePollSeconds=N("RuijiePollSeconds"),
@@ -280,6 +287,17 @@ namespace SarmatPlugin.UI
         private void Check(TableLayoutPanel p, string label, string key, bool value)
         {
             var c = new CheckBox { Text=label, Checked=value, AutoSize=true }; fields[key]=c; p.Controls.Add(c); p.SetColumnSpan(c,2);
+        }
+        private void BindFeatureControls(TableLayoutPanel panel, string key)
+        {
+            var toggle = (CheckBox)fields[key];
+            Action update = () =>
+            {
+                foreach (Control control in panel.Controls)
+                    if (control != toggle) control.Enabled = toggle.Checked;
+            };
+            toggle.CheckedChanged += (sender, args) => update();
+            update();
         }
         private void TextBox(TableLayoutPanel p, string label, string key, string value, bool password=false)
         {

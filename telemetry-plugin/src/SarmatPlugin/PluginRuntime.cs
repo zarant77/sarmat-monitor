@@ -35,7 +35,8 @@ namespace SarmatPlugin
         public event Action<bool> TakeoffWarningChanged;
         public event Action VehicleConnected;
         public event Action VehicleReconnectRequested;
-        public bool ShouldRestoreGStreamer => settings.GStreamerWasStarted;
+        public event Action CameraSettingsChanged;
+        public bool ShouldRestoreGStreamer => settings.CameraEnabled && settings.GStreamerWasStarted;
         public PluginSettings CurrentSettings => settings;
 
         public PluginRuntime(Func<object> currentState, Func<long?> packetCount = null)
@@ -138,8 +139,9 @@ namespace SarmatPlugin
             StopWorkers();
             cancellation = new CancellationTokenSource();
             var token = cancellation.Token;
-            Task.Run(() => ObsLoop(token), token).ContinueWith(t => LogFault("OBS worker", t), TaskScheduler.Default);
-            Task.Run(() => RuijieLoop(token), token).ContinueWith(t => LogFault("Ruijie worker", t), TaskScheduler.Default);
+            lock (sync) { obs = new ObsStatus(); ruijie = new RuijieStatus(); }
+            if (settings.ObsEnabled) Task.Run(() => ObsLoop(token), token).ContinueWith(t => LogFault("OBS worker", t), TaskScheduler.Default);
+            if (settings.RuijieEnabled) Task.Run(() => RuijieLoop(token), token).ContinueWith(t => LogFault("Ruijie worker", t), TaskScheduler.Default);
             Task.Run(() => AggregatorLoop(token), token)
                 .ContinueWith(t => LogFault("Aggregator worker", t), TaskScheduler.Default);
         }
@@ -162,7 +164,11 @@ namespace SarmatPlugin
                     : await client.QueryAsync(token).ConfigureAwait(false);
                 if (pending.HasValue && value.Connected)
                     transitions.Confirm(armed);
-                lock (sync) obs = value;
+                lock (sync)
+                {
+                    if (token.IsCancellationRequested) return;
+                    obs = value;
+                }
                 await Task.Delay(TimeSpan.FromSeconds(value.Connected ? 1 : settings.ObsReconnectSeconds), token).ConfigureAwait(false);
             }
         }
@@ -175,6 +181,7 @@ namespace SarmatPlugin
                     var value = await client.GetStatusAsync(token).ConfigureAwait(false);
                     lock (sync)
                     {
+                        if (token.IsCancellationRequested) return;
                         if (value.Connected) ruijie = value;
                         else
                         {
@@ -260,6 +267,8 @@ namespace SarmatPlugin
             audio.UpdateSettings(settings);
             alerts.Reset();
             StartWorkers();
+            CameraSettingsChanged?.Invoke();
+            Tick();
             log.Info("Settings updated");
         }
 

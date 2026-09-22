@@ -20,6 +20,16 @@ flight; later mode changes do not reactivate it. Disarming resets the check for 
 - Target framework: **.NET Framework 4.7.2 (`net472`)**
 - Verified build target: Mission Planner **1.3.83**
 
+## Optional features
+
+The **Ruijie**, **Camera**, and **OBS** settings tabs each have an **Enabled** checkbox.
+Changes apply when you save. Disabled OBS/Ruijie integrations stop background requests,
+recording automation, and their alerts; their widgets are hidden without changing the saved
+widget selection. Disabling Camera stops video started by Sarmat and disables its manual
+and automatic reconnect. Enable Camera again and use **Reconnect camera** to start video.
+Connection settings are preserved. All three features remain enabled for existing settings
+files that predate these switches.
+
 ## Sarmat Monitor
 
 The optional **Monitor** settings tab streams the current Mission Planner telemetry to

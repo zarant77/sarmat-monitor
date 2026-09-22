@@ -13,6 +13,7 @@ namespace SarmatPlugin.UI
         private readonly Dictionary<string, TelemetryWidget> widgets;
         private string enabledSignature;
         private bool hasTelemetryContent;
+        private readonly ToolStripItem reconnectCamera;
 
         public event EventHandler SettingsRequested;
         public event EventHandler VideoSourceRequested;
@@ -45,7 +46,7 @@ namespace SarmatPlugin.UI
             var menu = new ContextMenuStrip();
             menu.Items.Add("Settings", null, (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Reconnect camera", null,
+            reconnectCamera = menu.Items.Add("Reconnect camera", null,
                 (s, e) => VideoSourceRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add("Reconnect drone", null,
                 (s, e) => VehicleReconnectRequested?.Invoke(this, EventArgs.Empty));
@@ -68,7 +69,10 @@ namespace SarmatPlugin.UI
                 return;
             }
 
-            UpdateVisibleWidgets(settings.EnabledWidgets);
+            reconnectCamera.Enabled = settings.CameraEnabled;
+            UpdateVisibleWidgets((settings.EnabledWidgets ?? WidgetCatalog.DefaultIds)
+                .Where(id => (settings.ObsEnabled || !string.Equals(id, "obs", StringComparison.OrdinalIgnoreCase)) &&
+                    (settings.RuijieEnabled || !string.Equals(id, "ruijie", StringComparison.OrdinalIgnoreCase))));
 
             SetWidget("sat_count", "Sat Count", telemetry.Satellites.ToString("0"),
                 TelemetryStatusPolicy.Satellites(telemetry.Satellites));

@@ -78,6 +78,16 @@ namespace SarmatPlugin.Core
     [DataContract]
     public sealed class PluginSettings
     {
+        [DataMember] public bool ObsEnabled { get; set; } = true;
+        [DataMember] public bool RuijieEnabled { get; set; } = true;
+        [DataMember] public bool CameraEnabled { get; set; } = true;
+
+        [OnDeserializing]
+        private void OnDeserializing(StreamingContext context)
+        {
+            ObsEnabled = RuijieEnabled = CameraEnabled = true;
+        }
+
         [DataMember] public string ObsEndpoint { get; set; } = "ws://127.0.0.1:4455";
         [DataMember] public string ObsPassword { get; set; } = "";
         [DataMember] public double ObsReconnectSeconds { get; set; } = 2;

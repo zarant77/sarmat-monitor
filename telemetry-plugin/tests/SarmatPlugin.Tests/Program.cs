@@ -16,6 +16,8 @@ namespace SarmatPlugin.Tests
         private static int failures;
         private static void Main()
         {
+            Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
+            Run("Disabled integrations do not generate alerts", DisabledAlerts);
             Run("Alert engine enforces ARMED and grace", ArmedAndGrace);
             Run("Alert engine debounce and recovery", DebounceRecovery);
             Run("Alert engine follows shared red thresholds", SharedAlertThresholds);
@@ -55,6 +57,49 @@ namespace SarmatPlugin.Tests
                 Satellites=sats, Hdop=hdop, CurrentAmps=current };
         private static ObsStatus O(bool connected=true, bool recording=true) => new ObsStatus { Connected=connected, Recording=recording };
         private static RuijieStatus R(bool connected=true, bool stale=false) => new RuijieStatus { Connected=connected, Stale=stale };
+        private static void FeatureSettings()
+        {
+            var serializer = new DataContractJsonSerializer(typeof(PluginSettings));
+            using (var legacy = new MemoryStream(Encoding.UTF8.GetBytes("{}")))
+            {
+                var settings = (PluginSettings)serializer.ReadObject(legacy);
+                True(settings.ObsEnabled && settings.RuijieEnabled && settings.CameraEnabled);
+            }
+            using (var stream = new MemoryStream())
+            {
+                serializer.WriteObject(stream, new PluginSettings
+                {
+                    ObsEnabled = false, RuijieEnabled = false, CameraEnabled = false
+                });
+                stream.Position = 0;
+                var settings = (PluginSettings)serializer.ReadObject(stream);
+                settings.Normalize();
+                True(!settings.ObsEnabled && !settings.RuijieEnabled && !settings.CameraEnabled);
+            }
+        }
+
+        private static void DisabledAlerts()
+        {
+            foreach (var obsEnabled in new[] { false, true })
+            foreach (var ruijieEnabled in new[] { false, true })
+            {
+                var engine = new AlertEngine();
+                var settings = new PluginSettings { ObsEnabled = obsEnabled, RuijieEnabled = ruijieEnabled };
+                var now = DateTime.UtcNow;
+                engine.Update(T(), O(false), R(false), settings, now);
+                engine.Update(T(), O(false), R(false), settings, now.AddSeconds(3));
+                var result = engine.Update(T(), O(false), R(false), settings, now.AddSeconds(6));
+                Equal(obsEnabled, result.Reasons.Any(x => x.Kind == AlertKind.Obs));
+                Equal(ruijieEnabled, result.Reasons.Any(x => x.Kind == AlertKind.Ruijie));
+                settings.ObsEnabled = settings.RuijieEnabled = false;
+                result = engine.Update(T(), O(false), R(false), settings, now.AddSeconds(7));
+                Equal(0, result.Reasons.Count);
+                engine.Update(T(battery:40), O(false), R(false), settings, now.AddSeconds(8));
+                result = engine.Update(T(battery:40), O(false), R(false), settings, now.AddSeconds(11));
+                True(result.Reasons.Any(x => x.Kind == AlertKind.Battery));
+            }
+        }
+
         private static void ArmedAndGrace()
         {
             var e=new AlertEngine(); var s=Fast(); var now=DateTime.UtcNow;

@@ -45,21 +45,21 @@ namespace SarmatPlugin.Core
             var thresholds = TelemetryThresholds.Current;
             var conditions = new Dictionary<AlertKind, bool>
             {
-                [AlertKind.Obs] = !obs.Connected || obs.Recording != true,
+                [AlertKind.Obs] = settings.ObsEnabled && (!obs.Connected || obs.Recording != true),
                 [AlertKind.Satellites] = telemetry.Satellites < thresholds.Satellites.Normal,
                 [AlertKind.Hdop] = telemetry.Hdop > thresholds.Hdop.Normal,
                 [AlertKind.Battery] = telemetry.BatteryVoltage > 0 &&
                     telemetry.BatteryVoltage < thresholds.Voltage.Normal,
                 [AlertKind.Current] = telemetry.CurrentAmps > thresholds.Current.Normal,
-                [AlertKind.Ruijie] = !ruijie.Connected || ruijie.Stale ||
-                    (ruijie.Rssi.HasValue && ruijie.Rssi.Value < thresholds.LinkRssi.Normal)
+                [AlertKind.Ruijie] = settings.RuijieEnabled && (!ruijie.Connected || ruijie.Stale ||
+                    (ruijie.Rssi.HasValue && ruijie.Rssi.Value < thresholds.LinkRssi.Normal))
             };
 
             foreach (var pair in conditions)
                 Debounce(gates[pair.Key], pair.Value, nowUtc);
 
             var reasons = new List<AlertReason>();
-            if (gates[AlertKind.Ruijie].Active)
+            if (settings.RuijieEnabled && gates[AlertKind.Ruijie].Active)
                 reasons.Add(Reason(AlertKind.Ruijie, Severity.Critical,
                     !ruijie.Connected ? "RUIJIE DISCONNECTED" : ruijie.Stale ? "RUIJIE STALE" :
                     $"RUIJIE RSSI: {ruijie.Rssi} dBm < {thresholds.LinkRssi.Normal:0} dBm"));
@@ -71,7 +71,7 @@ namespace SarmatPlugin.Core
                 reasons.Add(Reason(AlertKind.Current, Severity.Critical,
                     string.Format(CultureInfo.InvariantCulture, "CURRENT: {0:0.0} A > {1:0.0} A",
                         telemetry.CurrentAmps, thresholds.Current.Normal)));
-            if (gates[AlertKind.Obs].Active)
+            if (settings.ObsEnabled && gates[AlertKind.Obs].Active)
                 reasons.Add(Reason(AlertKind.Obs, Severity.Warning,
                     obs.Connected ? "OBS NOT RECORDING" : "OBS DISCONNECTED"));
             if (gates[AlertKind.Satellites].Active)
