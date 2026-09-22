@@ -26,4 +26,23 @@ class MeasurementDraftTest {
         draft[11] = ""
         assertFalse(isCompleteMeasurement(draft))
     }
+
+    @Test fun `first manual cell uses three to four point two volts`() {
+        assertEquals(300..420, manualVoltageRangeCentivolts(MutableList(12) { "" }, 0))
+    }
+
+    @Test fun `dependent cells use plus or minus point one from first cell`() {
+        val draft = MutableList(12) { "" }.apply { this[0] = "4.05" }
+        assertEquals(395..415, manualVoltageRangeCentivolts(draft, 1))
+        assertEquals(null, manualVoltageRangeCentivolts(MutableList(12) { "" }, 1))
+        draft[0] = "4.20"
+        assertEquals(410..420, manualVoltageRangeCentivolts(draft, 11))
+    }
+
+    @Test fun `changing first cell clamps existing dependent values`() {
+        val draft = MutableList(12) { "4.10" }.apply { this[0] = "3.80"; this[1] = "4.05"; this[2] = "3.20" }
+        clampDependentCellVoltages(draft)
+        assertEquals("3.90", draft[1])
+        assertEquals("3.70", draft[2])
+    }
 }

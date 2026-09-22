@@ -10,6 +10,7 @@ import android.util.Size
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +19,9 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.sarmat.crew.api.ApiException
 import com.sarmat.crew.api.BatterySummary
 import com.sarmat.crew.api.CrewApi
@@ -34,6 +38,7 @@ import java.util.Locale
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
     private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, SCANNER }
@@ -49,6 +54,8 @@ class MainActivity : AppCompatActivity() {
     private var draftNotes = ""
     private val cellViews = mutableListOf<TextView>()
     private var selectedCell = 0
+    private var editorMinCentivolts = 300
+    private var editorMaxCentivolts = 420
     private var previewValid = false
     private var previewGeneration = 0
     private val previewHandler = Handler(Looper.getMainLooper())
@@ -71,6 +78,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         api = CrewApi(getSharedPreferences("sarmat_crew", MODE_PRIVATE))
         if (OpenCVLoader.initLocal()) scanner = LcdScanner()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -86,7 +94,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLogin(message: String = "") {
-        stopCamera(); screen = Screen.LOGIN; setContentView(R.layout.activity_login)
+        stopCamera(); screen = Screen.LOGIN; setScreenContent(R.layout.activity_login)
         val server = findViewById<EditText>(R.id.serverUrlInput).apply { setText(api.baseUrl) }
         val username = findViewById<EditText>(R.id.usernameInput)
         val password = findViewById<EditText>(R.id.passwordInput)
@@ -103,7 +111,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBatteries() {
-        stopCamera(); screen = Screen.BATTERIES; setContentView(R.layout.activity_batteries)
+        stopCamera(); screen = Screen.BATTERIES; setScreenContent(R.layout.activity_batteries)
         findViewById<TextView>(R.id.crewNameText).text = api.savedCrewLabel()
         findViewById<TextView>(R.id.menuButton).setOnClickListener { anchor ->
             PopupMenu(this, anchor).apply {
@@ -118,12 +126,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadBatteries() {
-        val statusView = findViewById<TextView>(R.id.listStatusText).apply { text = getString(R.string.loading) }
-        val list = findViewById<LinearLayout>(R.id.batteryList).apply { removeAllViews() }
+        val list = findViewById<LinearLayout>(R.id.batteryList)
+        val statusView = findViewById<TextView>(R.id.listStatusText).apply { text = if (list.childCount == 0) getString(R.string.loading) else "Оновлення…" }
         networkExecutor.execute {
             runCatching(api::batteries).onSuccess { items -> runOnUiThread {
                 if (screen != Screen.BATTERIES) return@runOnUiThread
                 statusView.text = if (items.isEmpty()) "У екіпажу немає активних батарей" else "${items.size} батарей"
+                list.removeAllViews()
                 items.sortedWith(compareByDescending<BatterySummary> { it.activeSince != null }.thenBy { it.label }).forEach { list.addView(batteryCard(it)) }
             } }.onFailure { failure -> runOnUiThread {
                 if (failure is ApiException && failure.status == 401) showLogin("Сесія завершилась. Увійдіть знову.")
@@ -133,43 +142,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun batteryCard(item: BatterySummary): View {
-        val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(148)).apply { setMargins(0, 0, 0, dp(10)) }; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.action_background) }
-        frame.addView(TextView(this).apply {
-            text = if (item.activeSince == null) "У ДРОН" else "ЗНЯТИ"; gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            setPadding(0, 0, dp(24), 0); textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
-        }, FrameLayout.LayoutParams(-1, -1))
+        val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(108)).apply { setMargins(0, 0, 0, dp(8)) }; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.action_background) }
+        val actionLabel = if (item.activeSince == null) "У ДРОН" else "ЗНЯТИ"
+        frame.addView(swipeActionLabel(actionLabel, Gravity.CENTER_VERTICAL or Gravity.START).apply { setPadding(dp(24), 0, 0, 0) }, FrameLayout.LayoutParams(-1, -1))
+        frame.addView(swipeActionLabel(actionLabel, Gravity.CENTER_VERTICAL or Gravity.END).apply { setPadding(0, 0, dp(24), 0) }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(15), dp(18), dp(15))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(11), dp(16), dp(10))
             background = ContextCompat.getDrawable(this@MainActivity, if (item.activeSince != null) R.drawable.card_active else R.drawable.cell_background)
             val titleRow = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             titleRow.addView(TextView(this@MainActivity).apply {
-                text = if (item.activeSince != null) "⚡ ${item.label}" else item.label; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                text = if (item.activeSince != null) "⚡ ${item.label}" else item.label; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             }, LinearLayout.LayoutParams(0, -2, 1f))
             titleRow.addView(TextView(this@MainActivity).apply {
-                text = item.latestChargePercent?.let { "$it%" } ?: "—"; textSize = 22f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
+                text = item.latestChargePercent?.let { "$it%" } ?: "—"; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
             })
             addView(titleRow)
             addView(TextView(this@MainActivity).apply {
-                text = if (item.activeSince != null) "У ДРОНІ · ${age(item.activeSince)}\n${item.latestDelta?.let { String.format(Locale.US, "Δ %.2f V", it) } ?: "Немає вимірювань"}" else item.latestDelta?.let { String.format(Locale.US, "Δ %.2f V", it) } ?: "Немає вимірювань"
+                text = if (item.activeSince != null) "У ДРОНІ · ${age(item.activeSince)}" else item.latestDelta?.let { String.format(Locale.US, "Δ %.2f V", it) } ?: "Немає вимірювань"
                 setTextColor(ContextCompat.getColor(this@MainActivity, when (item.latestHealth) { "danger" -> R.color.scanner_red; "warning" -> R.color.scanner_yellow; else -> R.color.text_primary }))
-                textSize = 16f; setPadding(0, dp(9), 0, 0)
+                textSize = 15f; setPadding(0, dp(5), 0, 0)
             })
             addView(TextView(this@MainActivity).apply {
-                text = item.latestMeasuredAt?.let { "Перевірена ${age(it)} тому" } ?: "Ще не перевірялась"
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)); textSize = 14f
+                text = buildString {
+                    if (item.activeSince != null) item.latestDelta?.let { append(String.format(Locale.US, "Δ %.2f V · ", it)) }
+                    append(item.latestMeasuredAt?.let { "Перевірена ${age(it)} тому" } ?: "Ще не перевірялась")
+                }
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)); textSize = 13f
             })
         }
         frame.addView(content, FrameLayout.LayoutParams(-1, -1))
-        var downX = 0f; var moved = false
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downX = 0f; var downY = 0f; var horizontalGesture = false; var verticalGesture = false
         content.setOnTouchListener { view, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX = event.rawX; moved = false; true }
-                MotionEvent.ACTION_MOVE -> { val dx = event.rawX - downX; moved = moved || kotlin.math.abs(dx) > dp(8); view.translationX = dx.coerceIn(-view.width * .7f, 0f); true }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val toggle = kotlin.math.abs(view.translationX) > dp(88)
-                    view.animate().translationX(0f).setDuration(160).start()
-                    if (toggle) toggleActive(item) else if (!moved && event.actionMasked == MotionEvent.ACTION_UP) openBattery(item)
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX; downY = event.rawY; horizontalGesture = false; verticalGesture = false
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
                     true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX; val dy = event.rawY - downY
+                    if (!horizontalGesture && !verticalGesture) {
+                        when (classifyGesture(dx, dy, touchSlop)) {
+                            GestureDirection.HORIZONTAL -> horizontalGesture = true
+                            GestureDirection.VERTICAL -> {
+                                verticalGesture = true; view.translationX = 0f
+                                view.parent?.requestDisallowInterceptTouchEvent(false)
+                            }
+                            GestureDirection.UNDECIDED -> Unit
+                        }
+                    }
+                    if (horizontalGesture) {
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                        view.translationX = dx.coerceIn(-view.width * .7f, view.width * .7f)
+                    }
+                    !verticalGesture
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    val toggle = horizontalGesture && kotlin.math.abs(view.translationX) > dp(88)
+                    view.animate().translationX(0f).setDuration(160).start()
+                    if (toggle) toggleActive(item)
+                    else if (!horizontalGesture && !verticalGesture && event.actionMasked == MotionEvent.ACTION_UP) openBattery(item)
+                    !verticalGesture
                 }
                 else -> false
             }
@@ -181,12 +216,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleActive(item: BatterySummary) {
         findViewById<TextView>(R.id.listStatusText).text = if (item.activeSince == null) "Встановлюю ${item.label}…" else "Знімаю ${item.label}…"
-        networkExecutor.execute { runCatching { api.toggleActive(item.id) }.onSuccess { runOnUiThread(::loadBatteries) }.onFailure { error -> runOnUiThread { findViewById<TextView>(R.id.listStatusText).text = error.message ?: "Не вдалося змінити активну батарею" } } }
+        networkExecutor.execute { runCatching { api.toggleActive(item.id) }.onSuccess { runOnUiThread { if (screen == Screen.BATTERIES) loadBatteries() } }.onFailure { error -> runOnUiThread { if (screen == Screen.BATTERIES) findViewById<TextView>(R.id.listStatusText).text = error.message ?: "Не вдалося змінити активну батарею" } } }
     }
 
     private fun showMeasurement() {
         stopCamera(); val item = battery ?: return showBatteries()
-        screen = Screen.MEASUREMENT; setContentView(R.layout.activity_measurement)
+        screen = Screen.MEASUREMENT; setScreenContent(R.layout.activity_measurement)
         findViewById<TextView>(R.id.batteryTitle).text = item.label
         findViewById<TextView>(R.id.detailCharge).text = item.latestChargePercent?.let { "$it%" } ?: "—"
         findViewById<TextView>(R.id.batteryStatus).text = buildString {
@@ -195,7 +230,6 @@ class MainActivity : AppCompatActivity() {
             item.latestMeasuredAt?.let { append("\nПеревірена ${age(it)} тому") }
         }
         findViewById<TextView>(R.id.batteryMeta).text = "${item.cellCount}S ${item.chemistry} · ${item.capacityAh.toInt()} Ah · ${item.serialNumber}"
-        findViewById<TextView>(R.id.backToBatteriesButton).setOnClickListener { showBatteries() }
         findViewById<Button>(R.id.scanAButton).apply {
             text = getString(R.string.scan_module, "A"); visibility = if (item.cellCount == 12) View.VISIBLE else View.GONE
             setOnClickListener { keepDraft(); showScanner(0) }
@@ -204,9 +238,8 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.scan_module, "B"); visibility = if (item.cellCount == 12) View.VISIBLE else View.GONE
             setOnClickListener { keepDraft(); showScanner(6) }
         }
-        findViewById<Button>(R.id.manualEntryButton).setOnClickListener { findViewById<View>(R.id.manualEditor).visibility = View.VISIBLE; selectCell(selectedCell) }
+        configureVoltageEditor()
         createCells(item.cellCount)
-        configureVoltageEditor(item)
         findViewById<EditText>(R.id.notesInput).setText(draftNotes)
         findViewById<Button>(R.id.saveMeasurementButton).apply { isEnabled = false; setOnClickListener { saveMeasurement() } }
         updateSummary()
@@ -216,13 +249,13 @@ class MainActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.measurementCells); cellViews.clear()
         draft = MutableList(count) { draft.getOrNull(it).orEmpty() }
         for (start in 0 until count step 6) {
-            container.addView(TextView(this).apply { text = "МОДУЛЬ ${if (start == 0) "A · комірки 1–6" else "B · комірки 7–12"}"; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime)); setTypeface(typeface, Typeface.BOLD); setPadding(dp(4), dp(8), 0, dp(6)) })
+            container.addView(TextView(this).apply { text = "МОДУЛЬ ${if (start == 0) "A · 1–6" else "B · 7–12"}"; textSize = 12f; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime)); setTypeface(typeface, Typeface.BOLD); setPadding(dp(4), dp(4), 0, dp(2)) })
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (index in start until minOf(start + 6, count)) {
-                val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background); layoutParams = LinearLayout.LayoutParams(0, dp(72), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }; setOnClickListener { findViewById<View>(R.id.manualEditor).visibility = View.VISIBLE; selectCell(index) } }
+                val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background); layoutParams = LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }; isClickable = true; isFocusable = true; setOnClickListener { openCellEditor(index) } }
                 box.addView(TextView(this).apply { text = "${index + 1}"; gravity = Gravity.CENTER; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)) })
-                val value = TextView(this).apply { text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.3f", it) } ?: "—"; gravity = Gravity.CENTER; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary)) }
-                box.addView(value, LinearLayout.LayoutParams(-1, dp(42))); row.addView(box); cellViews += value
+                val value = TextView(this).apply { text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f", it) } ?: "—"; gravity = Gravity.CENTER; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary)) }
+                box.addView(value, LinearLayout.LayoutParams(-1, dp(34))); row.addView(box); cellViews += value
             }
             container.addView(row)
         }
@@ -230,10 +263,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSummary() {
         if (screen != Screen.MEASUREMENT || cellViews.isEmpty()) return
-        cellViews.forEachIndexed { index, view -> view.text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.3f", it) } ?: "—" }
+        cellViews.forEachIndexed { index, view -> view.text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f", it) } ?: "—" }
         val values = draft.mapNotNull { it.toDoubleOrNull() }
         previewValid = false; findViewById<Button>(R.id.saveMeasurementButton).isEnabled = false
-        findViewById<TextView>(R.id.measurementSummary).text = "Заповнено: ${values.size} / ${draft.size}" + if (values.isNotEmpty()) String.format(Locale.US, "\nЗагальна: %.2f V\nMin: %.3f V · Max: %.3f V\nDelta: %.3f V", values.sum(), values.min(), values.max(), values.max() - values.min()) else ""
+        findViewById<TextView>(R.id.measurementSummary).apply {
+            visibility = if (values.isEmpty()) View.GONE else View.VISIBLE
+            text = if (values.isNotEmpty()) String.format(Locale.US, "Загальна: %.2f V  ·  Min: %.2f V  ·  Max: %.2f V\nDelta: %.2f V", values.sum(), values.min(), values.max(), values.max() - values.min()) else ""
+        }
         previewRunnable?.let(previewHandler::removeCallbacks)
         if (values.size == 12) {
             previewRunnable = Runnable { requestPreview(values) }.also { previewHandler.postDelayed(it, 250) }
@@ -260,44 +296,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun configureVoltageEditor(item: BatterySummary) {
+    private fun configureVoltageEditor() {
         val slider = findViewById<SeekBar>(R.id.voltageSlider)
-        val minMv = (item.minVoltage / item.cellCount * 1000).toInt()
-        val maxMv = (item.maxVoltage / item.cellCount * 1000).toInt()
-        slider.max = maxMv - minMv
+        slider.max = editorMaxCentivolts - editorMinCentivolts
+        slider.isEnabled = false
         slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) { if (fromUser) setSelectedVoltage((minMv + progress) / 1000.0) }
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) { if (fromUser) setSelectedVoltage((editorMinCentivolts + progress) / 100.0) }
             override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
         })
-        findViewById<Button>(R.id.decreaseVoltage).setOnClickListener { adjustSelected(-0.001, minMv / 1000.0, maxMv / 1000.0) }
-        findViewById<Button>(R.id.increaseVoltage).setOnClickListener { adjustSelected(0.001, minMv / 1000.0, maxMv / 1000.0) }
+        findViewById<Button>(R.id.decreaseVoltage).apply { isEnabled = false; setOnClickListener { adjustSelected(-0.01) } }
+        findViewById<Button>(R.id.increaseVoltage).apply { isEnabled = false; setOnClickListener { adjustSelected(0.01) } }
     }
 
     private fun selectCell(index: Int) {
-        val item = battery ?: return
+        if (index !in draft.indices) return
+        val range = manualVoltageRangeCentivolts(draft, index)
+        if (range == null) {
+            findViewById<TextView>(R.id.measurementError).text = "Спочатку вкажіть напругу комірки 1"
+            return
+        }
         selectedCell = index
-        val minMv = (item.minVoltage / item.cellCount * 1000).toInt()
-        val maxMv = (item.maxVoltage / item.cellCount * 1000).toInt()
-        val currentMv = ((draft[index].toDoubleOrNull() ?: ((minMv + maxMv) / 2000.0)) * 1000).toInt().coerceIn(minMv, maxMv)
-        findViewById<TextView>(R.id.selectedCellTitle).text = "Комірка ${index + 1} · Модуль ${if (index < 6) "A" else "B"}"
-        findViewById<TextView>(R.id.selectedCellValue).text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.3f V", it) } ?: "—"
-        findViewById<SeekBar>(R.id.voltageSlider).progress = currentMv - minMv
+        editorMinCentivolts = range.first; editorMaxCentivolts = range.last
+        val currentCentivolts = ((draft[index].toDoubleOrNull() ?: ((range.first + range.last) / 200.0)) * 100).roundToInt().coerceIn(range.first, range.last)
+        findViewById<SeekBar>(R.id.voltageSlider).max = range.last - range.first
+        findViewById<SeekBar>(R.id.voltageSlider).isEnabled = true
+        findViewById<Button>(R.id.decreaseVoltage).isEnabled = true
+        findViewById<Button>(R.id.increaseVoltage).isEnabled = true
+        findViewById<TextView>(R.id.measurementError).text = ""
+        findViewById<TextView>(R.id.selectedCellTitle).text = String.format(Locale.US, "Комірка %d · Модуль %s\nДіапазон %.2f–%.2f V", index + 1, if (index < 6) "A" else "B", range.first / 100.0, range.last / 100.0)
+        findViewById<TextView>(R.id.selectedCellValue).text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f V", it) } ?: "—"
+        findViewById<SeekBar>(R.id.voltageSlider).progress = currentCentivolts - range.first
     }
 
-    private fun adjustSelected(delta: Double, min: Double, max: Double) {
-        val sliderValue = min + findViewById<SeekBar>(R.id.voltageSlider).progress / 1000.0
+    private fun adjustSelected(delta: Double) {
+        if (selectedCell !in draft.indices || editorMaxCentivolts <= editorMinCentivolts) return
+        val min = editorMinCentivolts / 100.0; val max = editorMaxCentivolts / 100.0
+        val sliderValue = min + findViewById<SeekBar>(R.id.voltageSlider).progress / 100.0
         val current = draft[selectedCell].toDoubleOrNull() ?: sliderValue
         setSelectedVoltage((current + delta).coerceIn(min, max))
     }
 
     private fun setSelectedVoltage(value: Double) {
-        draft[selectedCell] = String.format(Locale.US, "%.3f", value)
-        findViewById<TextView>(R.id.selectedCellValue).text = String.format(Locale.US, "%.3f V", value)
-        battery?.let { item ->
-            val minMv = (item.minVoltage / item.cellCount * 1000).toInt()
-            findViewById<SeekBar>(R.id.voltageSlider).progress = (value * 1000).toInt() - minMv
-        }
+        if (selectedCell !in draft.indices) return
+        draft[selectedCell] = String.format(Locale.US, "%.2f", value)
+        if (selectedCell == 0) clampDependentCellVoltages(draft)
+        findViewById<TextView>(R.id.selectedCellValue).text = String.format(Locale.US, "%.2f V", value)
+        findViewById<SeekBar>(R.id.voltageSlider).progress = ((value * 100).roundToInt() - editorMinCentivolts).coerceIn(0, editorMaxCentivolts - editorMinCentivolts)
         updateSummary()
     }
 
@@ -311,7 +356,7 @@ class MainActivity : AppCompatActivity() {
                 findViewById<Button>(R.id.saveMeasurementButton).isEnabled = true
                 findViewById<TextView>(R.id.measurementError).text = ""
                 findViewById<TextView>(R.id.measurementSummary).apply {
-                    text = String.format(Locale.US, "Заповнено: 12 / 12\nЗагальна: %.2f V\nMin: %.3f V · Max: %.3f V\nDelta: %.3f V\nЗаряд: %d%% · Здоров’я: %s", result.totalVoltage, result.minCellVoltage, result.maxCellVoltage, result.cellDelta, result.chargePercent, healthLabel(result.health))
+                    text = String.format(Locale.US, "Загальна: %.2f V  ·  Min: %.2f V  ·  Max: %.2f V\nDelta: %.2f V  ·  Заряд: %d%%  ·  %s", result.totalVoltage, result.minCellVoltage, result.maxCellVoltage, result.cellDelta, result.chargePercent, healthLabel(result.health))
                     setTextColor(ContextCompat.getColor(this@MainActivity, when (result.health) { "danger" -> R.color.scanner_red; "warning" -> R.color.scanner_yellow; else -> R.color.text_primary }))
                 }
             } }.onFailure { error -> runOnUiThread {
@@ -330,7 +375,7 @@ class MainActivity : AppCompatActivity() {
     private fun showScanner(offset: Int) {
         if (!::scanner.isInitialized) return
         screen = Screen.SCANNER; moduleOffset = offset; recognized = null; accumulator = ScanAccumulator(); missingFrames = 0
-        setContentView(R.layout.activity_scanner)
+        setScreenContent(R.layout.activity_scanner)
         preview = findViewById(R.id.preview); overlay = findViewById(R.id.scannerOverlay); status = findViewById(R.id.statusText); useButton = findViewById(R.id.useValuesButton)
         findViewById<TextView>(R.id.scannerTitle).text = if (offset == 0) "МОДУЛЬ A · КОМІРКИ 1–6" else "МОДУЛЬ B · КОМІРКИ 7–12"
         findViewById<Button>(R.id.cancelScannerButton).setOnClickListener { showMeasurement() }
@@ -400,6 +445,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopCamera() { provider?.unbindAll(); provider = null }
+    private fun setScreenContent(layoutId: Int) {
+        setContentView(layoutId)
+        val root = findViewById<View>(R.id.screenRoot)
+        val left = root.paddingLeft; val top = root.paddingTop; val right = root.paddingRight; val bottom = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(left + bars.left, top + bars.top, right + bars.right, bottom + bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun swipeActionLabel(label: String, labelGravity: Int) = TextView(this).apply {
+        text = label; gravity = labelGravity; textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
+    }
+
+    private fun openCellEditor(index: Int) {
+        if (index !in draft.indices) {
+            findViewById<TextView>(R.id.measurementError).text = "Не вдалося відкрити комірку"
+            return
+        }
+        if (manualVoltageRangeCentivolts(draft, index) == null) {
+            findViewById<TextView>(R.id.measurementError).text = "Спочатку вкажіть напругу комірки 1"
+            return
+        }
+        selectCell(index)
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { stopCamera(); if (::scanner.isInitialized) scanner.close(); cameraExecutor.shutdown(); networkExecutor.shutdown(); super.onDestroy() }
 }
