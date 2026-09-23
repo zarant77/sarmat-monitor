@@ -322,7 +322,7 @@ namespace SarmatPlugin
             takeoffModeWarning = new TranslucentWarningLabel
             {
                 Name = "SarmatTakeoffModeWarning",
-                Text = "WARNING: TAKEOFF MODE IS NOT PostHold",
+                Text = "WARNING: UNSAFE TAKEOFF MODE",
                 Dock = DockStyle.Bottom,
                 Height = 48,
                 ForeColor = Color.White,

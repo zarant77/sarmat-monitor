@@ -45,7 +45,18 @@ namespace SarmatPlugin.UI
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
             var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, AutoSize = true };
             var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-            ok.Click += (s, e) => Result = Read();
+            ok.Click += (s, e) =>
+            {
+                if (B("TakeoffModeWarningEnabled") && string.IsNullOrWhiteSpace(T("SafeArmingModes")))
+                {
+                    MessageBox.Show(this, "Enter at least one safe arming mode.",
+                        "Arming safety", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    fields["SafeArmingModes"].Focus();
+                    DialogResult = DialogResult.None;
+                    return;
+                }
+                Result = Read();
+            };
             buttons.Controls.Add(ok); buttons.Controls.Add(cancel);
             Controls.Add(tabs); Controls.Add(buttons); AcceptButton = ok; CancelButton = cancel;
         }
@@ -144,6 +155,31 @@ namespace SarmatPlugin.UI
         private Control General()
         {
             var p = Grid();
+            var armingSafety = new GroupBox
+            {
+                Text = "Arming safety",
+                AutoSize = true,
+                Dock = DockStyle.Top,
+                Padding = new Padding(8)
+            };
+            var armingSafetyFields = Grid();
+            armingSafetyFields.Dock = DockStyle.Top;
+            Check(armingSafetyFields, "Warn when armed outside a safe mode",
+                "TakeoffModeWarningEnabled", settings.TakeoffModeWarningEnabled);
+            TextBox(armingSafetyFields, "Safe modes (comma-separated)", "SafeArmingModes",
+                settings.SafeArmingModes);
+            var safeModesHint = new Label
+            {
+                Text = "Example: PosHold, Loiter",
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText
+            };
+            armingSafetyFields.Controls.Add(safeModesHint);
+            armingSafetyFields.SetColumnSpan(safeModesHint, 2);
+            BindFeatureControls(armingSafetyFields, "TakeoffModeWarningEnabled");
+            armingSafety.Controls.Add(armingSafetyFields);
+            p.Controls.Add(armingSafety);
+            p.SetColumnSpan(armingSafety, 2);
             Check(p, "Reconnect vehicle after MAVLink silence", "VehicleAutoReconnectEnabled",
                 settings.VehicleAutoReconnectEnabled);
             Number(p, "Vehicle reconnect timeout (s)", "VehicleReconnectTimeoutSeconds",
@@ -219,6 +255,8 @@ namespace SarmatPlugin.UI
                 AudioEnabled=B("AudioEnabled"), AudioVolume=N("AudioVolume")/100,
                 AudioAlertCooldownSeconds=N("AudioAlertCooldownSeconds"),
                 AudioWarningSoundPath=T("AudioWarningSoundPath"),
+                TakeoffModeWarningEnabled=B("TakeoffModeWarningEnabled"),
+                SafeArmingModes=T("SafeArmingModes"),
                 VehicleAutoReconnectEnabled=B("VehicleAutoReconnectEnabled"),
                 VehicleReconnectTimeoutSeconds=N("VehicleReconnectTimeoutSeconds"),
                 DebugLogging=B("DebugLogging"),

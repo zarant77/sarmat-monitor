@@ -94,7 +94,8 @@ namespace SarmatPlugin
             }
             else if (!telemetry.Connected)
                 wasConnected = false;
-            var warning = takeoffModeWarning.Update(telemetry.Armed, telemetry.FlightMode);
+            var warning = takeoffModeWarning.Update(telemetry.Armed, telemetry.FlightMode,
+                settings.TakeoffModeWarningEnabled, settings.SafeArmingModes);
             if (warning != takeoffWarningVisible)
             {
                 takeoffWarningVisible = warning;

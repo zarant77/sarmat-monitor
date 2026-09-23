@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 
 namespace SarmatPlugin.Core
@@ -9,13 +10,20 @@ namespace SarmatPlugin.Core
         private bool wasArmed;
         private bool resolvedForFlight;
 
-        public bool Update(bool armed, string mode)
+        public bool Update(bool armed, string mode, bool enabled, string safeModes)
         {
+            if (!enabled)
+            {
+                initialized = true;
+                wasArmed = armed;
+                resolvedForFlight = armed;
+                return false;
+            }
             if (!initialized)
             {
                 initialized = true;
                 wasArmed = armed;
-                resolvedForFlight = armed && IsPostHold(mode);
+                resolvedForFlight = armed && IsSafeMode(mode, safeModes);
                 return armed && !resolvedForFlight;
             }
             if (!armed)
@@ -27,21 +35,29 @@ namespace SarmatPlugin.Core
             if (!wasArmed)
             {
                 wasArmed = true;
-                resolvedForFlight = IsPostHold(mode);
+                resolvedForFlight = IsSafeMode(mode, safeModes);
                 return !resolvedForFlight;
             }
-            if (!resolvedForFlight && IsPostHold(mode))
+            if (!resolvedForFlight && IsSafeMode(mode, safeModes))
                 resolvedForFlight = true;
             return !resolvedForFlight;
         }
 
-        public static bool IsPostHold(string mode)
+        public static bool IsSafeMode(string mode, string safeModes)
+        {
+            var actual = NormalizeMode(mode);
+            return !string.IsNullOrEmpty(actual) && (safeModes ?? "")
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(NormalizeMode)
+                .Any(expected => expected == actual);
+        }
+
+        private static string NormalizeMode(string mode)
         {
             var normalized = new StringBuilder();
             foreach (var c in mode ?? "")
                 if (char.IsLetterOrDigit(c)) normalized.Append(char.ToLowerInvariant(c));
-            var value = normalized.ToString();
-            return value == "posthold" || value == "poshold";
+            return normalized.ToString();
         }
     }
 }

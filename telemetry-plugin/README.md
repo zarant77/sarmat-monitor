@@ -6,9 +6,11 @@ a Ruijie wireless bridge.
 All warnings and audio are gated by the vehicle's `ARMED` state.
 
 At the `DISARMED → ARMED` transition, Sarmat checks the Mission Planner flight mode. If the
-vehicle was armed outside PostHold/PosHold, a translucent red warning blinks at the bottom of the
-main HUD for five seconds. Reaching PostHold dismisses it early for the remainder of that armed
-flight; later mode changes do not reactivate it. Disarming resets the check for the next takeoff.
+vehicle was armed outside the configured safe modes, a translucent red warning blinks at the
+bottom of the main HUD for five seconds. Safe modes are case-insensitive, configurable as a
+comma-separated list, and default to `PosHold`; the check can also be disabled. Reaching any safe
+mode dismisses the warning early for the remainder of that armed flight. Later mode changes do not
+reactivate it. Disarming resets the check for the next takeoff.
 
 ## Compatibility and API
 

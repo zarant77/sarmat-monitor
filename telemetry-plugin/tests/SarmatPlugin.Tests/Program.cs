@@ -28,7 +28,7 @@ namespace SarmatPlugin.Tests
             Run("OBS automation reacts only to ARMED edges", ObsArmingEdges);
             Run("OBS widget colors depend on ARMED and recording state", ObsWidgetColors);
             Run("Telemetry widget thresholds match Sarmat Monitor", TelemetryWidgetThresholds);
-            Run("Takeoff mode warning only checks the arming transition", TakeoffModeWarning);
+            Run("Takeoff mode warning supports configurable safe modes", TakeoffModeWarning);
             Run("MAVLink silence watchdog requests bounded reconnects", MavlinkSilenceReconnect);
             Run("Ruijie OpenSSL AES round trip", CryptoRoundTrip);
             Run("Ruijie legacy auth page", LegacyAuthPage);
@@ -63,18 +63,23 @@ namespace SarmatPlugin.Tests
             using (var legacy = new MemoryStream(Encoding.UTF8.GetBytes("{}")))
             {
                 var settings = (PluginSettings)serializer.ReadObject(legacy);
-                True(settings.ObsEnabled && settings.RuijieEnabled && settings.CameraEnabled);
+                True(settings.ObsEnabled && settings.RuijieEnabled && settings.CameraEnabled &&
+                    settings.TakeoffModeWarningEnabled);
+                Equal("PosHold", settings.SafeArmingModes);
             }
             using (var stream = new MemoryStream())
             {
                 serializer.WriteObject(stream, new PluginSettings
                 {
-                    ObsEnabled = false, RuijieEnabled = false, CameraEnabled = false
+                    ObsEnabled = false, RuijieEnabled = false, CameraEnabled = false,
+                    TakeoffModeWarningEnabled = false, SafeArmingModes = "Loiter, PosHold"
                 });
                 stream.Position = 0;
                 var settings = (PluginSettings)serializer.ReadObject(stream);
                 settings.Normalize();
                 True(!settings.ObsEnabled && !settings.RuijieEnabled && !settings.CameraEnabled);
+                True(!settings.TakeoffModeWarningEnabled);
+                Equal("Loiter, PosHold", settings.SafeArmingModes);
             }
         }
 
@@ -218,18 +223,24 @@ namespace SarmatPlugin.Tests
         private static void TakeoffModeWarning()
         {
             var tracker = new TakeoffModeWarningTracker();
-            Equal(false, tracker.Update(false, "AltHold"));
-            Equal(true, tracker.Update(true, "AltHold"));
-            Equal(true, tracker.Update(true, "Loiter"));
-            Equal(false, tracker.Update(true, "PostHold"));
-            Equal(false, tracker.Update(true, "AltHold"));
-            Equal(false, tracker.Update(false, "AltHold"));
-            Equal(false, tracker.Update(true, "POSHOLD"));
+            Equal(false, tracker.Update(false, "AltHold", true, "PosHold, Loiter"));
+            Equal(true, tracker.Update(true, "AltHold", true, "PosHold, Loiter"));
+            Equal(false, tracker.Update(true, "LOITER", true, "PosHold, Loiter"));
+            Equal(false, tracker.Update(true, "AltHold", true, "PosHold, Loiter"));
+            Equal(false, tracker.Update(false, "AltHold", true, "PosHold, Loiter"));
+            Equal(false, tracker.Update(true, "POSHOLD", true, "PosHold, Loiter"));
 
             var correctAtTakeoff = new TakeoffModeWarningTracker();
-            correctAtTakeoff.Update(false, "AltHold");
-            Equal(false, correctAtTakeoff.Update(true, "Pos Hold"));
-            Equal(false, correctAtTakeoff.Update(true, "AltHold"));
+            correctAtTakeoff.Update(false, "AltHold", true, "PosHold");
+            Equal(false, correctAtTakeoff.Update(true, "Pos Hold", true, "PosHold"));
+            Equal(false, correctAtTakeoff.Update(true, "AltHold", true, "PosHold"));
+
+            var disabled = new TakeoffModeWarningTracker();
+            Equal(false, disabled.Update(false, "AltHold", false, "PosHold"));
+            Equal(false, disabled.Update(true, "AltHold", false, "PosHold"));
+            Equal(false, disabled.Update(true, "AltHold", true, "PosHold"));
+            Equal(false, disabled.Update(false, "AltHold", true, "PosHold"));
+            Equal(true, disabled.Update(true, "PostHold", true, "PosHold"));
         }
         private static void MavlinkSilenceReconnect()
         {

@@ -81,11 +81,14 @@ namespace SarmatPlugin.Core
         [DataMember] public bool ObsEnabled { get; set; } = true;
         [DataMember] public bool RuijieEnabled { get; set; } = true;
         [DataMember] public bool CameraEnabled { get; set; } = true;
+        [DataMember] public bool TakeoffModeWarningEnabled { get; set; } = true;
+        [DataMember] public string SafeArmingModes { get; set; } = "PosHold";
 
         [OnDeserializing]
         private void OnDeserializing(StreamingContext context)
         {
-            ObsEnabled = RuijieEnabled = CameraEnabled = true;
+            ObsEnabled = RuijieEnabled = CameraEnabled = TakeoffModeWarningEnabled = true;
+            SafeArmingModes = "PosHold";
         }
 
         [DataMember] public string ObsEndpoint { get; set; } = "ws://127.0.0.1:4455";
@@ -143,6 +146,11 @@ namespace SarmatPlugin.Core
             AudioWarningSoundPath = (AudioWarningSoundPath ?? "").Trim();
             if (VehicleReconnectTimeoutSeconds <= 0) VehicleReconnectTimeoutSeconds = 10;
             VehicleReconnectTimeoutSeconds = Math.Max(3, Math.Min(300, VehicleReconnectTimeoutSeconds));
+            SafeArmingModes = string.Join(", ", (SafeArmingModes ?? "")
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim()).Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(SafeArmingModes)) SafeArmingModes = "PosHold";
             CameraUrl = string.IsNullOrWhiteSpace(CameraUrl)
                 ? "rtsp://192.168.69.5:554/stream=0" : CameraUrl.Trim();
             CameraProtocol = string.IsNullOrWhiteSpace(CameraProtocol) ? "tcp" : CameraProtocol.Trim();
