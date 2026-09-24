@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertTransferAccess, effectiveCrewId, isAccountEnabled, type Actor } from "../src/auth.js";
+import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertSuperAdmin, assertTransferAccess, effectiveCrewId, isAccountEnabled, type Actor } from "../src/auth.js";
 
 const base = { crewNumber: null, crewName: null, crewColor: null, userEnabled: true, groupEnabled: true, crewEnabled: true };
 const superAdmin: Actor = { ...base, userId: "super", username: "super", role: "SUPER_ADMIN", groupId: null, groupName: null, crewId: null };
@@ -27,6 +27,12 @@ describe("hierarchical authorization policy", () => {
 
   it("allows SUPER_ADMIN to transfer batteries between groups", () => {
     expect(() => assertTransferAccess(superAdmin, "group-a", "group-b")).not.toThrow();
+  });
+
+  it("reserves permanent deletion operations for SUPER_ADMIN", () => {
+    expect(() => assertSuperAdmin(superAdmin)).not.toThrow();
+    expect(() => assertSuperAdmin(groupAdminA)).toThrowError("Super administrator access required");
+    expect(() => assertSuperAdmin(crewA)).toThrowError("Super administrator access required");
   });
 
   it("scopes CREW lists to its authenticated crew", () => {

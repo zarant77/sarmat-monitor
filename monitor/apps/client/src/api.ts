@@ -49,6 +49,7 @@ export const api = {
   correctMeasurement: (id: string, data: Partial<MeasurementInput>) => request(`/api/admin/measurements/${id}`, json("PATCH", data)),
   archiveBattery: (id: string) => request(`/api/admin/batteries/${id}/archive`, json("POST", {})),
   restoreBattery: (id: string) => request(`/api/admin/batteries/${id}/restore`, json("POST", {})),
+  deleteBattery: (id: string) => request<void>(`/api/admin/batteries/${id}`, { method: "DELETE" }),
   thresholds: () => request<Thresholds>("/api/settings/thresholds"),
   updateThresholds: (data: ThresholdInput) => request<Thresholds>("/api/settings/thresholds", json("PUT", data))
 };

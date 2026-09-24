@@ -534,6 +534,13 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     return { ...updated, createdAt: iso(updated.createdAt), updatedAt: iso(updated.updatedAt), archivedAt: null };
   });
 
+  app.delete<{ Params: { id: string } }>("/api/admin/batteries/:id", async (request, reply) => {
+    assertSuperAdmin(request.actor);
+    const battery = await requireBattery(request.params.id, request.actor!);
+    await db.delete(batteries).where(eq(batteries.id, battery.id));
+    return reply.status(204).send();
+  });
+
   app.get("/api/settings/thresholds", async () => {
     const [row] = await db.select().from(settings).where(eq(settings.id, 1));
     return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
