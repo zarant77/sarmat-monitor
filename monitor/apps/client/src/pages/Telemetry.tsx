@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, RadioTower } from "lucide-react";
@@ -46,21 +46,6 @@ function TelemetryTable({ data }: { data?: TelemetryResponse }) {
   </table></div>;
 }
 
-function TelemetryCards({ data }: { data?: TelemetryResponse }) {
-  const { t } = useI18n();
-  return <div className="telemetry-card-grid">{data?.crews.map(crew => {
-    if (!crew.snapshot) return <article className="telemetry-status-card offline" style={{ "--crew-color": crew.color } as CSSProperties} key={crew.id}><div className="telemetry-card-head"><CrewIdentity number={crew.number} name={crew.name} color={crew.color}/><strong>{t("admin.dashboard.offline")}<i/></strong></div><div className="telemetry-no-signal"><RadioTower/>{t("telemetry.noSignal")}</div></article>;
-    const [status, ageMs, , voltage, current, satellites, hdop, heading, altitude, linkRssi, flags] = crew.snapshot;
-    const armed = Boolean(flags & 2); const recording = Boolean(flags & 1); const online = status === 0;
-    const linkPercent = linkRssi === null ? 0 : Math.max(0, Math.min(100, Math.round((linkRssi + 100) / 60 * 100)));
-    return <article className={`telemetry-status-card ${online ? "online" : "offline"}`} style={{ "--crew-color": crew.color } as CSSProperties} key={crew.id} title={t("telemetry.age", { seconds: Math.floor(ageMs / 1000) })}>
-      <div className="telemetry-card-head"><CrewIdentity number={crew.number} name={crew.name} color={crew.color}/><strong>{online ? t("admin.dashboard.online") : t("admin.dashboard.offline")}<i/></strong></div>
-      <div className="telemetry-card-metrics"><span><small>{t("telemetry.columns.voltage")}</small><strong>{value(voltage, 1, " V")}</strong></span><span><small>{t("telemetry.columns.current")}</small><strong>{value(current, 1, " A")}</strong></span><span><small>SAT</small><strong>{satellites ?? dash}</strong></span><span><small>HDOP</small><strong>{value(hdop, 1)}</strong></span><span><small>{t("telemetry.columns.heading")}</small><strong>{value(heading, 0, "°")}</strong></span><span><small>{t("telemetry.columns.altitude")}</small><strong>{value(altitude, 0, " m")}</strong></span></div>
-      <div className="telemetry-card-footer"><div><span>{t("telemetry.columns.link")}</span><strong>{linkPercent}%</strong><i><b style={{ width: `${linkPercent}%` }}/></i></div><span className={armed ? "armed" : ""}>{armed ? t("telemetry.armed") : t("telemetry.disarmed")}</span><span className={recording ? "recording" : ""}>{recording ? "REC" : "NR"}</span></div>
-    </article>;
-  })}</div>;
-}
-
 export function TelemetryPage() {
   const { t } = useI18n(); const auth = useAuth(); const superAdmin = auth.user?.role === "SUPER_ADMIN";
   const groups = useQuery({ queryKey: ["groups", "telemetry"], queryFn: api.groups, enabled: superAdmin });
@@ -95,8 +80,12 @@ export function TelemetryPage() {
       <span className={`telemetry-connection ${query.isError ? "offline" : ""}`}><i/>{query.isError ? t("telemetry.connectionLost") : t("telemetry.updating")}</span>
       <button className="button secondary" type="button" onClick={detach} disabled={!groupId}><ExternalLink/>{t("telemetry.detach")}</button>
     </div></section>
-    <section className="telemetry-cards-panel"><TelemetryCards data={query.data}/>{query.isLoading && <div className="empty">{t("telemetry.loading")}</div>}{!query.isLoading && !query.data?.crews.length && <div className="empty"><RadioTower/>{t("telemetry.empty")}</div>}{query.isError && <p className="admin-error">{t("telemetry.loadError")}</p>}</section>
-    {query.data?.crews.length ? <details className="panel telemetry-table-panel"><summary>{t("telemetry.tableView")}</summary><TelemetryTable data={query.data}/></details> : null}
+    <section className="panel telemetry-panel">
+      {query.data?.crews.length ? <TelemetryTable data={query.data}/> : null}
+      {query.isLoading && <div className="empty">{t("telemetry.loading")}</div>}
+      {!query.isLoading && !query.data?.crews.length && <div className="empty"><RadioTower/>{t("telemetry.empty")}</div>}
+      {query.isError && <p className="admin-error">{t("telemetry.loadError")}</p>}
+    </section>
     {detachedWindow && createPortal(<main className="detached-telemetry"><TelemetryTable data={query.data}/></main>, detachedWindow.document.body)}
   </div>;
 }
