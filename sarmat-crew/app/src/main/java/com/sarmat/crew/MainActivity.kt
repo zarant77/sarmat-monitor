@@ -426,25 +426,113 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun historyCard(item: BatteryHistoryItem): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(15), dp(11), dp(15), dp(11))
-        background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background)
-        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(8)) }
-        addView(TextView(this@MainActivity).apply {
+    private fun historyCard(item: BatteryHistoryItem): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(15), dp(11), dp(15), dp(11))
+            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(8)) }
+            isClickable = true; isFocusable = true
+        }
+        card.addView(TextView(this).apply {
             text = historyTitle(item); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
             setTextColor(ContextCompat.getColor(this@MainActivity, when (item.kind) { "charge" -> R.color.scanner_green; "discharge" -> R.color.scanner_yellow; else -> R.color.text_primary }))
         })
-        addView(TextView(this@MainActivity).apply {
+        card.addView(TextView(this).apply {
             text = formatHistoryTime(item.occurredAt); textSize = 12f
             setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted))
         })
         historyDetails(item).takeIf { it.isNotBlank() }?.let { details ->
-            addView(TextView(this@MainActivity).apply {
+            card.addView(TextView(this).apply {
                 text = details; textSize = 14f; setPadding(0, dp(5), 0, 0)
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             })
         }
+        val expanded = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(0, dp(10), 0, dp(4))
+        }
+        if (item.kind == "measurement" && !item.cellVoltages.isNullOrEmpty()) {
+            expanded.addView(TextView(this).apply {
+                text = historyMeasurementStats(item); textSize = 13f
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            })
+            expanded.addView(historyModuleRow("МОДУЛЬ A", item.cellVoltages.take(6), 0))
+            expanded.addView(historyModuleRow("МОДУЛЬ B", item.cellVoltages.drop(6).take(6), 6))
+        } else {
+            expanded.addView(TextView(this).apply {
+                text = historyExpandedDetails(item); textSize = 13f
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            })
+        }
+        card.addView(expanded)
+        val hint = TextView(this).apply {
+            text = "ДЕТАЛІ  ▾"; textSize = 11f; setPadding(0, dp(7), 0, 0)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
+        }
+        card.addView(hint)
+        card.setOnClickListener {
+            val opening = expanded.visibility != View.VISIBLE
+            expanded.visibility = if (opening) View.VISIBLE else View.GONE
+            hint.text = if (opening) "ЗГОРНУТИ  ▴" else "ДЕТАЛІ  ▾"
+        }
+        return card
+    }
+
+    private fun historyModuleRow(label: String, values: List<Double>, offset: Int): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(0, dp(9), 0, 0)
+        addView(TextView(this@MainActivity).apply {
+            text = label; textSize = 11f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime))
+        })
+        addView(LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            values.forEachIndexed { index, voltage ->
+                addView(LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                    background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background)
+                    setPadding(dp(2), dp(5), dp(2), dp(5))
+                    addView(TextView(this@MainActivity).apply {
+                        text = "${offset + index + 1}"; gravity = Gravity.CENTER; textSize = 10f
+                        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted))
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        text = String.format(Locale.US, "%.2f", voltage); gravity = Gravity.CENTER; textSize = 12f; setTypeface(typeface, Typeface.BOLD)
+                        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                    })
+                }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(1), 0, dp(1), 0) })
+            }
+        })
+    }
+
+    private fun historyMeasurementStats(item: BatteryHistoryItem): String = buildString {
+        append(listOfNotNull(
+            item.totalVoltage?.let { String.format(Locale.US, "Загальна: %.2f V", it) },
+            item.chargePercent?.let { "Заряд: $it%" },
+            item.health?.let { "Стан: ${healthLabel(it)}" }
+        ).joinToString(" · "))
+        append("\n")
+        append(listOfNotNull(
+            item.minCellVoltage?.let { String.format(Locale.US, "Min: %.2f V", it) },
+            item.maxCellVoltage?.let { String.format(Locale.US, "Max: %.2f V", it) },
+            item.cellDelta?.let { String.format(Locale.US, "Δ %.2f V", it) }
+        ).joinToString(" · "))
+        item.notes?.takeIf { it.isNotBlank() }?.let { append("\nПримітка: $it") }
+    }
+
+    private fun historyExpandedDetails(item: BatteryHistoryItem): String = buildString {
+        when (item.kind) {
+            "charge", "discharge" -> {
+                append(if (item.inferred == true) "Джерело: автоматичний аналіз вимірювань" else "Джерело: ручний запис")
+                append("\nЗміна циклів: ${item.cycleDelta ?: 0}")
+            }
+            "transfer" -> append("Звідки: ${item.fromCrewName ?: "без екіпажу"}\nКуди: ${item.toCrewName ?: "невідомий екіпаж"}")
+            else -> {
+                item.flightMinutes?.let { append("Тривалість польоту: $it хв") }
+                if (isEmpty()) append("Додаткових даних немає")
+            }
+        }
+        item.notes?.takeIf { it.isNotBlank() }?.let { append("\nПримітка: $it") }
     }
 
     private fun historyTitle(item: BatteryHistoryItem) = when (item.kind) {
@@ -476,7 +564,6 @@ class MainActivity : AppCompatActivity() {
             "transfer" -> append("${item.fromCrewName ?: "Без екіпажу"} → ${item.toCrewName ?: "Екіпаж"}")
             else -> item.flightMinutes?.let { append("Політ: $it хв") }
         }
-        item.notes?.takeIf { it.isNotBlank() }?.let { append(if (isEmpty()) it else "\n$it") }
     }
 
     private fun formatHistoryTime(value: String): String = runCatching {

@@ -377,7 +377,10 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
         select ${measurements.id}::text as "id", ${measurements.batteryId} as "batteryId", 'measurement'::text as "kind",
           ${measurements.measuredAt} as "occurredAt",
           jsonb_build_object('totalVoltage', ${measurements.totalVoltage}, 'chargePercent', ${measurements.chargePercent},
-            'cellDelta', ${measurements.cellDelta}, 'health', ${measurements.health}, 'notes', ${measurements.notes}) as "data"
+            'cellVoltages', ${measurements.cellVoltages}, 'minCellVoltage', ${measurements.minCellVoltage},
+            'maxCellVoltage', ${measurements.maxCellVoltage}, 'cellDelta', ${measurements.cellDelta},
+            'health', ${measurements.health}, 'warningThresholdV', ${measurements.warningThresholdV},
+            'dangerThresholdV', ${measurements.dangerThresholdV}, 'notes', ${measurements.notes}) as "data"
         from ${measurements}
         union all
         select ${cycleEvents.id}::text, ${cycleEvents.batteryId}, ${cycleEvents.type}::text, ${cycleEvents.occurredAt},
