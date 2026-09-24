@@ -5,7 +5,11 @@ export class ApiError extends Error {
   constructor(message: string, readonly code?: string, readonly details?: unknown) { super(message); }
 }
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { ...options, credentials: "include", headers: { "Content-Type": "application/json", ...options?.headers } });
+  const response = await fetch(`${BASE}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: { ...(options?.body !== undefined ? { "Content-Type": "application/json" } : {}), ...options?.headers }
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }));
     throw new ApiError(body.error ?? response.statusText, body.code, body.issues ?? body.partial);
