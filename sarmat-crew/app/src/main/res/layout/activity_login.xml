@@ -5,70 +5,96 @@
     android:layout_height="match_parent"
     android:background="@color/black"
     android:fillViewport="true">
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:orientation="vertical"
-        android:padding="28dp">
+        android:paddingHorizontal="24dp">
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/login_title"
+            android:background="@drawable/secondary_button_background"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="7dp"
+            android:text="CREW ACCESS"
             android:textColor="@color/lime"
-            android:textSize="30sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
-
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
-            android:gravity="center"
+            android:layout_marginTop="18dp"
+            android:text="@string/login_title"
+            android:textColor="@color/text_primary"
+            android:textSize="36sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="30dp"
             android:text="@string/login_subtitle"
-            android:textColor="@color/text_muted" />
+            android:textColor="@color/text_muted"
+            android:textSize="14sp" />
 
         <EditText
             android:id="@+id/serverUrlInput"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
+            android:background="@drawable/input_background"
             android:hint="@string/server_url"
             android:inputType="textUri"
+            android:singleLine="true"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_muted" />
-
         <EditText
             android:id="@+id/usernameInput"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/input_background"
             android:hint="@string/username"
             android:inputType="text"
+            android:singleLine="true"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_muted" />
-
         <EditText
             android:id="@+id/passwordInput"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/input_background"
             android:hint="@string/password"
             android:inputType="textPassword"
+            android:singleLine="true"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_muted" />
-
         <TextView
             android:id="@+id/loginError"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/scanner_red" />
-
+            android:minHeight="28dp"
+            android:gravity="center_vertical"
+            android:textColor="@color/status_danger"
+            android:textSize="12sp" />
         <Button
             android:id="@+id/loginButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="16dp"
-            android:text="@string/sign_in" />
+            android:layout_height="54dp"
+            android:background="@drawable/primary_button_background"
+            android:backgroundTint="@null"
+            android:text="@string/sign_in"
+            android:textColor="@color/black"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="Захищене підключення до Sarmat Monitor"
+            android:textColor="@color/text_muted"
+            android:textSize="10sp" />
     </LinearLayout>
 </ScrollView>

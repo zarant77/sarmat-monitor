@@ -32,15 +32,8 @@ android {
 }
 
 dependencies {
-    val cameraXVersion = "1.6.2"
-
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
-    implementation("androidx.camera:camera-core:$cameraXVersion")
-    implementation("androidx.camera:camera-camera2:$cameraXVersion")
-    implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
-    implementation("androidx.camera:camera-view:$cameraXVersion")
-    implementation("org.opencv:opencv:4.14.0")
 
     testImplementation("junit:junit:4.13.2")
 }

@@ -8,27 +8,27 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="78dp"
-        android:background="@color/surface"
+        android:layout_height="92dp"
+        android:background="@drawable/header_background"
         android:gravity="center_vertical"
         android:orientation="vertical"
         android:paddingHorizontal="20dp">
-
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:letterSpacing="0.08"
             android:text="ІСТОРІЯ"
-            android:textColor="@color/lime"
-            android:textSize="21sp"
+            android:textColor="@color/text_primary"
+            android:textSize="24sp"
             android:textStyle="bold" />
-
         <TextView
             android:id="@+id/historyBatteryLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
+            android:layout_marginTop="4dp"
+            android:textColor="@color/lime"
+            android:textSize="13sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <ScrollView
@@ -37,7 +37,6 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:fillViewport="true">
-
         <LinearLayout
             android:id="@+id/historyList"
             android:layout_width="match_parent"
@@ -48,16 +47,16 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
+        android:background="@color/surface"
         android:gravity="center"
         android:orientation="horizontal">
-
         <ProgressBar
             android:id="@+id/historyProgress"
             style="?android:attr/progressBarStyleSmall"
-            android:layout_width="28dp"
-            android:layout_height="28dp" />
-
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:indeterminateTint="@color/lime" />
         <TextView
             android:id="@+id/historyStatus"
             android:layout_width="wrap_content"
@@ -65,6 +64,6 @@
             android:layout_marginStart="8dp"
             android:text="Завантаження…"
             android:textColor="@color/text_muted"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

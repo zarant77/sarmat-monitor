@@ -11,21 +11,9 @@
     <string name="refresh">Оновити</string>
     <string name="sign_out">Вийти</string>
     <string name="record_measurement">Записати вимірювання</string>
-    <string name="scan_module">Сканувати модуль %1$s</string>
-    <string name="manual_entry">Ввести вручну</string>
     <string name="history">Історія</string>
     <string name="save_measurement">Зберегти вимірювання</string>
     <string name="notes">Примітка</string>
-    <string name="use_values">Використати значення</string>
-    <string name="back">Назад</string>
     <string name="loading">Завантаження…</string>
-    <string name="scanner_title">СКАНЕР LCD</string>
-    <string name="scanner_hint">Помістіть дисплей чекера в рамку</string>
-    <string name="camera_permission">Для сканування потрібен доступ до камери.</string>
-    <string name="camera_error">Не вдалося запустити камеру</string>
-    <string name="scanner_error">Не вдалося запустити модуль розпізнавання</string>
-    <string name="state_searching">ШУКАЮ ДИСПЛЕЙ</string>
-    <string name="state_reading">ЗЧИТУЮ ЗНАЧЕННЯ</string>
-    <string name="state_recognized">РОЗПІЗНАНО</string>
     <string name="cell_number">Комірка %1$d</string>
 </resources>

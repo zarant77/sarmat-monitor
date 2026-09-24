@@ -8,12 +8,20 @@
 
 - [`telemetry-plugin`](./telemetry-plugin) — плагін для Mission Planner, який надсилає телеметрію.
 - [`monitor`](./monitor) — основний вебзастосунок для телеметрії станцій, керування акумуляторами, перевірками, циклами та передаванням між екіпажами.
-- [`sarmat-crew`](./sarmat-crew) — нативний Android-застосунок екіпажу: список батарей, сканування LCD і запис вимірювань.
+- [`sarmat-crew`](./sarmat-crew) — нативний Android-застосунок екіпажу: список батарей, ручне введення та запис вимірювань.
 - [`theme`](./theme) — спільні ресурси оформлення Mission Planner для всіх плагінів.
 
 Telemetry plugin і Monitor використовують компактний MessagePack-протокол через WebSocket. Під час локальної розробки вебінтерфейс типово доступний на `http://localhost:5173/` (або `https://localhost:5173/`, якщо налаштовані локальні сертифікати), а API — на `http://localhost:3000/`.
 
 Детальні інструкції запуску є в [`monitor/README.md`](./monitor/README.md). Із кореня монорепозиторію доступні команди `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`, `npm run db:migrate` і `npm run db:seed`.
+
+Для швидкого запуску використовуйте кореневий launcher:
+
+```bash
+./launcher.sh
+```
+
+Він відкриває інтерактивне меню для dev-режиму, production build, тестів, міграцій та Android-збірок. Ті самі операції доступні без меню, наприклад `./launcher.sh dev`, `./launcher.sh android-release` або `./launcher.sh android-install DEVICE_SERIAL`.
 
 ## Railway
 

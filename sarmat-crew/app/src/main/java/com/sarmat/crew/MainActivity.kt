@@ -1,23 +1,16 @@
 package com.sarmat.crew
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Size
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -26,15 +19,6 @@ import com.sarmat.crew.api.ApiException
 import com.sarmat.crew.api.BatteryHistoryItem
 import com.sarmat.crew.api.BatterySummary
 import com.sarmat.crew.api.CrewApi
-import com.sarmat.crew.scanner.LcdScanner
-import com.sarmat.crew.scanner.ScanAccumulator
-import com.sarmat.crew.scanner.ScanQuad
-import com.sarmat.crew.scanner.StableScan
-import com.sarmat.crew.ui.ScannerOverlayView
-import org.opencv.android.OpenCVLoader
-import org.opencv.core.Core
-import org.opencv.core.CvType
-import org.opencv.core.Mat
 import java.util.Locale
 import java.time.Duration
 import java.time.Instant
@@ -44,18 +28,16 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
-    private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, HISTORY, SCANNER }
+    private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, HISTORY }
 
     private lateinit var api: CrewApi
-    private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val networkExecutor = Executors.newSingleThreadExecutor()
-    private lateinit var scanner: LcdScanner
-    private var provider: ProcessCameraProvider? = null
     private var screen = Screen.LOGIN
     private var battery: BatterySummary? = null
     private var draft = mutableListOf<String>()
     private var draftNotes = ""
     private val cellViews = mutableListOf<TextView>()
+    private val cellContainers = mutableListOf<LinearLayout>()
     private var selectedCell = 0
     private var manualReferenceCell: Int? = null
     private var editorMinCentivolts = 300
@@ -64,34 +46,17 @@ class MainActivity : AppCompatActivity() {
     private var previewGeneration = 0
     private val previewHandler = Handler(Looper.getMainLooper())
     private var previewRunnable: Runnable? = null
-    private var moduleOffset = 0
-    private var recognized: List<Double>? = null
     private var historyOffset = 0
     private var historyLoading = false
     private var historyHasMore = true
-
-    private lateinit var preview: PreviewView
-    private lateinit var overlay: ScannerOverlayView
-    private lateinit var status: TextView
-    private lateinit var useButton: Button
-    private val scanValues = mutableListOf<TextView>()
-    private var accumulator = ScanAccumulator()
-    private var missingFrames = 0
-
-    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && screen == Screen.SCANNER) startCamera()
-        else if (screen == Screen.SCANNER) status.text = getString(R.string.camera_permission)
-    }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         api = CrewApi(getSharedPreferences("sarmat_crew", MODE_PRIVATE))
-        if (OpenCVLoader.initLocal()) scanner = LcdScanner()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when (screen) {
-                    Screen.SCANNER -> showMeasurement()
                     Screen.HISTORY -> showMeasurement()
                     Screen.MEASUREMENT -> showBatteries()
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
@@ -102,7 +67,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLogin(message: String = "") {
-        stopCamera(); screen = Screen.LOGIN; setScreenContent(R.layout.activity_login)
+        screen = Screen.LOGIN; setScreenContent(R.layout.activity_login)
         val server = findViewById<EditText>(R.id.serverUrlInput).apply { setText(api.baseUrl) }
         val username = findViewById<EditText>(R.id.usernameInput)
         val password = findViewById<EditText>(R.id.passwordInput)
@@ -119,7 +84,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBatteries() {
-        stopCamera(); screen = Screen.BATTERIES; setScreenContent(R.layout.activity_batteries)
+        screen = Screen.BATTERIES; setScreenContent(R.layout.activity_batteries)
         findViewById<TextView>(R.id.crewNameText).text = api.savedCrewLabel()
         findViewById<TextView>(R.id.menuButton).setOnClickListener { anchor ->
             PopupMenu(this, anchor).apply {
@@ -167,7 +132,7 @@ class MainActivity : AppCompatActivity() {
             addView(titleRow)
             addView(TextView(this@MainActivity).apply {
                 text = if (item.activeSince != null) "У ДРОНІ · ${age(item.activeSince)}" else item.latestDelta?.let { String.format(Locale.US, "Δ %.2f V", it) } ?: "Немає вимірювань"
-                setTextColor(ContextCompat.getColor(this@MainActivity, when (item.latestHealth) { "danger" -> R.color.scanner_red; "warning" -> R.color.scanner_yellow; else -> R.color.text_primary }))
+                setTextColor(ContextCompat.getColor(this@MainActivity, when (item.latestHealth) { "danger" -> R.color.status_danger; "warning" -> R.color.status_warning; else -> R.color.text_primary }))
                 textSize = 15f; setPadding(0, dp(5), 0, 0)
             })
             addView(TextView(this@MainActivity).apply {
@@ -228,7 +193,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMeasurement() {
-        stopCamera(); val item = battery ?: return showBatteries()
+        val item = battery ?: return showBatteries()
         screen = Screen.MEASUREMENT; setScreenContent(R.layout.activity_measurement)
         findViewById<TextView>(R.id.batteryTitle).text = item.label
         findViewById<TextView>(R.id.detailCharge).text = item.latestChargePercent?.let { "$it%" } ?: "—"
@@ -238,14 +203,6 @@ class MainActivity : AppCompatActivity() {
             item.latestMeasuredAt?.let { append("\nПеревірена ${age(it)} тому") }
         }
         findViewById<TextView>(R.id.batteryMeta).text = "${item.cellCount}S ${item.chemistry} · ${item.capacityAh.toInt()} Ah · ${item.serialNumber}"
-        findViewById<Button>(R.id.scanAButton).apply {
-            text = getString(R.string.scan_module, "A"); visibility = if (item.cellCount == 12) View.VISIBLE else View.GONE
-            setOnClickListener { keepDraft(); showScanner(0) }
-        }
-        findViewById<Button>(R.id.scanBButton).apply {
-            text = getString(R.string.scan_module, "B"); visibility = if (item.cellCount == 12) View.VISIBLE else View.GONE
-            setOnClickListener { keepDraft(); showScanner(6) }
-        }
         findViewById<Button>(R.id.historyButton).setOnClickListener { keepDraft(); showHistory() }
         configureVoltageEditor()
         createCells(item.cellCount)
@@ -255,7 +212,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createCells(count: Int) {
-        val container = findViewById<LinearLayout>(R.id.measurementCells); cellViews.clear()
+        val container = findViewById<LinearLayout>(R.id.measurementCells); cellViews.clear(); cellContainers.clear()
         draft = MutableList(count) { draft.getOrNull(it).orEmpty() }
         for (start in 0 until count step 6) {
             container.addView(TextView(this).apply { text = "МОДУЛЬ ${if (start == 0) "A · 1–6" else "B · 7–12"}"; textSize = 12f; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.lime)); setTypeface(typeface, Typeface.BOLD); setPadding(dp(4), dp(4), 0, dp(2)) })
@@ -264,7 +221,7 @@ class MainActivity : AppCompatActivity() {
                 val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background); layoutParams = LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }; isClickable = true; isFocusable = true; setOnClickListener { openCellEditor(index) } }
                 box.addView(TextView(this).apply { text = "${index + 1}"; gravity = Gravity.CENTER; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)) })
                 val value = TextView(this).apply { text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f", it) } ?: "—"; gravity = Gravity.CENTER; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary)) }
-                box.addView(value, LinearLayout.LayoutParams(-1, dp(34))); row.addView(box); cellViews += value
+                box.addView(value, LinearLayout.LayoutParams(-1, dp(34))); row.addView(box); cellViews += value; cellContainers += box
             }
             container.addView(row)
         }
@@ -322,6 +279,7 @@ class MainActivity : AppCompatActivity() {
         if (index !in draft.indices) return
         val range = manualVoltageRangeCentivolts(draft, index, manualReferenceCell) ?: return
         selectedCell = index
+        cellContainers.forEachIndexed { cellIndex, view -> view.background = ContextCompat.getDrawable(this, if (cellIndex == index) R.drawable.cell_selected else R.drawable.cell_background) }
         editorMinCentivolts = range.first; editorMaxCentivolts = range.last
         val currentCentivolts = ((draft[index].toDoubleOrNull() ?: ((range.first + range.last) / 200.0)) * 100).roundToInt().coerceIn(range.first, range.last)
         findViewById<SeekBar>(R.id.voltageSlider).max = range.last - range.first
@@ -363,7 +321,7 @@ class MainActivity : AppCompatActivity() {
                 findViewById<TextView>(R.id.measurementError).text = ""
                 findViewById<TextView>(R.id.measurementSummary).apply {
                     text = String.format(Locale.US, "Загальна: %.2f V  ·  Min: %.2f V  ·  Max: %.2f V\nDelta: %.2f V  ·  Заряд: %d%%  ·  %s", result.totalVoltage, result.minCellVoltage, result.maxCellVoltage, result.cellDelta, result.chargePercent, healthLabel(result.health))
-                    setTextColor(ContextCompat.getColor(this@MainActivity, when (result.health) { "danger" -> R.color.scanner_red; "warning" -> R.color.scanner_yellow; else -> R.color.text_primary }))
+                    setTextColor(ContextCompat.getColor(this@MainActivity, when (result.health) { "danger" -> R.color.status_danger; "warning" -> R.color.status_warning; else -> R.color.text_primary }))
                 }
             } }.onFailure { error -> runOnUiThread {
                 if (screen == Screen.MEASUREMENT && generation == previewGeneration) findViewById<TextView>(R.id.measurementError).text = error.message ?: "Не вдалося перевірити вимірювання"
@@ -379,7 +337,7 @@ class MainActivity : AppCompatActivity() {
     }.getOrDefault("—")
 
     private fun showHistory() {
-        stopCamera(); val item = battery ?: return showBatteries()
+        val item = battery ?: return showBatteries()
         screen = Screen.HISTORY; setScreenContent(R.layout.activity_history)
         findViewById<TextView>(R.id.historyBatteryLabel).text = item.label
         historyOffset = 0; historyLoading = false; historyHasMore = true
@@ -436,7 +394,7 @@ class MainActivity : AppCompatActivity() {
         }
         card.addView(TextView(this).apply {
             text = historyTitle(item); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ContextCompat.getColor(this@MainActivity, when (item.kind) { "charge" -> R.color.scanner_green; "discharge" -> R.color.scanner_yellow; else -> R.color.text_primary }))
+            setTextColor(ContextCompat.getColor(this@MainActivity, when (item.kind) { "charge" -> R.color.status_good; "discharge" -> R.color.status_warning; else -> R.color.text_primary }))
         })
         card.addView(TextView(this).apply {
             text = formatHistoryTime(item.occurredAt); textSize = 12f
@@ -570,82 +528,6 @@ class MainActivity : AppCompatActivity() {
         HISTORY_TIME_FORMAT.format(Instant.parse(value).atZone(ZoneId.systemDefault()))
     }.getOrDefault(value)
 
-    private fun showScanner(offset: Int) {
-        if (!::scanner.isInitialized) return
-        screen = Screen.SCANNER; moduleOffset = offset; recognized = null; accumulator = ScanAccumulator(); missingFrames = 0
-        setScreenContent(R.layout.activity_scanner)
-        preview = findViewById(R.id.preview); overlay = findViewById(R.id.scannerOverlay); status = findViewById(R.id.statusText); useButton = findViewById(R.id.useValuesButton)
-        findViewById<TextView>(R.id.scannerTitle).text = if (offset == 0) "МОДУЛЬ A · КОМІРКИ 1–6" else "МОДУЛЬ B · КОМІРКИ 7–12"
-        findViewById<Button>(R.id.cancelScannerButton).setOnClickListener { showMeasurement() }
-        useButton.setOnClickListener {
-            recognized?.let {
-                if (manualReferenceCell == null) manualReferenceCell = moduleOffset
-                applyModuleScan(draft, moduleOffset, it)
-            }
-            showMeasurement()
-        }
-        scanValues.clear(); createScanValues(findViewById(R.id.cellValues))
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
-    }
-
-    private fun startCamera() {
-        val future = ProcessCameraProvider.getInstance(this)
-        future.addListener({
-            if (screen != Screen.SCANNER) return@addListener
-            try {
-                val current = future.get().also { provider = it }; val rotation = preview.display?.rotation ?: android.view.Surface.ROTATION_0
-                val cameraPreview = Preview.Builder().setTargetRotation(rotation).build().also { it.surfaceProvider = preview.surfaceProvider }
-                val analysis = ImageAnalysis.Builder().setTargetRotation(rotation).setTargetResolution(Size(1280, 720)).setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build().also { it.setAnalyzer(cameraExecutor, ::analyze) }
-                current.unbindAll(); current.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, cameraPreview, analysis)
-            } catch (_: Exception) { status.text = getString(R.string.camera_error) }
-        }, ContextCompat.getMainExecutor(this))
-    }
-
-    private fun analyze(image: ImageProxy) {
-        try {
-            val source = imageToGray(image); val upright = rotate(source, image.imageInfo.rotationDegrees); if (upright !== source) source.release()
-            val frame = scanner.scan(upright); upright.release()
-            if (frame.displayFound) missingFrames = 0 else if (++missingFrames >= 12) { accumulator.clear(); missingFrames = 0 }
-            val stable = accumulator.add(frame)
-            runOnUiThread {
-                if (screen == Screen.SCANNER) renderScan(stable, frame.debugRows, frame.sourceWidth, frame.sourceHeight)
-            }
-        } catch (_: Exception) {} finally { image.close() }
-    }
-
-    private fun imageToGray(image: ImageProxy): Mat {
-        val plane = image.planes[0]; val mat = Mat(image.height, image.width, CvType.CV_8UC1); val bytes = ByteArray(image.width * image.height); val buffer = plane.buffer.apply { rewind() }
-        if (plane.pixelStride == 1 && plane.rowStride == image.width) buffer.get(bytes, 0, minOf(bytes.size, buffer.remaining())) else {
-            val row = ByteArray(plane.rowStride); var target = 0
-            repeat(image.height) { val length = minOf(plane.rowStride, buffer.remaining()); buffer.get(row, 0, length); repeat(image.width) { x -> bytes[target++] = row[x * plane.pixelStride] } }
-        }
-        mat.put(0, 0, bytes); return mat
-    }
-
-    private fun rotate(source: Mat, degrees: Int): Mat {
-        if (degrees == 0) return source; val result = Mat()
-        when (degrees) { 90 -> Core.rotate(source, result, Core.ROTATE_90_CLOCKWISE); 180 -> Core.rotate(source, result, Core.ROTATE_180); 270 -> Core.rotate(source, result, Core.ROTATE_90_COUNTERCLOCKWISE); else -> return source }
-        return result
-    }
-
-    private fun renderScan(scan: StableScan, rows: List<ScanQuad>, sourceWidth: Int, sourceHeight: Int) {
-        scan.cells.forEachIndexed { index, reading -> scanValues[index].text = reading?.let { String.format(Locale.US, "%.2f", it.value) } ?: "—" }
-        val state = when { !scan.displayFound -> ScannerOverlayView.State.SEARCHING; scan.isComplete -> ScannerOverlayView.State.RECOGNIZED; else -> ScannerOverlayView.State.READING }
-        overlay.setState(state)
-        overlay.setDetectedRows(rows, sourceWidth, sourceHeight)
-        status.text = getString(when (state) { ScannerOverlayView.State.SEARCHING -> R.string.state_searching; ScannerOverlayView.State.READING -> R.string.state_reading; ScannerOverlayView.State.RECOGNIZED -> R.string.state_recognized })
-        if (scan.isComplete) recognized = scan.cells.map { it!!.value }; useButton.isEnabled = scan.isComplete
-    }
-
-    private fun createScanValues(container: LinearLayout) = repeat(6) { index ->
-        val value = TextView(this).apply { text = "—"; gravity = Gravity.CENTER; textSize = 18f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary)) }
-        container.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background); layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(dp(3), 0, dp(3), 0) }
-            addView(TextView(this@MainActivity).apply { text = "${moduleOffset + index + 1}"; gravity = Gravity.CENTER; setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)) }); addView(value)
-        }); scanValues += value
-    }
-
-    private fun stopCamera() { provider?.unbindAll(); provider = null }
     private fun setScreenContent(layoutId: Int) {
         setContentView(layoutId)
         val root = findViewById<View>(R.id.screenRoot)
@@ -673,7 +555,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun Int?.orZero() = this ?: 0
-    override fun onDestroy() { stopCamera(); if (::scanner.isInitialized) scanner.close(); cameraExecutor.shutdown(); networkExecutor.shutdown(); super.onDestroy() }
+    override fun onDestroy() { networkExecutor.shutdown(); super.onDestroy() }
 
     companion object {
         private val HISTORY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy · HH:mm")
