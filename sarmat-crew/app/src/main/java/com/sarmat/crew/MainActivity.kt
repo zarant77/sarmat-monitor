@@ -23,6 +23,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.sarmat.crew.api.ApiException
+import com.sarmat.crew.api.BatteryHistoryItem
 import com.sarmat.crew.api.BatterySummary
 import com.sarmat.crew.api.CrewApi
 import com.sarmat.crew.scanner.LcdScanner
@@ -37,11 +38,13 @@ import org.opencv.core.Mat
 import java.util.Locale
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
-    private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, SCANNER }
+    private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, HISTORY, SCANNER }
 
     private lateinit var api: CrewApi
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -54,14 +57,18 @@ class MainActivity : AppCompatActivity() {
     private var draftNotes = ""
     private val cellViews = mutableListOf<TextView>()
     private var selectedCell = 0
+    private var manualReferenceCell: Int? = null
     private var editorMinCentivolts = 300
-    private var editorMaxCentivolts = 420
+    private var editorMaxCentivolts = 422
     private var previewValid = false
     private var previewGeneration = 0
     private val previewHandler = Handler(Looper.getMainLooper())
     private var previewRunnable: Runnable? = null
     private var moduleOffset = 0
     private var recognized: List<Double>? = null
+    private var historyOffset = 0
+    private var historyLoading = false
+    private var historyHasMore = true
 
     private lateinit var preview: PreviewView
     private lateinit var overlay: ScannerOverlayView
@@ -85,6 +92,7 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 when (screen) {
                     Screen.SCANNER -> showMeasurement()
+                    Screen.HISTORY -> showMeasurement()
                     Screen.MEASUREMENT -> showBatteries()
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                 }
@@ -212,7 +220,7 @@ class MainActivity : AppCompatActivity() {
         return frame
     }
 
-    private fun openBattery(item: BatterySummary) { battery = item; draft = MutableList(item.cellCount) { "" }; draftNotes = ""; showMeasurement() }
+    private fun openBattery(item: BatterySummary) { battery = item; draft = MutableList(item.cellCount) { "" }; draftNotes = ""; manualReferenceCell = null; showMeasurement() }
 
     private fun toggleActive(item: BatterySummary) {
         findViewById<TextView>(R.id.listStatusText).text = if (item.activeSince == null) "Встановлюю ${item.label}…" else "Знімаю ${item.label}…"
@@ -238,6 +246,7 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.scan_module, "B"); visibility = if (item.cellCount == 12) View.VISIBLE else View.GONE
             setOnClickListener { keepDraft(); showScanner(6) }
         }
+        findViewById<Button>(R.id.historyButton).setOnClickListener { keepDraft(); showHistory() }
         configureVoltageEditor()
         createCells(item.cellCount)
         findViewById<EditText>(R.id.notesInput).setText(draftNotes)
@@ -285,13 +294,13 @@ class MainActivity : AppCompatActivity() {
         val error = findViewById<TextView>(R.id.measurementError); val button = findViewById<Button>(R.id.saveMeasurementButton)
         val nullable = draft.map { it.toDoubleOrNull() }
         if (nullable.any { it == null }) { error.text = "Заповніть усі ${item.cellCount} комірок"; return }
-        val cells = nullable.filterNotNull(); val min = item.minVoltage / item.cellCount; val max = item.maxVoltage / item.cellCount
+        val cells = nullable.filterNotNull(); val min = item.minVoltage / item.cellCount; val max = item.maxVoltage / item.cellCount + 0.02
         if (cells.any { it !in min..max }) { error.text = String.format(Locale.US, "Допустимий діапазон: %.2f–%.2f V", min, max); return }
         if (!previewValid) { error.text = "Дочекайтеся перевірки вимірювання"; return }
         button.isEnabled = false; error.text = "Зберігаю…"
         val notes = findViewById<EditText>(R.id.notesInput).text.toString()
         networkExecutor.execute {
-            runCatching { api.saveMeasurement(item.id, cells, notes); api.batteries().first { it.id == item.id } }.onSuccess { updated -> runOnUiThread { battery = updated; draft = MutableList(updated.cellCount) { "" }; draftNotes = ""; showMeasurement() } }
+            runCatching { api.saveMeasurement(item.id, cells, notes); api.batteries().first { it.id == item.id } }.onSuccess { updated -> runOnUiThread { battery = updated; draft = MutableList(updated.cellCount) { "" }; draftNotes = ""; manualReferenceCell = null; showMeasurement() } }
                 .onFailure { runOnUiThread { error.text = it.message ?: "Не вдалося зберегти"; button.isEnabled = true } }
         }
     }
@@ -311,11 +320,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectCell(index: Int) {
         if (index !in draft.indices) return
-        val range = manualVoltageRangeCentivolts(draft, index)
-        if (range == null) {
-            findViewById<TextView>(R.id.measurementError).text = "Спочатку вкажіть напругу комірки 1"
-            return
-        }
+        val range = manualVoltageRangeCentivolts(draft, index, manualReferenceCell) ?: return
         selectedCell = index
         editorMinCentivolts = range.first; editorMaxCentivolts = range.last
         val currentCentivolts = ((draft[index].toDoubleOrNull() ?: ((range.first + range.last) / 200.0)) * 100).roundToInt().coerceIn(range.first, range.last)
@@ -339,8 +344,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setSelectedVoltage(value: Double) {
         if (selectedCell !in draft.indices) return
+        if (manualReferenceCell == null) manualReferenceCell = selectedCell
         draft[selectedCell] = String.format(Locale.US, "%.2f", value)
-        if (selectedCell == 0) clampDependentCellVoltages(draft)
+        if (selectedCell == manualReferenceCell) clampDependentCellVoltages(draft, selectedCell)
         findViewById<TextView>(R.id.selectedCellValue).text = String.format(Locale.US, "%.2f V", value)
         findViewById<SeekBar>(R.id.voltageSlider).progress = ((value * 100).roundToInt() - editorMinCentivolts).coerceIn(0, editorMaxCentivolts - editorMinCentivolts)
         updateSummary()
@@ -372,6 +378,111 @@ class MainActivity : AppCompatActivity() {
         when { minutes < 1 -> "щойно"; minutes < 60 -> "$minutes хв"; minutes < 1440 -> "${minutes / 60} год"; else -> "${minutes / 1440} дн" }
     }.getOrDefault("—")
 
+    private fun showHistory() {
+        stopCamera(); val item = battery ?: return showBatteries()
+        screen = Screen.HISTORY; setScreenContent(R.layout.activity_history)
+        findViewById<TextView>(R.id.historyBatteryLabel).text = item.label
+        historyOffset = 0; historyLoading = false; historyHasMore = true
+        val scroll = findViewById<ScrollView>(R.id.historyScroll)
+        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            val content = scroll.getChildAt(0)
+            if (content != null && scrollY + scroll.height >= content.height - dp(160)) loadHistoryPage()
+        }
+        findViewById<TextView>(R.id.historyStatus).setOnClickListener { if (!historyLoading) loadHistoryPage() }
+        loadHistoryPage()
+    }
+
+    private fun loadHistoryPage() {
+        val item = battery ?: return
+        if (screen != Screen.HISTORY || historyLoading || !historyHasMore) return
+        historyLoading = true
+        findViewById<ProgressBar>(R.id.historyProgress).visibility = View.VISIBLE
+        findViewById<TextView>(R.id.historyStatus).text = "Завантаження…"
+        val requestedOffset = historyOffset
+        networkExecutor.execute {
+            runCatching { api.batteryHistory(item.id, requestedOffset) }.onSuccess { page -> runOnUiThread {
+                if (screen != Screen.HISTORY || battery?.id != item.id) return@runOnUiThread
+                val list = findViewById<LinearLayout>(R.id.historyList)
+                page.items.forEach { list.addView(historyCard(it)) }
+                historyOffset = page.nextOffset ?: historyOffset
+                historyHasMore = page.nextOffset != null
+                historyLoading = false
+                findViewById<ProgressBar>(R.id.historyProgress).visibility = View.GONE
+                findViewById<TextView>(R.id.historyStatus).text = when {
+                    list.childCount == 0 -> "Історія поки порожня"
+                    historyHasMore -> "Прокрутіть далі для завантаження"
+                    else -> "Уся історія завантажена"
+                }
+                val scroll = findViewById<ScrollView>(R.id.historyScroll)
+                scroll.post {
+                    if (screen == Screen.HISTORY && historyHasMore && scroll.getChildAt(0)?.height.orZero() <= scroll.height) loadHistoryPage()
+                }
+            } }.onFailure { error -> runOnUiThread {
+                if (screen != Screen.HISTORY) return@runOnUiThread
+                historyLoading = false
+                findViewById<ProgressBar>(R.id.historyProgress).visibility = View.GONE
+                findViewById<TextView>(R.id.historyStatus).text = "${error.message ?: "Не вдалося завантажити"} · натисніть, щоб повторити"
+            } }
+        }
+    }
+
+    private fun historyCard(item: BatteryHistoryItem): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(15), dp(11), dp(15), dp(11))
+        background = ContextCompat.getDrawable(this@MainActivity, R.drawable.cell_background)
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(8)) }
+        addView(TextView(this@MainActivity).apply {
+            text = historyTitle(item); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(this@MainActivity, when (item.kind) { "charge" -> R.color.scanner_green; "discharge" -> R.color.scanner_yellow; else -> R.color.text_primary }))
+        })
+        addView(TextView(this@MainActivity).apply {
+            text = formatHistoryTime(item.occurredAt); textSize = 12f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted))
+        })
+        historyDetails(item).takeIf { it.isNotBlank() }?.let { details ->
+            addView(TextView(this@MainActivity).apply {
+                text = details; textSize = 14f; setPadding(0, dp(5), 0, 0)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            })
+        }
+    }
+
+    private fun historyTitle(item: BatteryHistoryItem) = when (item.kind) {
+        "measurement" -> "Вимірювання"
+        "charge" -> "Заряд"
+        "discharge" -> "Розряд"
+        "cycle" -> "Цикл"
+        "maintenance" -> "Обслуговування"
+        "repair" -> "Ремонт"
+        "inspection" -> "Огляд"
+        "service" -> "Сервіс"
+        "retirement" -> "Списання"
+        "transfer" -> "Передача"
+        else -> "Подія"
+    }
+
+    private fun historyDetails(item: BatteryHistoryItem): String = buildString {
+        when (item.kind) {
+            "measurement" -> append(listOfNotNull(
+                item.chargePercent?.let { "$it%" },
+                item.totalVoltage?.let { String.format(Locale.US, "%.2f V", it) },
+                item.cellDelta?.let { String.format(Locale.US, "Δ %.2f V", it) },
+                item.health?.let(::healthLabel)
+            ).joinToString(" · "))
+            "charge", "discharge" -> {
+                if (item.inferred == true) append("Визначено автоматично за вимірюваннями")
+                if ((item.cycleDelta ?: 0) > 0) append(if (isEmpty()) "Цикл +${item.cycleDelta}" else " · Цикл +${item.cycleDelta}")
+            }
+            "transfer" -> append("${item.fromCrewName ?: "Без екіпажу"} → ${item.toCrewName ?: "Екіпаж"}")
+            else -> item.flightMinutes?.let { append("Політ: $it хв") }
+        }
+        item.notes?.takeIf { it.isNotBlank() }?.let { append(if (isEmpty()) it else "\n$it") }
+    }
+
+    private fun formatHistoryTime(value: String): String = runCatching {
+        HISTORY_TIME_FORMAT.format(Instant.parse(value).atZone(ZoneId.systemDefault()))
+    }.getOrDefault(value)
+
     private fun showScanner(offset: Int) {
         if (!::scanner.isInitialized) return
         screen = Screen.SCANNER; moduleOffset = offset; recognized = null; accumulator = ScanAccumulator(); missingFrames = 0
@@ -380,7 +491,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.scannerTitle).text = if (offset == 0) "МОДУЛЬ A · КОМІРКИ 1–6" else "МОДУЛЬ B · КОМІРКИ 7–12"
         findViewById<Button>(R.id.cancelScannerButton).setOnClickListener { showMeasurement() }
         useButton.setOnClickListener {
-            recognized?.let { applyModuleScan(draft, moduleOffset, it) }
+            recognized?.let {
+                if (manualReferenceCell == null) manualReferenceCell = moduleOffset
+                applyModuleScan(draft, moduleOffset, it)
+            }
             showMeasurement()
         }
         scanValues.clear(); createScanValues(findViewById(R.id.cellValues))
@@ -467,13 +581,14 @@ class MainActivity : AppCompatActivity() {
             findViewById<TextView>(R.id.measurementError).text = "Не вдалося відкрити комірку"
             return
         }
-        if (manualVoltageRangeCentivolts(draft, index) == null) {
-            findViewById<TextView>(R.id.measurementError).text = "Спочатку вкажіть напругу комірки 1"
-            return
-        }
         selectCell(index)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun Int?.orZero() = this ?: 0
     override fun onDestroy() { stopCamera(); if (::scanner.isInitialized) scanner.close(); cameraExecutor.shutdown(); networkExecutor.shutdown(); super.onDestroy() }
+
+    companion object {
+        private val HISTORY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy · HH:mm")
+    }
 }

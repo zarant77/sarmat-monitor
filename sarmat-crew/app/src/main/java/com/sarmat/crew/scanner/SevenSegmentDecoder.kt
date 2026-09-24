@@ -59,7 +59,7 @@ class SevenSegmentDecoder {
                 val bottom = min(binary.rows(), run.last + 1 + padding)
                 Rect(left, top, right - left, bottom - top)
             }
-        }.take(6)
+        }
     }
 
     fun decode(binary: Mat, rows: List<Rect>): List<CellReading?> {

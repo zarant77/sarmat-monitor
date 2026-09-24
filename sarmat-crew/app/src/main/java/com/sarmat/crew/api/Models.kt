@@ -36,3 +36,21 @@ data class MeasurementPreview(
     val chargePercent: Int,
     val health: String,
 )
+
+data class BatteryHistoryItem(
+    val id: String,
+    val kind: String,
+    val occurredAt: String,
+    val totalVoltage: Double?,
+    val chargePercent: Int?,
+    val cellDelta: Double?,
+    val health: String?,
+    val cycleDelta: Int?,
+    val flightMinutes: Int?,
+    val inferred: Boolean?,
+    val fromCrewName: String?,
+    val toCrewName: String?,
+    val notes: String?,
+)
+
+data class BatteryHistoryPage(val items: List<BatteryHistoryItem>, val nextOffset: Int?)

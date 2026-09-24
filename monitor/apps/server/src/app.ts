@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import websocket from "@fastify/websocket";
 import { compare, hash } from "bcryptjs";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import {
   batteryInputSchema, batteryTypeInputSchema, batteryTypeUpdateSchema, batteryUpdateSchema, measurementPreviewInputSchema, crewInputSchema, crewUpdateSchema, cycleEventInputSchema,
   credentialInputSchema, credentialUpdateSchema, groupAdminCredentialInputSchema, groupInputSchema, groupUpdateSchema, loginInputSchema, measurementCorrectionSchema,
@@ -17,6 +17,8 @@ import { calculateMeasurementPreview } from "./measurement-preview.js";
 import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertGroupAdministrator, assertSuperAdmin, assertTransferAccess, createSession, effectiveCrewId, isAccountEnabled, loadActor, publicActor, revokeSession, type Actor } from "./auth.js";
 import { rebuildInferredCycleEvents, type ChargeStateThresholds } from "./cycle-inference.js";
 import { nextActiveBatteryId } from "./active-battery.js";
+import { cellVoltageBounds } from "./voltage-limits.js";
+import { parseHistoryPagination } from "./history.js";
 import { TELEMETRY_THRESHOLDS, TelemetryHub, type TelemetryCrew } from "./telemetry.js";
 
 declare module "fastify" { interface FastifyRequest { telemetryCrew: TelemetryCrew | null } }
@@ -25,8 +27,8 @@ const number = (value: string | number | null) => value === null ? null : Number
 const iso = (value: Date) => value.toISOString();
 const sumCellVoltages = (cells: number[]) => Math.round(cells.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000;
 const validateCellVoltageRange = (cells: number[], packMinVoltage: number, packMaxVoltage: number, cellCount: number) => {
-  const minCellVoltage = packMinVoltage / cellCount; const maxCellVoltage = packMaxVoltage / cellCount;
-  if (cells.some(voltage => !Number.isFinite(voltage) || voltage < minCellVoltage || voltage > maxCellVoltage)) {
+  const bounds = cellVoltageBounds(packMinVoltage, packMaxVoltage, cellCount);
+  if (cells.some(voltage => !Number.isFinite(voltage) || voltage < bounds.min || voltage > bounds.max)) {
     throw Object.assign(new Error("One or more cell voltages are outside the battery type voltage range"), { statusCode: 400 });
   }
 };
@@ -99,7 +101,9 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     if (!row || !isAccountEnabled(row.user.role, row.user.enabled, row.group?.enabled ?? true, row.crew?.enabled ?? true) || !(await compare(data.password, row.user.passwordHash))) {
       throw Object.assign(new Error("Invalid username or password"), { statusCode: 401 });
     }
-    await db.delete(sessions).where(eq(sessions.userId, row.user.id));
+    // A login creates an independent device session. Keep other active sessions and
+    // opportunistically remove only expired tokens for this account.
+    await db.delete(sessions).where(and(eq(sessions.userId, row.user.id), lte(sessions.expiresAt, new Date())));
     await createSession(row.user.id, reply);
     return { id: row.user.id, username: row.user.username, role: row.user.role, groupId: row.user.groupId, groupName: row.group?.name ?? null, crewId: row.user.crewId, crewNumber: row.crew?.number ?? null, crewName: row.crew?.name ?? null, crewColor: row.crew?.color ?? null };
   });
@@ -362,6 +366,42 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
       transfers: transferRows.map(transfer => ({ ...transfer, fromCrewName: transfer.fromCrewId ? crewNames.get(transfer.fromCrewId) ?? null : null, toCrewName: crewNames.get(transfer.toCrewId) ?? "Unknown crew", transferredAt: iso(transfer.transferredAt) })),
       createdAt: iso(battery.createdAt), updatedAt: iso(battery.updatedAt)
     };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { offset?: string; limit?: string } }>("/api/batteries/:id/history", async request => {
+    const battery = await requireBattery(request.params.id, request.actor!);
+    const { offset, limit } = parseHistoryPagination(request.query);
+    type HistoryRow = { id: string; kind: string; occurredAt: Date | string; data: Record<string, unknown> };
+    const result = await db.execute(sql`
+      select "id", "kind", "occurredAt", "data" from (
+        select ${measurements.id}::text as "id", ${measurements.batteryId} as "batteryId", 'measurement'::text as "kind",
+          ${measurements.measuredAt} as "occurredAt",
+          jsonb_build_object('totalVoltage', ${measurements.totalVoltage}, 'chargePercent', ${measurements.chargePercent},
+            'cellDelta', ${measurements.cellDelta}, 'health', ${measurements.health}, 'notes', ${measurements.notes}) as "data"
+        from ${measurements}
+        union all
+        select ${cycleEvents.id}::text, ${cycleEvents.batteryId}, ${cycleEvents.type}::text, ${cycleEvents.occurredAt},
+          jsonb_build_object('cycleDelta', ${cycleEvents.cycleDelta}, 'flightMinutes', ${cycleEvents.flightMinutes},
+            'notes', ${cycleEvents.notes}, 'inferred', ${cycleEvents.inferred})
+        from ${cycleEvents}
+        union all
+        select ${transfers.id}::text, ${transfers.batteryId}, 'transfer'::text, ${transfers.transferredAt},
+          jsonb_build_object('fromCrewName', (select ${crews.name} from ${crews} where ${crews.id} = ${transfers.fromCrewId}),
+            'toCrewName', (select ${crews.name} from ${crews} where ${crews.id} = ${transfers.toCrewId}), 'notes', ${transfers.notes})
+        from ${transfers}
+      ) as history
+      where "batteryId" = ${battery.id}
+      order by "occurredAt" desc, "id" desc
+      limit ${limit + 1} offset ${offset}
+    `);
+    const rows = Array.from(result as unknown as Iterable<HistoryRow>);
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit).map(row => ({
+      id: row.id, kind: row.kind,
+      occurredAt: row.occurredAt instanceof Date ? iso(row.occurredAt) : new Date(row.occurredAt).toISOString(),
+      ...row.data
+    }));
+    return { items, nextOffset: hasMore ? offset + limit : null };
   });
 
   app.post<{ Params: { id: string } }>("/api/batteries/:id/toggle-active", async request => {

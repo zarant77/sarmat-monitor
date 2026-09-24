@@ -101,6 +101,30 @@ class CrewApi(private val preferences: SharedPreferences) {
         )
     }
 
+    fun batteryHistory(batteryId: String, offset: Int, limit: Int = 25): BatteryHistoryPage {
+        val json = requestObject("GET", "/api/batteries/$batteryId/history?offset=$offset&limit=$limit")
+        val array = json.getJSONArray("items")
+        val items = (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            BatteryHistoryItem(
+                id = item.getString("id"),
+                kind = item.getString("kind"),
+                occurredAt = item.getString("occurredAt"),
+                totalVoltage = item.optDoubleOrNull("totalVoltage"),
+                chargePercent = item.optIntOrNull("chargePercent"),
+                cellDelta = item.optDoubleOrNull("cellDelta"),
+                health = item.optStringOrNull("health"),
+                cycleDelta = item.optIntOrNull("cycleDelta"),
+                flightMinutes = item.optIntOrNull("flightMinutes"),
+                inferred = if (item.has("inferred") && !item.isNull("inferred")) item.getBoolean("inferred") else null,
+                fromCrewName = item.optStringOrNull("fromCrewName"),
+                toCrewName = item.optStringOrNull("toCrewName"),
+                notes = item.optStringOrNull("notes"),
+            )
+        }
+        return BatteryHistoryPage(items, if (json.isNull("nextOffset")) null else json.getInt("nextOffset"))
+    }
+
     fun logout() {
         runCatching { requestObject("POST", "/api/auth/logout", JSONObject()) }
         clearSession()

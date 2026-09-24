@@ -13,6 +13,7 @@
     <string name="record_measurement">Записати вимірювання</string>
     <string name="scan_module">Сканувати модуль %1$s</string>
     <string name="manual_entry">Ввести вручну</string>
+    <string name="history">Історія</string>
     <string name="save_measurement">Зберегти вимірювання</string>
     <string name="notes">Примітка</string>
     <string name="use_values">Використати значення</string>

@@ -90,7 +90,8 @@ class LcdScanner {
         var winnerScore = Double.NEGATIVE_INFINITY
 
         contours.forEach { contour ->
-            if (Imgproc.contourArea(contour) >= frameArea * 0.025) {
+            val contourArea = Imgproc.contourArea(contour)
+            if (contourArea >= frameArea * 0.025) {
                 val points = MatOfPoint2f(*contour.toArray())
                 val rect = Imgproc.minAreaRect(points)
                 points.release()
@@ -98,13 +99,24 @@ class LcdScanner {
                 val shortSide = min(rect.size.width, rect.size.height)
                 val areaRatio = longSide * shortSide / frameArea
                 val aspect = shortSide / longSide.coerceAtLeast(1.0)
+                val fill = contourArea / (longSide * shortSide).coerceAtLeast(1.0)
                 val dx = abs(rect.center.x - center.x) / gray.cols()
                 val dy = abs(rect.center.y - center.y) / gray.rows()
-                if (aspect in 0.38..0.78 && areaRatio in 0.035..0.62 && dx < 0.30 && dy < 0.30) {
+                val bounds = Imgproc.boundingRect(contour)
+                val bounded = Rect(
+                    bounds.x.coerceIn(0, gray.cols() - 1),
+                    bounds.y.coerceIn(0, gray.rows() - 1),
+                    min(bounds.width, gray.cols() - bounds.x.coerceIn(0, gray.cols() - 1)),
+                    min(bounds.height, gray.rows() - bounds.y.coerceIn(0, gray.rows() - 1)),
+                )
+                val region = gray.submat(bounded)
+                val brightness = Core.mean(region).`val`[0] / 255.0
+                region.release()
+                if (aspect in 0.38..0.78 && areaRatio in 0.035..0.62 && fill >= 0.38 && brightness >= 0.42 && dx < 0.30 && dy < 0.30) {
                     val aspectScore = 1.0 - abs(aspect - 0.56)
                     val centerScore = 1.0 - dx - dy
                     val sizeScore = min(areaRatio / 0.16, 1.0)
-                    val score = aspectScore * 2.0 + centerScore + sizeScore
+                    val score = aspectScore * 1.5 + centerScore + sizeScore + fill * 2.0 + brightness * 3.0
                     if (score > winnerScore) {
                         winner = rect
                         winnerScore = score
@@ -194,10 +206,12 @@ class LcdScanner {
 
         val masks = listOf(blackHatMask, adaptive, otsu)
         val detectedRows = masks.map(decoder::detectRows)
-        val bestRows = detectedRows.maxWithOrNull(
-            compareBy<List<Rect>> { if (it.size == 6) 1 else 0 }.thenBy { it.size },
-        ).orEmpty()
-        val variants = masks.zip(detectedRows).filter { it.second.size == 6 }.map { (mask, rows) -> decoder.decode(mask, rows) }
+        val rowSets = masks.zip(detectedRows).mapNotNull { (mask, rows) ->
+            selectBestRowSet(mask, rows)
+        }
+        val bestRows = rowSets.maxByOrNull { it.score }?.rows
+            ?: detectedRows.maxByOrNull { it.size }?.take(CELL_COUNT).orEmpty()
+        val variants = rowSets.map { it.readings }
         enhanced.release()
         otsu.release()
         adaptive.release()
@@ -221,6 +235,32 @@ class LcdScanner {
             }
         }
         return DecodedFrame(cells, bestRows)
+    }
+
+    /**
+     * A border, glare or the Total line can look like another text row. Evaluate
+     * every consecutive group of six instead of blindly taking the first six.
+     * Real cell rows have nearly equal centre-to-centre spacing and, most
+     * importantly, yield more valid 3.xx/4.xx readings.
+     */
+    private fun selectBestRowSet(mask: Mat, detected: List<Rect>): RowSetCandidate? {
+        if (detected.size < CELL_COUNT) return null
+        return detected.windowed(CELL_COUNT).map { rows ->
+            val readings = decoder.decode(mask, rows)
+            val decodedCount = readings.count { it != null }
+            val centres = rows.map { it.y + it.height / 2.0 }
+            val gaps = centres.zipWithNext { first, second -> second - first }
+            val meanGap = gaps.average().coerceAtLeast(1.0)
+            val gapDeviation = gaps.map { abs(it - meanGap) / meanGap }.average()
+            val meanHeight = rows.map { it.height.toDouble() }.average().coerceAtLeast(1.0)
+            val heightDeviation = rows.map { abs(it.height - meanHeight) / meanHeight }.average()
+            val confidence = readings.filterNotNull().sumOf { it.confidence }
+            RowSetCandidate(
+                rows = rows,
+                readings = readings,
+                score = decodedCount * 10.0 + confidence - gapDeviation * 4.0 - heightDeviation * 2.0,
+            )
+        }.maxByOrNull { it.score }
     }
 
     private fun rowQuads(
@@ -275,8 +315,15 @@ class LcdScanner {
     private companion object {
         const val NORMALIZED_WIDTH = 340
         const val NORMALIZED_HEIGHT = 600
+        const val CELL_COUNT = 6
         const val HISTORY_SIZE = 4
     }
 
     private data class DecodedFrame(val cells: List<CellReading?>, val rows: List<Rect>)
+
+    private data class RowSetCandidate(
+        val rows: List<Rect>,
+        val readings: List<CellReading?>,
+        val score: Double,
+    )
 }

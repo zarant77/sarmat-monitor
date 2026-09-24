@@ -27,22 +27,25 @@ class MeasurementDraftTest {
         assertFalse(isCompleteMeasurement(draft))
     }
 
-    @Test fun `first manual cell uses three to four point two volts`() {
-        assertEquals(300..420, manualVoltageRangeCentivolts(MutableList(12) { "" }, 0))
+    @Test fun `any first manual cell uses full voltage range`() {
+        val draft = MutableList(12) { "" }
+        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 0, null))
+        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 6, null))
     }
 
-    @Test fun `dependent cells use plus or minus point one from first cell`() {
-        val draft = MutableList(12) { "" }.apply { this[0] = "4.05" }
-        assertEquals(395..415, manualVoltageRangeCentivolts(draft, 1))
-        assertEquals(null, manualVoltageRangeCentivolts(MutableList(12) { "" }, 1))
-        draft[0] = "4.20"
-        assertEquals(410..420, manualVoltageRangeCentivolts(draft, 11))
+    @Test fun `dependent cells use plus or minus point one from chosen reference cell`() {
+        val draft = MutableList(12) { "" }.apply { this[6] = "4.05" }
+        assertEquals(395..415, manualVoltageRangeCentivolts(draft, 0, 6))
+        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 6, 6))
+        draft[6] = "4.22"
+        assertEquals(412..422, manualVoltageRangeCentivolts(draft, 11, 6))
     }
 
-    @Test fun `changing first cell clamps existing dependent values`() {
-        val draft = MutableList(12) { "4.10" }.apply { this[0] = "3.80"; this[1] = "4.05"; this[2] = "3.20" }
-        clampDependentCellVoltages(draft)
+    @Test fun `changing reference cell clamps existing dependent values`() {
+        val draft = MutableList(12) { "4.10" }.apply { this[6] = "3.80"; this[1] = "4.05"; this[2] = "3.20" }
+        clampDependentCellVoltages(draft, 6)
         assertEquals("3.90", draft[1])
         assertEquals("3.70", draft[2])
+        assertEquals("3.80", draft[6])
     }
 }
