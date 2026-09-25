@@ -14,7 +14,7 @@ import { CrewIdentity } from "../components/CrewIdentity";
 import { useI18n } from "../i18n";
 import { clientSettings, defaultHistoryFilter, historyEventCategories, type HistoryEventCategory, type HistoryFilterSettings } from "../client-settings";
 
-function EventForm({ id, cellCount, minVoltage, maxVoltage, crewId, archived, onClose }: { crewId: string; archived: boolean; id: string; cellCount: number; minVoltage: number; maxVoltage: number; onClose: () => void }) {
+function EventForm({ id, batteryLabel, cellCount, minVoltage, maxVoltage, crewId, archived, onClose }: { batteryLabel: string; crewId: string; archived: boolean; id: string; cellCount: number; minVoltage: number; maxVoltage: number; onClose: () => void }) {
   const { t } = useI18n(); const qc = useQueryClient();
   const [type, setType] = useState<"check" | "transfer" | "archive" | "retirement">(archived ? "retirement" : "check");
   const crews = useQuery({ queryKey: ["crews"], queryFn: () => api.crews(), enabled: type === "transfer" });
@@ -44,8 +44,7 @@ function EventForm({ id, cellCount, minVoltage, maxVoltage, crewId, archived, on
     if (type === "check") mutation.mutate({ cellVoltages: cells.map(Number), notes: data.get("notes") });
     else mutation.mutate({ crewId: data.get("crewId"), notes: data.get("notes") });
   };
-  const title = t("battery.history.add");
-  return <Modal title={title} eyebrow={t("events.history")} onClose={onClose}><form onSubmit={submit} className="form-grid">
+  return <Modal title={batteryLabel} eyebrow={t("battery.history.add")} onClose={onClose}><form onSubmit={submit} className="form-grid">
     <label className="full">{t("events.eventType")}<select value={type} disabled={mutation.isPending} onChange={event => { setType(event.target.value as typeof type); mutation.reset(); }}>
       <option value="check" disabled={archived}>{t("events.recordCheck")}</option>
       <option value="transfer" disabled={archived}>{t("events.transferBattery")}</option>
@@ -134,6 +133,6 @@ export function BatteryDetails() {
       if (entry.kind === "transfer") { const item = entry.item; return <article className="history-entry transfer" key={`transfer-${item.id}`}><span className="history-icon"><ArrowRightLeft/></span><div className="history-body"><strong>{t("battery.history.transfer")}</strong><p>{item.fromCrewName ?? "—"} → {item.toCrewName}</p><small>{formatDate(item.transferredAt)} {item.notes && `· ${item.notes}`}</small></div></article>; }
       const item = entry.item; const source = item.sourceMeasurementId ? measurementsById.get(item.sourceMeasurementId) : undefined; const icon = item.type === "charge" ? <BatteryCharging/> : item.type === "discharge" ? <BatteryLow/> : item.type === "archive" ? <Archive/> : item.type === "restore" ? <RotateCcw/> : <CalendarClock/>; return <article className={`history-entry event ${item.type}`} key={`event-${item.id}`}><span className="history-icon">{icon}</span><div className="history-body"><strong>{t(`cycleTypes.${item.type}`)}</strong>{source && <p>{source.totalVoltage.toFixed(2)} {t("common.volts")} · {source.chargePercent != null ? `${source.chargePercent}%` : "—"}</p>}<small>{formatDate(item.occurredAt)} {item.type === "charge" && item.inferred && `· ${t("battery.history.cycleCompleted", { count: cycleNumbers.get(item.id) ?? battery.cycleCount })}`} {item.type === "discharge" && item.inferred && `· ${t("battery.history.usageRecorded")}`} {item.flightMinutes ? `· ${item.flightMinutes} ${t("common.minutesShort")}` : ""} {item.notes && `· ${item.notes}`}</small></div></article>;
     })}{!historyItems.length ? <div className="empty">{t("battery.history.empty")}</div> : !filteredHistoryItems.length && <div className="empty">{t("battery.history.filter.empty")}</div>}</div></details></section>
-    {form === "edit" && <BatteryForm battery={battery} onClose={() => setForm(null)}/>} {form === "event" && <EventForm id={battery.id} crewId={battery.crewId} archived={Boolean(battery.archivedAt)} cellCount={battery.cellCount} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setForm(null)}/>} {correction && <CorrectionForm measurement={correction} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setCorrection(null)}/>}
+    {form === "edit" && <BatteryForm battery={battery} onClose={() => setForm(null)}/>} {form === "event" && <EventForm id={battery.id} batteryLabel={battery.label} crewId={battery.crewId} archived={Boolean(battery.archivedAt)} cellCount={battery.cellCount} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setForm(null)}/>} {correction && <CorrectionForm measurement={correction} minVoltage={battery.minVoltage} maxVoltage={battery.maxVoltage} onClose={() => setCorrection(null)}/>}
   </div>;
 }
