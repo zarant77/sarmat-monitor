@@ -3,7 +3,7 @@ import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timesta
 
 export const batteryStateEnum = pgEnum("battery_state", ["ready", "charging", "in_use", "storage", "service", "retired"]);
 export const healthStateEnum = pgEnum("health_state", ["good", "warning", "danger"]);
-export const cycleEventTypeEnum = pgEnum("cycle_event_type", ["cycle", "charge", "discharge", "maintenance", "repair", "inspection", "service", "retirement", "note"]);
+export const cycleEventTypeEnum = pgEnum("cycle_event_type", ["charge", "discharge", "archive", "restore", "retirement"]);
 export const userRoleEnum = pgEnum("user_role", ["SUPER_ADMIN", "GROUP_ADMIN", "CREW"]);
 
 const timestamps = {

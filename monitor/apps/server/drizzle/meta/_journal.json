@@ -36,6 +36,13 @@
       "when": 1789981200000,
       "tag": "0004_active_battery_and_event_deadband",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790324279515,
+      "tag": "0005_battery_lifecycle",
+      "breakpoints": true
     }
   ]
 }

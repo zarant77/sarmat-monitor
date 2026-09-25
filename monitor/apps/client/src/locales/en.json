@@ -73,15 +73,11 @@
     "danger": "Danger"
   },
   "cycleTypes": {
-    "cycle": "Full cycle",
     "charge": "Charge",
     "discharge": "Discharge",
-    "maintenance": "Maintenance",
-    "repair": "Repair",
-    "inspection": "Inspection",
-    "service": "Service event",
-    "retirement": "Retirement",
-    "note": "Note"
+    "retirement": "Decommission (retire)",
+    "archive": "Suspend operation (archive)",
+    "restore": "Operation restored"
   },
   "dashboard": {
     "eyebrow": "Operations overview",
@@ -212,8 +208,8 @@
       "title": "Battery history",
       "subtitle": "Unified timeline · {{count}} cycles",
       "add": "Add event",
-      "measurement": "Measurement",
-      "transfer": "Crew transfer",
+      "measurement": "Charge measurement",
+      "transfer": "Transfer to another crew",
       "cycleCompleted": "Cycle #{{count}} completed",
       "usageRecorded": "Battery usage recorded",
       "empty": "Battery history is empty.",
@@ -241,9 +237,9 @@
   },
   "events": {
     "history": "Append to history",
-    "recordCheck": "Record battery check",
+    "recordCheck": "Charge measurement",
     "addUsage": "Add history event",
-    "transferBattery": "Transfer battery",
+    "transferBattery": "Transfer to another crew",
     "totalVoltage": "Total voltage (V)",
     "chargePercent": "Charge (%)",
     "temperatureC": "Temperature (°C)",
@@ -257,7 +253,12 @@
     "adminAction": "Administrator action",
     "correctMeasurement": "Correct measurement",
     "correctionNote": "Correction note",
-    "saveCorrection": "Save correction"
+    "saveCorrection": "Save correction",
+    "archiveBattery": "Suspend operation (archive)",
+    "retireBattery": "Decommission (retire)",
+    "archiveHelp": "The battery will leave the crew operational list. It can be restored from the archive.",
+    "retireHelp": "The battery will be permanently retired. History will be preserved, but restoration and further operation will be unavailable.",
+    "module": "Module {{module}}"
   },
   "photos": {
     "battery": "Battery {{module}}",

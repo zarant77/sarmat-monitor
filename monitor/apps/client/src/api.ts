@@ -1,4 +1,4 @@
-import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, CycleEventInput, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, MeasurementPreview, MeasurementPreviewInput, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
+import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, MeasurementPreview, MeasurementPreviewInput, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "";
 export class ApiError extends Error {
@@ -49,9 +49,9 @@ export const api = {
   transfer: (id: string, crewId: string, notes = "") => request(`/api/batteries/${id}/transfer`, json("POST", { crewId, notes })),
   measurement: (id: string, data: MeasurementInput) => request(`/api/batteries/${id}/measurements`, json("POST", data)),
   measurementPreview: (id: string, data: MeasurementPreviewInput) => request<MeasurementPreview>(`/api/batteries/${id}/measurement-preview`, json("POST", data)),
-  cycle: (id: string, data: CycleEventInput) => request(`/api/batteries/${id}/cycles`, json("POST", data)),
   correctMeasurement: (id: string, data: Partial<MeasurementInput>) => request(`/api/admin/measurements/${id}`, json("PATCH", data)),
-  archiveBattery: (id: string) => request(`/api/admin/batteries/${id}/archive`, json("POST", {})),
+  archiveBattery: (id: string, notes = "") => request(`/api/admin/batteries/${id}/archive`, json("POST", { notes })),
+  retireBattery: (id: string, notes = "") => request(`/api/admin/batteries/${id}/retirement`, json("POST", { notes })),
   restoreBattery: (id: string) => request(`/api/admin/batteries/${id}/restore`, json("POST", {})),
   deleteBattery: (id: string) => request<void>(`/api/admin/batteries/${id}`, { method: "DELETE" }),
   thresholds: () => request<Thresholds>("/api/settings/thresholds"),

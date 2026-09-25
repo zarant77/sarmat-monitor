@@ -5,7 +5,7 @@ import websocket from "@fastify/websocket";
 import { compare, hash } from "bcryptjs";
 import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import {
-  batteryInputSchema, batteryTypeInputSchema, batteryTypeUpdateSchema, batteryUpdateSchema, measurementPreviewInputSchema, crewInputSchema, crewUpdateSchema, cycleEventInputSchema,
+  batteryInputSchema, batteryTypeInputSchema, batteryTypeUpdateSchema, batteryUpdateSchema, measurementPreviewInputSchema, crewInputSchema, crewUpdateSchema, lifecycleInputSchema,
   credentialInputSchema, credentialUpdateSchema, groupAdminCredentialInputSchema, groupInputSchema, groupUpdateSchema, loginInputSchema, measurementCorrectionSchema,
   measurementInputSchema, thresholdInputSchema, transferInputSchema
 } from "@sbm/shared";
@@ -17,6 +17,7 @@ import { calculateMeasurementPreview } from "./measurement-preview.js";
 import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertGroupAdministrator, assertSuperAdmin, assertTransferAccess, createSession, effectiveCrewId, isAccountEnabled, loadActor, publicActor, revokeSession, type Actor } from "./auth.js";
 import { rebuildInferredCycleEvents, type ChargeStateThresholds } from "./cycle-inference.js";
 import { nextActiveBatteryId } from "./active-battery.js";
+import { assertBatteryOperational, lifecycleChange } from "./battery-lifecycle.js";
 import { cellVoltageBounds } from "./voltage-limits.js";
 import { parseHistoryPagination } from "./history.js";
 import { TELEMETRY_THRESHOLDS, TelemetryHub, type TelemetryCrew } from "./telemetry.js";
@@ -54,6 +55,16 @@ async function requireBattery(id: string, actor: Actor) {
   if (!row) throw Object.assign(new Error("Battery not found"), { statusCode: 404 });
   assertCrewAccess(actor, row.battery.crewId, row.crew.groupId);
   return { ...row.battery, groupId: row.crew.groupId, groupName: row.group.name, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry };
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockBattery(tx: Transaction, id: string, actor: Actor) {
+  const [battery] = await tx.select().from(batteries).where(eq(batteries.id, id)).for("update");
+  if (!battery) throw Object.assign(new Error("Battery not found"), { statusCode: 404 });
+  const [crew] = await tx.select().from(crews).where(eq(crews.id, battery.crewId));
+  assertCrewAccess(actor, battery.crewId, crew.groupId);
+  return battery;
 }
 
 export async function buildApp(options: { rebuildCycleHistory?: (batteryId: string, thresholds: ChargeStateThresholds) => Promise<void> } = {}): Promise<FastifyInstance> {
@@ -409,9 +420,13 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
 
   app.post<{ Params: { id: string } }>("/api/batteries/:id/toggle-active", async request => {
     const target = await requireBattery(request.params.id, request.actor!);
+    assertBatteryOperational(target);
     return db.transaction(async tx => {
       // Serialize toggles for this crew; the partial unique index is the final invariant guard.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${target.crewId}))`);
+      const locked = await lockBattery(tx, target.id, request.actor!);
+      assertBatteryOperational(locked);
+      if (locked.crewId !== target.crewId) throw Object.assign(new Error("Battery crew changed; retry the operation"), { statusCode: 409 });
       const [current] = await tx.select({ id: batteries.id }).from(batteries)
         .where(and(eq(batteries.crewId, target.crewId), sql`${batteries.activeSince} is not null`)).limit(1);
       const nextId = nextActiveBatteryId(current?.id ?? null, target.id);
@@ -427,13 +442,19 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
 
   app.patch<{ Params: { id: string } }>("/api/batteries/:id", async request => {
     assertGroupAdministrator(request.actor);
-    await requireBattery(request.params.id, request.actor!);
+    const current = await requireBattery(request.params.id, request.actor!);
     const data = batteryUpdateSchema.parse(request.body);
+    if (data.state !== undefined) assertBatteryOperational(current);
     if (data.typeId) {
       const [type] = await db.select().from(batteryTypes).where(eq(batteryTypes.id, data.typeId));
       if (!type) throw Object.assign(new Error("Battery type not found"), { statusCode: 400 });
     }
-    const [battery] = await db.update(batteries).set({ ...data, updatedAt: new Date() }).where(eq(batteries.id, request.params.id)).returning();
+    const battery = await db.transaction(async tx => {
+      const locked = await lockBattery(tx, request.params.id, request.actor!);
+      if (data.state !== undefined) assertBatteryOperational(locked);
+      const [updated] = await tx.update(batteries).set({ ...data, updatedAt: new Date() }).where(eq(batteries.id, locked.id)).returning();
+      return updated;
+    });
     if (!battery) throw Object.assign(new Error("Battery not found"), { statusCode: 404 });
     const enriched = await requireBattery(battery.id, request.actor!);
     return { ...enriched, createdAt: iso(enriched.createdAt), updatedAt: iso(enriched.updatedAt) };
@@ -443,11 +464,15 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     assertGroupAdministrator(request.actor);
     const data = transferInputSchema.parse(request.body);
     const current = await requireBattery(request.params.id, request.actor!);
+    assertBatteryOperational(current);
     const [targetCrew] = await db.select().from(crews).where(eq(crews.id, data.crewId));
     if (!targetCrew || !targetCrew.enabled) throw Object.assign(new Error("Target crew is not available"), { statusCode: 400 });
     assertTransferAccess(request.actor!, current.groupId, targetCrew.groupId);
     if (current.crewId === data.crewId) throw Object.assign(new Error("Battery already belongs to this crew"), { statusCode: 400 });
     return db.transaction(async tx => {
+      const locked = await lockBattery(tx, current.id, request.actor!);
+      assertBatteryOperational(locked);
+      if (locked.crewId !== current.crewId) throw Object.assign(new Error("Battery crew changed; retry the transfer"), { statusCode: 409 });
       await tx.update(batteries).set({ crewId: data.crewId, activeSince: null, updatedAt: new Date() }).where(eq(batteries.id, current.id));
       const [event] = await tx.insert(transfers).values({ batteryId: current.id, fromCrewId: current.crewId, toCrewId: data.crewId, notes: data.notes ?? "" }).returning();
       return { ...event, transferredAt: iso(event.transferredAt) };
@@ -457,6 +482,7 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
   app.post<{ Params: { id: string } }>("/api/batteries/:id/measurements", async (request, reply) => {
     const data = measurementInputSchema.parse(request.body);
     const battery = await requireBattery(request.params.id, request.actor!);
+    assertBatteryOperational(battery);
     if (data.cellVoltages.length !== battery.cellCount) {
       throw Object.assign(new Error(`Expected ${battery.cellCount} cell voltages, received ${data.cellVoltages.length}`), { statusCode: 400 });
     }
@@ -467,13 +493,17 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     const totalVoltage = sumCellVoltages(data.cellVoltages);
     const chargePercent = calculateChargePercent(totalVoltage, battery.minVoltage, battery.maxVoltage);
     validateCellVoltageRange(data.cellVoltages, battery.minVoltage, battery.maxVoltage, battery.cellCount);
-    const [measurement] = await db.insert(measurements).values({
-      batteryId: battery.id, totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
-      minCellVoltage: result.minCellVoltage.toString(), maxCellVoltage: result.maxCellVoltage.toString(),
-      cellDelta: result.cellDelta.toString(), chargePercent,
-      temperatureC: null, health: result.health,
-      warningThresholdV: warning.toString(), dangerThresholdV: danger.toString(), notes: data.notes
-    }).returning();
+    const measurement = await db.transaction(async tx => {
+      assertBatteryOperational(await lockBattery(tx, battery.id, request.actor!));
+      const [inserted] = await tx.insert(measurements).values({
+        batteryId: battery.id, totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
+        minCellVoltage: result.minCellVoltage.toString(), maxCellVoltage: result.maxCellVoltage.toString(),
+        cellDelta: result.cellDelta.toString(), chargePercent,
+        temperatureC: null, health: result.health,
+        warningThresholdV: warning.toString(), dangerThresholdV: danger.toString(), notes: data.notes
+      }).returning();
+      return inserted;
+    });
     await rebuildCycleHistory(battery.id, { chargedThresholdPercent: configuration.chargedThresholdPercent, dischargedThresholdPercent: configuration.dischargedThresholdPercent, chargeEventDeadbandPercent: configuration.chargeEventDeadbandPercent });
     return reply.status(201).send(mapMeasurement(measurement));
   });
@@ -484,14 +514,6 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     if (battery.cellCount !== 12) throw Object.assign(new Error("A/B measurement preview is available only for 12-cell battery types"), { statusCode: 400 });
     const [configuration] = await db.select().from(settings).where(eq(settings.id, 1));
     return calculateMeasurementPreview(data.A.cells, data.B.cells, Number(configuration.warningCellDeltaV), Number(configuration.dangerCellDeltaV), battery.minVoltage, battery.maxVoltage);
-  });
-
-  app.post<{ Params: { id: string } }>("/api/batteries/:id/cycles", async (request, reply) => {
-    assertGroupAdministrator(request.actor);
-    const data = cycleEventInputSchema.parse(request.body);
-    await requireBattery(request.params.id, request.actor!);
-    const [event] = await db.insert(cycleEvents).values({ batteryId: request.params.id, ...data }).returning();
-    return reply.status(201).send({ ...event, occurredAt: iso(event.occurredAt) });
   });
 
   app.patch<{ Params: { id: string } }>("/api/admin/measurements/:id", async (request) => {
@@ -520,19 +542,20 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
     return mapMeasurement(updated);
   });
 
-  app.post<{ Params: { id: string } }>("/api/admin/batteries/:id/archive", async request => {
-    assertGroupAdministrator(request.actor);
-    const battery = await requireBattery(request.params.id, request.actor!);
-    const [updated] = await db.update(batteries).set({ state: "retired", activeSince: null, archivedAt: new Date(), updatedAt: new Date() }).where(eq(batteries.id, battery.id)).returning();
-    return { ...updated, createdAt: iso(updated.createdAt), updatedAt: iso(updated.updatedAt), archivedAt: updated.archivedAt ? iso(updated.archivedAt) : null };
-  });
-
-  app.post<{ Params: { id: string } }>("/api/admin/batteries/:id/restore", async request => {
-    assertGroupAdministrator(request.actor);
-    const battery = await requireBattery(request.params.id, request.actor!);
-    const [updated] = await db.update(batteries).set({ state: "storage", archivedAt: null, updatedAt: new Date() }).where(eq(batteries.id, battery.id)).returning();
-    return { ...updated, createdAt: iso(updated.createdAt), updatedAt: iso(updated.updatedAt), archivedAt: null };
-  });
+  for (const action of ["archive", "restore", "retirement"] as const) {
+    app.post<{ Params: { id: string } }>(`/api/admin/batteries/:id/${action}`, async request => {
+      assertGroupAdministrator(request.actor);
+      const battery = await requireBattery(request.params.id, request.actor!);
+      const data = lifecycleInputSchema.parse(request.body ?? {});
+      return db.transaction(async tx => {
+        const current = await lockBattery(tx, battery.id, request.actor!);
+        const changes = lifecycleChange(current, action, new Date());
+        const [updated] = await tx.update(batteries).set(changes).where(eq(batteries.id, battery.id)).returning();
+        await tx.insert(cycleEvents).values({ batteryId: battery.id, type: action, notes: data.notes, occurredAt: changes.updatedAt });
+        return { ...updated, createdAt: iso(updated.createdAt), updatedAt: iso(updated.updatedAt), archivedAt: updated.archivedAt ? iso(updated.archivedAt) : null };
+      });
+    });
+  }
 
   app.delete<{ Params: { id: string } }>("/api/admin/batteries/:id", async (request, reply) => {
     assertSuperAdmin(request.actor);

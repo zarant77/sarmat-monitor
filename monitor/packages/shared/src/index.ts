@@ -2,8 +2,7 @@ import { z } from "zod";
 
 export const batteryStates = ["ready", "charging", "in_use", "storage", "service", "retired"] as const;
 export const healthStates = ["good", "warning", "danger"] as const;
-export const cycleEventTypes = ["cycle", "charge", "discharge", "maintenance", "repair", "inspection", "service", "retirement", "note"] as const;
-export const manualCycleEventTypes = ["maintenance", "repair", "inspection", "service", "retirement", "note"] as const;
+export const cycleEventTypes = ["charge", "discharge", "archive", "restore", "retirement"] as const;
 export const checkerModules = ["A", "B"] as const;
 export const userRoles = ["SUPER_ADMIN", "GROUP_ADMIN", "CREW"] as const;
 
@@ -45,7 +44,7 @@ export const batteryInputSchema = z.object({
   typeId: z.uuid(),
   serialNumber: z.string().trim().min(1).max(100),
   label: z.string().trim().min(1).max(100),
-  state: z.enum(batteryStates).default("ready"),
+  state: z.enum(["ready", "charging", "in_use", "storage", "service"]).default("ready"),
   notes: z.string().trim().max(2000).optional().default("")
 });
 
@@ -89,10 +88,7 @@ export const measurementPreviewInputSchema = z.object({
   B: checkerModuleCellsSchema
 });
 
-export const cycleEventInputSchema = z.object({
-  type: z.enum(manualCycleEventTypes),
-  cycleDelta: z.literal(0).optional().default(0),
-  flightMinutes: z.coerce.number().int().min(0).max(1440).optional(),
+export const lifecycleInputSchema = z.object({
   notes: z.string().trim().max(1000).optional().default("")
 });
 
@@ -141,7 +137,6 @@ export type BatteryTypeInput = z.infer<typeof batteryTypeInputSchema>;
 export type BatteryTypeUpdate = z.infer<typeof batteryTypeUpdateSchema>;
 export type MeasurementInput = z.infer<typeof measurementInputSchema>;
 export type MeasurementPreviewInput = z.infer<typeof measurementPreviewInputSchema>;
-export type CycleEventInput = z.infer<typeof cycleEventInputSchema>;
 export type ThresholdInput = z.infer<typeof thresholdInputSchema>;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 export type CredentialInput = z.infer<typeof credentialInputSchema>;
