@@ -258,7 +258,14 @@
     "retireBattery": "Decommission (retire)",
     "archiveHelp": "The battery will leave the crew operational list. It can be restored from the archive.",
     "retireHelp": "The battery will be permanently retired. History will be preserved, but restoration and further operation will be unavailable.",
-    "module": "Module {{module}}"
+    "module": "Module {{module}}",
+    "smartInputHelp": "Type continuously: 421420422 → 4.21 · 4.20 · 4.22. Focus moves to the next empty cell, wrapping from B to A. You can also paste the entire string.",
+    "cellRange": "Cell voltage: {{min}}–{{max}} V. Click a value to replace it.",
+    "cellEntryErrors": {
+      "format": "Enter three digits per cell (421), or use a decimal comma or point (4.21).",
+      "overflow": "There are more values than available cells. Nothing was pasted.",
+      "range": "Voltage is outside the allowed range. Check the value; multi-value entries are not applied."
+    }
   },
   "photos": {
     "battery": "Battery {{module}}",
