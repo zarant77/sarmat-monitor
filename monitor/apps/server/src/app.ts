@@ -405,7 +405,9 @@ export async function buildApp(options: { rebuildCycleHistory?: (batteryId: stri
         from ${transfers}
       ) as history
       where "batteryId" = ${battery.id}
-      order by "occurredAt" desc, "id" desc
+      order by "occurredAt" desc,
+        case when "kind" in ('charge', 'discharge') and "data"->>'inferred' = 'true' then 1 else 0 end desc,
+        "id" desc
       limit ${limit + 1} offset ${offset}
     `);
     const rows = Array.from(result as unknown as Iterable<HistoryRow>);

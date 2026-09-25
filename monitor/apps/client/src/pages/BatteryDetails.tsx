@@ -106,7 +106,12 @@ export function BatteryDetails() {
     ...battery.measurements.map(item => ({ kind: "measurement" as const, at: item.measuredAt, item })),
     ...battery.cycleEvents.map(item => ({ kind: "event" as const, at: item.occurredAt, item })),
     ...battery.transfers.map(item => ({ kind: "transfer" as const, at: item.transferredAt, item }))
-  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  ].sort((a, b) => {
+    const timeDifference = new Date(b.at).getTime() - new Date(a.at).getTime();
+    // Newest first: the inferred result follows its measurement chronologically.
+    const inferredResult = (entry: typeof a) => entry.kind === "event" && entry.item.inferred && (entry.item.type === "charge" || entry.item.type === "discharge") ? 1 : 0;
+    return timeDifference || inferredResult(b) - inferredResult(a);
+  });
   const categoryFor = (entry: typeof historyItems[number]): HistoryEventCategory => entry.kind === "measurement" ? "measurement" : entry.kind === "transfer" ? "transfer" : entry.item.type === "charge" ? "charge" : entry.item.type === "discharge" ? "discharge" : "manual";
   const fromTime = historyFilter.from ? new Date(`${historyFilter.from}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
   const toTime = historyFilter.to ? new Date(`${historyFilter.to}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
