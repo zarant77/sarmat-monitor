@@ -1,0 +1,64 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+    paths:
+      - "sarmat-crew/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "sarmat-crew/**"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sarmat-crew
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            sarmat-crew/**/*.gradle.kts
+            sarmat-crew/gradle.properties
+            sarmat-crew/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Build debug APK
+        run: bash ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Upload installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SarmatCrew-debug-${{ github.run_number }}-${{ github.run_attempt }}
+          path: sarmat-crew/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
