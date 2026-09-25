@@ -68,7 +68,7 @@ function EventForm({ id, batteryLabel, cellCount, minVoltage, maxVoltage, crewId
 
 function CorrectionForm({ measurement, minVoltage, maxVoltage, onClose }: { measurement: Measurement; minVoltage: number; maxVoltage: number; onClose: () => void }) {
   const { t } = useI18n(); const qc = useQueryClient(); const [cells, setCells] = useState(measurement.cellVoltages.map(voltage => voltage.toFixed(2)));
-  const mutation = useMutation({ mutationFn: (data: any) => api.correctMeasurement(measurement.id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery", measurement.batteryId] }); onClose(); } });
+  const mutation = useMutation({ mutationFn: (data: any) => api.correctMeasurement(measurement.id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery", measurement.batteryId] }); qc.invalidateQueries({ queryKey: ["batteries"] }); onClose(); } });
   const cellsComplete = cells.every(value => isCompleteCell(value, minVoltage / cells.length, maxVoltage / cells.length + 0.02));
   const totalVoltage = cells.reduce((sum, value) => sum + Number(value), 0);
   const chargePercent = Math.round(Math.max(0, Math.min(100, (totalVoltage - minVoltage) / (maxVoltage - minVoltage) * 100)));

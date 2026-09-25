@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "./db/index.js";
-import { cycleEvents, measurements } from "./db/schema.js";
+import { calculateChargePercent } from "./charge-percent.js";
+import { batteries, batteryTypes, cycleEvents, measurements } from "./db/schema.js";
 
 export interface ChargeStateThresholds {
   chargedThresholdPercent: number;
@@ -52,12 +53,23 @@ export function inferCycleEvents(history: ChargeMeasurement[], thresholds: Charg
   return inferred;
 }
 
-export async function rebuildInferredCycleEvents(batteryId: string, thresholds: ChargeStateThresholds) {
-  const history = await db.select({ id: measurements.id, chargePercent: measurements.chargePercent, measuredAt: measurements.measuredAt })
-    .from(measurements).where(eq(measurements.batteryId, batteryId)).orderBy(asc(measurements.measuredAt));
-  const inferred = inferCycleEvents(history, thresholds);
-  await db.transaction(async tx => {
+export type ChargeTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function rebuildInferredCycleEvents(batteryId: string, thresholds: ChargeStateThresholds, transaction?: ChargeTransaction) {
+  const rebuild = async (tx: ChargeTransaction) => {
+    // Serialize rebuilds and read history after obtaining the battery lock.
+    const [battery] = await tx.select().from(batteries).where(eq(batteries.id, batteryId)).for("update");
+    if (!battery) return;
+    const [type] = await tx.select().from(batteryTypes).where(eq(batteryTypes.id, battery.typeId));
+    const history = await tx.select({ id: measurements.id, totalVoltage: measurements.totalVoltage, measuredAt: measurements.measuredAt })
+      .from(measurements).where(eq(measurements.batteryId, batteryId)).orderBy(asc(measurements.measuredAt), asc(measurements.id));
+    const inferred = inferCycleEvents(history.map(row => ({
+      id: row.id, measuredAt: row.measuredAt,
+      chargePercent: calculateChargePercent(Number(row.totalVoltage), Number(type.minVoltage), Number(type.maxVoltage))
+    })), thresholds);
     await tx.delete(cycleEvents).where(and(eq(cycleEvents.batteryId, batteryId), eq(cycleEvents.inferred, true)));
     if (inferred.length) await tx.insert(cycleEvents).values(inferred.map(event => ({ batteryId, ...event, inferred: true, notes: "" })));
-  });
+  };
+  if (transaction) await rebuild(transaction);
+  else await db.transaction(rebuild);
 }

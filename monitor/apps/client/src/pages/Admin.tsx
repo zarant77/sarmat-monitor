@@ -122,7 +122,7 @@ export function AdminCrews() {
 
 function BatteryTypeForm({ type, onClose }: { type?: BatteryType; onClose: () => void }) {
   const { t } = useI18n(); const qc = useQueryClient();
-  const mutation = useMutation({ mutationFn: (data: any) => type ? api.updateBatteryType(type.id, data) : api.createBatteryType(data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery-types"] }); onClose(); } });
+  const mutation = useMutation({ mutationFn: (data: any) => type ? api.updateBatteryType(type.id, data) : api.createBatteryType(data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery-types"] }); qc.invalidateQueries({ queryKey: ["batteries"] }); qc.invalidateQueries({ queryKey: ["battery"] }); onClose(); } });
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ name: data.get("name"), capacityAh: Number(data.get("capacityAh")), minVoltage: Number(data.get("minVoltage")), maxVoltage: Number(data.get("maxVoltage")), cellCount: Number(data.get("cellCount")), chemistry: data.get("chemistry") }); };
   return <Modal title={type ? t("batteryTypes.edit") : t("batteryTypes.create")} eyebrow={t("batteryTypes.eyebrow")} onClose={onClose}><form className="form-grid" onSubmit={submit}>
     <label className="full">{t("batteryTypes.name")}<input name="name" defaultValue={type?.name} required/></label>
