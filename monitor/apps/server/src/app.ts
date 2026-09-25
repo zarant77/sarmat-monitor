@@ -303,13 +303,13 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     assertSuperAdmin(request.actor);
     const data = batteryTypeUpdateSchema.parse(request.body);
     const type = await db.transaction(async tx => {
+      const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1)).for("share");
       const [current] = await tx.select().from(batteryTypes).where(eq(batteryTypes.id, request.params.id)).for("update");
       if (!current) throw Object.assign(new Error("Battery type not found"), { statusCode: 404 });
       const minVoltage = data.minVoltage ?? Number(current.minVoltage), maxVoltage = data.maxVoltage ?? Number(current.maxVoltage);
       if (maxVoltage <= minVoltage) throw Object.assign(new Error("Maximum voltage must be greater than minimum voltage"), { statusCode: 400 });
       const [updated] = await tx.update(batteryTypes).set({ ...data, capacityAh: data.capacityAh?.toString(), minVoltage: data.minVoltage?.toString(), maxVoltage: data.maxVoltage?.toString(), updatedAt: new Date() }).where(eq(batteryTypes.id, current.id)).returning();
       if (minVoltage !== Number(current.minVoltage) || maxVoltage !== Number(current.maxVoltage)) {
-        const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1));
         const affected = await tx.select({ id: batteries.id }).from(batteries).where(eq(batteries.typeId, current.id)).orderBy(asc(batteries.id));
         for (const battery of affected) await rebuildCycleHistory(battery.id, configuration, tx);
       }
@@ -459,6 +459,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       if (!type) throw Object.assign(new Error("Battery type not found"), { statusCode: 400 });
     }
     const battery = await db.transaction(async tx => {
+      const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1)).for("share");
       // Coordinate reassignment with concurrent edits of the destination type's limits.
       if (data.typeId) {
         const [type] = await tx.select().from(batteryTypes).where(eq(batteryTypes.id, data.typeId)).for("share");
@@ -468,7 +469,6 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       if (data.state !== undefined) assertBatteryOperational(locked);
       const [updated] = await tx.update(batteries).set({ ...data, updatedAt: new Date() }).where(eq(batteries.id, locked.id)).returning();
       if (updated.typeId !== locked.typeId) {
-        const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1));
         await rebuildCycleHistory(updated.id, configuration, tx);
       }
       return updated;
@@ -511,6 +511,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     const totalVoltage = sumCellVoltages(data.cellVoltages);
     validateCellVoltageRange(data.cellVoltages, battery.minVoltage, battery.maxVoltage, battery.cellCount);
     const measurement = await db.transaction(async tx => {
+      const [currentConfiguration] = await tx.select().from(settings).where(eq(settings.id, 1)).for("share");
       assertBatteryOperational(await lockBattery(tx, battery.id, request.actor!));
       const [inserted] = await tx.insert(measurements).values({
         batteryId: battery.id, totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
@@ -519,11 +520,10 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
         temperatureC: null, health: result.health,
         warningThresholdV: warning.toString(), dangerThresholdV: danger.toString(), notes: data.notes
       }).returning();
-      const [currentConfiguration] = await tx.select().from(settings).where(eq(settings.id, 1));
       await rebuildCycleHistory(battery.id, currentConfiguration, tx);
       return inserted;
     });
-    return reply.status(201).send(mapMeasurement(measurement, battery));
+    return reply.status(201).send(mapMeasurement(measurement, await requireBattery(battery.id, request.actor!)));
   });
 
   app.post<{ Params: { id: string } }>("/api/batteries/:id/measurement-preview", async request => {
@@ -548,6 +548,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     const result = calculateCellHealth(cells, warning, danger);
     const totalVoltage = sumCellVoltages(cells);
     const updated = await db.transaction(async tx => {
+      const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1)).for("share");
       await lockBattery(tx, battery.id, request.actor!);
       const [row] = await tx.update(measurements).set({
         totalVoltage: totalVoltage.toString(), cellVoltages: data.cellVoltages,
@@ -556,11 +557,10 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
         notes: data.notes,
         correctedAt: new Date(), correctedByUserId: request.actor!.userId
       }).where(eq(measurements.id, current.id)).returning();
-      const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1));
       await rebuildCycleHistory(battery.id, configuration, tx);
       return row;
     });
-    return mapMeasurement(updated, battery);
+    return mapMeasurement(updated, await requireBattery(battery.id, request.actor!));
   });
 
   for (const action of ["archive", "restore", "retirement"] as const) {

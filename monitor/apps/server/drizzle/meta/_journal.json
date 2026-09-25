@@ -43,6 +43,13 @@
       "when": 1790324279515,
       "tag": "0005_battery_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790354006702,
+      "tag": "0006_dynamic_charge_percent",
+      "breakpoints": true
     }
   ]
 }

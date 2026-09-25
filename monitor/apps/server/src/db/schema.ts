@@ -92,7 +92,6 @@ export const measurements = pgTable("measurements", {
   minCellVoltage: numeric("min_cell_voltage", { precision: 6, scale: 3 }).notNull(),
   maxCellVoltage: numeric("max_cell_voltage", { precision: 6, scale: 3 }).notNull(),
   cellDelta: numeric("cell_delta", { precision: 6, scale: 3 }).notNull(),
-  chargePercent: integer("charge_percent"),
   temperatureC: numeric("temperature_c", { precision: 5, scale: 2 }),
   health: healthStateEnum("health").notNull(),
   warningThresholdV: numeric("warning_threshold_v", { precision: 6, scale: 3 }).notNull(),

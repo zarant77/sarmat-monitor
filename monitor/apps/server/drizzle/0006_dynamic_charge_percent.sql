@@ -1,0 +1,1 @@
+ALTER TABLE "measurements" DROP COLUMN "charge_percent";
