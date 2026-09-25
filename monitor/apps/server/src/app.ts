@@ -412,7 +412,8 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       ) as history
       where "batteryId" = ${battery.id}
       order by "occurredAt" desc,
-        case when "kind" in ('charge', 'discharge') and "data"->>'inferred' = 'true' then 1 else 0 end desc,
+        case when "kind" = 'measurement' then 0
+          when "kind" in ('charge', 'discharge') and "data"->>'inferred' = 'true' then 1 else 2 end asc,
         "id" desc
       limit ${limit + 1} offset ${offset}
     `);
