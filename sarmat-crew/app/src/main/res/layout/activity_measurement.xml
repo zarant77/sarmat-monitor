@@ -79,18 +79,6 @@
                 android:textColor="@color/text_muted"
                 android:textSize="10sp" />
         </LinearLayout>
-        <Button
-            android:id="@+id/historyButton"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:background="@drawable/secondary_button_background"
-            android:backgroundTint="@null"
-            android:minWidth="0dp"
-            android:paddingHorizontal="14dp"
-            android:text="@string/history"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout

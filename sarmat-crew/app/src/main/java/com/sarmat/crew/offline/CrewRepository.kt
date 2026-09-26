@@ -2,6 +2,7 @@ package com.sarmat.crew.offline
 
 import android.content.Context
 import com.sarmat.crew.api.*
+import com.sarmat.crew.DEFAULT_DISCHARGED_THRESHOLD_PERCENT
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -25,6 +26,9 @@ class CrewRepository(
     fun syncError(): String? = store.error(scope)
     fun pending(): List<PendingOperation> = store.operations(scope)
     fun pendingCount(batteryId: String? = null) = pending().count { batteryId == null || it.body.getString("batteryId") == batteryId }
+    fun dischargedThresholdPercent(): Int = store.snapshot(scope).optJSONObject("thresholds")
+        ?.optInt("dischargedThresholdPercent", DEFAULT_DISCHARGED_THRESHOLD_PERCENT)
+        ?: DEFAULT_DISCHARGED_THRESHOLD_PERCENT
 
     fun login(url: String, username: String, password: String): CrewUser = synchronized(syncLock) {
         remote.login(url, username, password).also { schedule(context); store.changed() }

@@ -44,17 +44,19 @@ class PullSyncLayout(context: Context, attrs: AttributeSet? = null) : FrameLayou
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (pulling) {
                 val refresh = event.actionMasked == MotionEvent.ACTION_UP && distance >= trigger && !refreshing
-                reset()
+                // A completed refresh owns the next UI update. Avoid asking the screen to
+                // reload the old snapshot immediately before synchronization starts.
+                reset(notifyProgress = !refresh)
                 if (refresh) { performClick(); onRefresh?.invoke() }
                 return true
             }
         }
         return super.dispatchTouchEvent(event)
     }
-    private fun reset() {
+    private fun reset(notifyProgress: Boolean = true) {
         pulling = false; eligible = false
         getChildAt(0)?.animate()?.translationY(0f)?.setDuration(150)?.start()
-        onProgress?.invoke(null)
+        if (notifyProgress) onProgress?.invoke(null)
     }
     override fun performClick(): Boolean { super.performClick(); return true }
 }

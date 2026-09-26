@@ -9,14 +9,17 @@ import { CrewForm } from "../components/Forms";
 import { Modal } from "../components/Modal";
 import { CrewIdentity } from "../components/CrewIdentity";
 import { useI18n } from "../i18n";
+import { DEFAULT_DISCHARGED_THRESHOLD_PERCENT, isBatteryDischarged } from "../battery-display";
 
 export function AdminDashboard() {
   const { t } = useI18n(); const auth = useAuth();
   const groups = useQuery({ queryKey: ["groups"], queryFn: api.groups });
   const crews = useQuery({ queryKey: ["crews", auth.user?.groupId], queryFn: () => api.crews() });
   const batteries = useQuery({ queryKey: ["batteries", "admin-summary"], queryFn: () => api.batteries() });
+  const thresholds = useQuery({ queryKey: ["thresholds"], queryFn: api.thresholds });
   const telemetry = useQuery({ queryKey: ["telemetry", auth.user?.groupId], queryFn: () => api.telemetry(auth.user?.groupId ?? undefined), enabled: Boolean(auth.user?.groupId), refetchInterval: 5000 });
   const danger = batteries.data?.filter(b => b.latestMeasurement?.health === "danger").length ?? 0;
+  const dischargedThreshold = thresholds.data?.dischargedThresholdPercent ?? DEFAULT_DISCHARGED_THRESHOLD_PERCENT;
   return <div className="page">
     <section className="hero-row"><div><span className="eyebrow">{t("admin.eyebrow")}</span><h1>{auth.user?.role === "GROUP_ADMIN" ? auth.user.groupName : t("admin.dashboard.title")}</h1><p>{auth.user?.role === "GROUP_ADMIN" ? t("admin.dashboard.groupDescription") : t("admin.dashboard.description")}</p></div></section>
     <section className="metrics-grid admin-metrics">
@@ -29,8 +32,8 @@ export function AdminDashboard() {
       <div className="section-heading"><div><span className="eyebrow">{t("admin.dashboard.liveStatus")}</span><h2>{t("admin.dashboard.crewReadiness")}</h2></div><span className="telemetry-connection"><i/>{t("telemetry.updating")}</span></div>
       <div className="operational-crew-grid">{crews.data?.map(crew => {
         const crewBatteries = batteries.data?.filter(battery => battery.crewId === crew.id) ?? [];
-        const ready = crewBatteries.filter(battery => battery.state === "ready").length;
-        const attention = crewBatteries.filter(battery => battery.latestMeasurement && battery.latestMeasurement.health !== "good").length;
+        const ready = crewBatteries.filter(battery => battery.state === "ready" && !isBatteryDischarged(battery, dischargedThreshold)).length;
+        const attention = crewBatteries.filter(battery => isBatteryDischarged(battery, dischargedThreshold) || (battery.latestMeasurement && battery.latestMeasurement.health !== "good")).length;
         const live = telemetry.data?.crews.find(item => item.id === crew.id); const online = Boolean(live?.snapshot && live.snapshot[0] === 0);
         return <Link to={`/admin/crews/${crew.id}`} className={`operational-crew-card ${attention ? "needs-attention" : ""}`} style={{ "--crew-color": crew.color } as CSSProperties} key={crew.id}>
           <div className="operational-crew-head"><CrewIdentity number={crew.number} name={crew.name} color={crew.color}/><strong className={crew.enabled ? "ready" : "offline"}>{crew.enabled ? t("admin.dashboard.ready") : t("common.disabled")}</strong></div>
