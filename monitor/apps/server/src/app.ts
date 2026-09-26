@@ -11,7 +11,8 @@ import {
 } from "@sbm/shared";
 import { ZodError } from "zod";
 import { db } from "./db/index.js";
-import { batteries, batteryTypes, crews, cycleEvents, groups, measurements, sessions, settings, transfers, users } from "./db/schema.js";
+import { batteries, batteryTypes, crews, cycleEvents, groups, measurements, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
+import { syncOperationSchema, syncPayloadHash } from "./offline-sync.js";
 import { calculateChargePercent } from "./charge-percent.js";
 import { calculateCellHealth } from "./health.js";
 import { calculateMeasurementPreview } from "./measurement-preview.js";
@@ -495,6 +496,67 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       await tx.update(batteries).set({ crewId: data.crewId, activeSince: null, updatedAt: new Date() }).where(eq(batteries.id, current.id));
       const [event] = await tx.insert(transfers).values({ batteryId: current.id, fromCrewId: current.crewId, toCrewId: data.crewId, notes: data.notes ?? "" }).returning();
       return { ...event, transferredAt: iso(event.transferredAt) };
+    });
+  });
+
+  app.get("/api/crew/sync-capabilities", async () => ({ version: 1 }));
+
+  app.post("/api/crew/sync", async request => {
+    const data = syncOperationSchema.parse(request.body);
+    const actor = request.actor!;
+    if (actor.role !== "CREW" || actor.crewId !== data.crewId) {
+      throw Object.assign(new Error("Цей запис належить іншому екіпажу"), { statusCode: 403 });
+    }
+    const payloadHash = syncPayloadHash(data);
+    return db.transaction(async tx => {
+      // Serialize identical retries, including requests from multiple connections.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`sync:${data.id}`}))`);
+      const [receipt] = await tx.select().from(syncOperations).where(eq(syncOperations.id, data.id));
+      if (receipt) {
+        if (receipt.userId !== actor.userId || receipt.payloadHash !== payloadHash) {
+          throw Object.assign(new Error("Ідентифікатор синхронізації вже використаний для іншого запису"), { statusCode: 409 });
+        }
+        return receipt.result;
+      }
+      const occurredAt = new Date(data.occurredAt);
+      if (occurredAt.getTime() > Date.now() + 5 * 60_000) {
+        throw Object.assign(new Error("Час запису в майбутньому. Перевірте годинник телефону"), { statusCode: 400 });
+      }
+      const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1)).for("share");
+      if (data.kind === "active") await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${data.crewId}))`);
+      const battery = await lockBattery(tx, data.batteryId, actor);
+      assertBatteryOperational(battery);
+      const [type] = await tx.select().from(batteryTypes).where(eq(batteryTypes.id, battery.typeId));
+      let result: Record<string, unknown>;
+      if (data.kind === "measurement") {
+        if (data.cellVoltages.length !== type.cellCount) {
+          throw Object.assign(new Error(`Очікується ${type.cellCount} комірок`), { statusCode: 400 });
+        }
+        validateCellVoltageRange(data.cellVoltages, Number(type.minVoltage), Number(type.maxVoltage), type.cellCount);
+        const warning = Number(configuration.warningCellDeltaV), danger = Number(configuration.dangerCellDeltaV);
+        const health = calculateCellHealth(data.cellVoltages, warning, danger);
+        const [inserted] = await tx.insert(measurements).values({
+          batteryId: battery.id, measuredAt: occurredAt, cellVoltages: data.cellVoltages,
+          totalVoltage: sumCellVoltages(data.cellVoltages).toString(),
+          minCellVoltage: health.minCellVoltage.toString(), maxCellVoltage: health.maxCellVoltage.toString(),
+          cellDelta: health.cellDelta.toString(), health: health.health,
+          warningThresholdV: warning.toString(), dangerThresholdV: danger.toString(), notes: data.notes
+        }).returning();
+        await rebuildCycleHistory(battery.id, configuration, tx);
+        result = { id: data.id, measurementId: inserted.id };
+      } else {
+        const [current] = await tx.select().from(batteries)
+          .where(and(eq(batteries.crewId, data.crewId), sql`${batteries.activeSince} is not null`)).limit(1);
+        if ((current?.id ?? null) !== data.expectedActiveId ||
+            (current?.activeSince?.getTime() ?? null) !== (data.expectedActiveSince ? new Date(data.expectedActiveSince).getTime() : null)) {
+          throw Object.assign(new Error("Статус «У дроні» вже змінено на іншому пристрої. Потрібне узгодження"), { statusCode: 409 });
+        }
+        await tx.update(batteries).set({ activeSince: null }).where(eq(batteries.crewId, data.crewId));
+        if (data.active) await tx.update(batteries).set({ activeSince: occurredAt }).where(eq(batteries.id, battery.id));
+        result = { id: data.id, activeBatteryId: data.active ? battery.id : null };
+      }
+      await tx.insert(syncOperations).values({ id: data.id, userId: actor.userId, payloadHash, result });
+      return result;
     });
   });
 

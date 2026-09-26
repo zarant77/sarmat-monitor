@@ -20,7 +20,9 @@ import androidx.core.view.WindowInsetsCompat
 import com.sarmat.crew.api.ApiException
 import com.sarmat.crew.api.BatteryHistoryItem
 import com.sarmat.crew.api.BatterySummary
-import com.sarmat.crew.api.CrewApi
+import com.sarmat.crew.offline.CrewRepository
+import androidx.core.widget.doAfterTextChanged
+import androidx.appcompat.app.AlertDialog
 import java.util.Locale
 import java.time.Duration
 import java.time.Instant
@@ -32,8 +34,18 @@ import kotlin.math.roundToInt
 class MainActivity : AppCompatActivity() {
     private enum class Screen { LOGIN, BATTERIES, MEASUREMENT, HISTORY }
 
-    private lateinit var api: CrewApi
+    private lateinit var api: CrewRepository
     private val networkExecutor = Executors.newSingleThreadExecutor()
+    private val syncExecutor = Executors.newSingleThreadExecutor()
+    private var rejectedMeasurementId: String? = null
+    private var savingMeasurement = false
+    private var manualSyncRunning = false
+    private val syncTicker = object : Runnable {
+        override fun run() {
+            if (screen == Screen.BATTERIES) updateSyncHeader()
+            previewHandler.postDelayed(this, 30_000)
+        }
+    }
     private val batteryLabelComparator = (Collator.getInstance(Locale.ROOT) as RuleBasedCollator).apply {
         setNumericCollation(true)
     }
@@ -58,17 +70,37 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        api = CrewApi(getSharedPreferences("sarmat_crew", MODE_PRIVATE))
+        api = CrewRepository(applicationContext)
+        api.store.changes.observe(this) { if (screen == Screen.BATTERIES) loadBatteries() }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when (screen) {
                     Screen.HISTORY -> showMeasurement()
                     Screen.MEASUREMENT -> showBatteries()
+                    Screen.LOGIN -> if (api.hasSession()) showBatteries() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                 }
             }
         })
         if (api.hasSession()) showBatteries() else showLogin()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        previewHandler.post(syncTicker)
+        if (::api.isInitialized && api.hasSession()) api.requestSync()
+    }
+
+    override fun onPause() {
+        if (screen == Screen.MEASUREMENT) keepDraft()
+        previewHandler.removeCallbacks(syncTicker)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        previewHandler.removeCallbacksAndMessages(null)
+        networkExecutor.shutdown(); syncExecutor.shutdown()
+        super.onDestroy()
     }
 
     private fun showLogin(message: String = "") {
@@ -93,14 +125,119 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.crewNameText).text = api.savedCrewLabel()
         findViewById<TextView>(R.id.menuButton).setOnClickListener { anchor ->
             PopupMenu(this, anchor).apply {
-                menu.add("Оновити").setOnMenuItemClickListener { loadBatteries(); true }
+                if (api.needsLogin) menu.add("Увійти для синхронізації").setOnMenuItemClickListener { showLogin(); true }
                 menu.add("Вийти").setOnMenuItemClickListener {
-                    networkExecutor.execute { api.logout(); runOnUiThread { showLogin() } }; true
+                    val logout = { networkExecutor.execute { api.logout(); runOnUiThread { showLogin() } } }
+                    if (api.pendingCount() > 0) AlertDialog.Builder(this@MainActivity)
+                        .setMessage("Є ненадіслані зміни. Вони залишаться на телефоні та будуть доступні після входу в цей самий обліковий запис.")
+                        .setPositiveButton("Вийти") { _, _ -> logout() }.setNegativeButton("Залишитися", null).show()
+                    else logout()
+                    true
                 }
                 show()
             }
         }
+        findViewById<TextView>(R.id.syncTimeText).setOnClickListener { showSyncDetails() }
+        findViewById<PullSyncLayout>(R.id.pullSync).apply {
+            onRefresh = { synchronizeNow() }
+            onProgress = { ready ->
+                findViewById<TextView>(R.id.listStatusText).text = when (ready) {
+                    true -> "Відпустіть для синхронізації"
+                    false -> "Потягніть нижче для синхронізації"
+                    null -> ""
+                }
+                if (ready == null) loadBatteries()
+            }
+        }
         loadBatteries()
+        api.requestSync()
+    }
+
+    private fun updateSyncHeader() {
+        if (screen != Screen.BATTERIES) return
+        val busy = manualSyncRunning || api.syncing
+        val pending = api.pendingCount()
+        val last = api.lastSync()?.let { val value = age(it); if (value == "щойно") "Синхр. щойно" else "Синхр. $value тому" } ?: "Ще не синхронізовано"
+        val problems = api.pending().count { it.state == "blocked" }
+        findViewById<TextView>(R.id.syncTimeText).apply {
+            text = buildString {
+                append(if (busy) "Синхронізація…" else last)
+                if (pending > 0) append(" · Очікує: $pending")
+                if (problems > 0) append(" · Увага: $problems")
+            }
+            contentDescription = "$text. Натисніть для стану синхронізації"
+            setTextColor(ContextCompat.getColor(this@MainActivity, if (problems > 0 || api.syncError() != null) R.color.status_warning else R.color.text_muted))
+        }
+        findViewById<PullSyncLayout>(R.id.pullSync).refreshing = busy
+    }
+
+    private fun synchronizeNow() {
+        if (manualSyncRunning || api.syncing) return
+        if (api.needsLogin) { showLogin("Увійдіть повторно. Локальні записи збережено"); return }
+        manualSyncRunning = true; updateSyncHeader()
+        syncExecutor.execute {
+            runCatching { api.sync() }.onFailure { error ->
+                runOnUiThread { Toast.makeText(this, error.message ?: "Не вдалося синхронізувати", Toast.LENGTH_LONG).show() }
+            }
+            runOnUiThread { manualSyncRunning = false; if (screen == Screen.BATTERIES) loadBatteries() }
+        }
+    }
+
+    private fun showSyncDetails() {
+        val blocked = api.pending().filter { it.state == "blocked" }
+        val activeConflict = blocked.any { it.body.getString("kind") == "active" }
+        val labels = api.batteries().associate { it.id to it.label }
+        val message = buildString {
+            append(api.syncError() ?: if (api.pendingCount() == 0) "Усі зміни синхронізовано" else "Зміни збережено на телефоні. Очікує: ${api.pendingCount()}")
+            blocked.forEach { append("\n\n${labels[it.body.getString("batteryId")] ?: "Батарея"}: ${it.error}") }
+            if (activeConflict) append("\n\nМожна прийняти серверний статус, а потім за потреби ще раз позначити батарею «У дроні».")
+        }
+        AlertDialog.Builder(this).setTitle("Синхронізація").setMessage(message)
+            .setPositiveButton(if (api.needsLogin) "Увійти" else "Синхронізувати") { _, _ -> synchronizeNow() }
+            .setNegativeButton("Закрити", null).apply {
+                if (blocked.isNotEmpty()) setNeutralButton("Розібрати зміни") { _, _ ->
+                    AlertDialog.Builder(this@MainActivity).setTitle("Ненадіслані зміни")
+                        .setItems(blocked.map { "${labels[it.body.getString("batteryId")] ?: "Батарея"} · ${if (it.body.getString("kind") == "active") "статус" else "вимірювання"}" }.toTypedArray()) { _, index ->
+                            showRejectedChange(blocked[index].id)
+                        }.setNegativeButton("Закрити", null).show()
+                }
+            }.show()
+    }
+
+    private fun showRejectedChange(id: String) {
+        val operation = api.pending().firstOrNull { it.id == id && it.state == "blocked" } ?: return
+        val body = operation.body
+        val active = body.getString("kind") == "active"
+        val item = api.batteries().firstOrNull { it.id == body.getString("batteryId") }
+        AlertDialog.Builder(this).setTitle(item?.label ?: "Ненадісланий запис")
+            .setMessage(buildString {
+                append(operation.error)
+                if (active) append("\n\nПрийняти актуальний серверний статус і скасувати локальні зміни статусу?")
+                else append("\n${body.optJSONArray("cellVoltages")}\n${body.optString("notes")}")
+            }).setNegativeButton("Закрити", null).apply {
+                if (active) setPositiveButton("Прийняти серверний") { _, _ ->
+                    networkExecutor.execute { runCatching { api.acceptServerActiveState() }.onFailure {
+                        runOnUiThread { Toast.makeText(this@MainActivity, it.message, Toast.LENGTH_LONG).show() }
+                    } }
+                } else {
+                    if (item != null) setPositiveButton("Виправити") { _, _ ->
+                        battery = item
+                        val cells = body.getJSONArray("cellVoltages")
+                        draft = MutableList(item.cellCount) { if (it < cells.length()) String.format(Locale.US, "%.2f", cells.getDouble(it)) else "" }
+                        draftNotes = body.optString("notes"); manualReferenceCell = null; rejectedMeasurementId = id
+                        api.saveDraft(item.id, draft, draftNotes, null, id)
+                        showMeasurement()
+                    }
+                    setNeutralButton("Видалити копію") { _, _ ->
+                        AlertDialog.Builder(this@MainActivity).setMessage("Видалити цей відхилений запис з телефону? Сервер його не прийняв.")
+                            .setNegativeButton("Залишити", null).setPositiveButton("Видалити") { _, _ ->
+                                networkExecutor.execute { runCatching { api.discardRejected(id) }.onFailure {
+                                    runOnUiThread { Toast.makeText(this@MainActivity, it.message, Toast.LENGTH_LONG).show() }
+                                } }
+                            }.show()
+                    }
+                }
+            }.show()
     }
 
     private fun loadBatteries() {
@@ -108,11 +245,17 @@ class MainActivity : AppCompatActivity() {
         val statusView = findViewById<TextView>(R.id.listStatusText).apply { text = if (list.childCount == 0) getString(R.string.loading) else "Оновлення…" }
         networkExecutor.execute {
             runCatching(api::batteries).onSuccess { items -> runOnUiThread {
-                if (screen != Screen.BATTERIES) return@runOnUiThread
-                statusView.text = if (items.isEmpty()) "У екіпажу немає активних батарей" else "${items.size} батарей"
+                if (screen != Screen.BATTERIES || findViewById<LinearLayout>(R.id.batteryList) !== list) return@runOnUiThread
+                statusView.text = api.syncError() ?: if (items.isEmpty()) {
+                    if (api.lastSync() == null) "Потягніть вниз для першої синхронізації" else "У екіпажу немає активних батарей"
+                } else "${items.size} батарей · потягніть вниз для синхронізації"
+                val scroll = findViewById<ScrollView>(R.id.batteryScroll)
+                val scrollY = scroll.scrollY
                 list.removeAllViews()
                 items.sortedWith(compareBy<BatterySummary, String>(batteryLabelComparator) { it.label }.thenBy { it.id })
                     .forEach { list.addView(batteryCard(it)) }
+                scroll.post { scroll.scrollTo(0, scrollY) }
+                updateSyncHeader()
             } }.onFailure { failure -> runOnUiThread {
                 if (failure is ApiException && failure.status == 401) showLogin("Сесія завершилась. Увійдіть знову.")
                 else statusView.text = failure.message ?: "Не вдалося завантажити батареї"
@@ -144,6 +287,7 @@ class MainActivity : AppCompatActivity() {
             addView(TextView(this@MainActivity).apply {
                 text = buildString {
                     if (item.activeSince != null) item.latestDelta?.let { append(String.format(Locale.US, "Δ %.2f V · ", it)) }
+                    if (api.pendingCount(item.id) > 0) append("Очікує синхронізації · ")
                     append(item.latestMeasuredAt?.let { "Перевірена ${age(it)} тому" } ?: "Ще не перевірялась")
                 }
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)); textSize = 13f
@@ -191,7 +335,15 @@ class MainActivity : AppCompatActivity() {
         return frame
     }
 
-    private fun openBattery(item: BatterySummary) { battery = item; draft = MutableList(item.cellCount) { "" }; draftNotes = ""; manualReferenceCell = null; showMeasurement() }
+    private fun openBattery(item: BatterySummary) {
+        battery = item
+        val saved = api.draft(item.id)
+        draft = MutableList(item.cellCount) { saved?.optJSONArray("cells")?.optString(it).orEmpty() }
+        draftNotes = saved?.optString("notes").orEmpty()
+        manualReferenceCell = saved?.takeUnless { it.isNull("reference") }?.getInt("reference")
+        rejectedMeasurementId = saved?.takeUnless { it.isNull("rejectedId") }?.getString("rejectedId")
+        showMeasurement()
+    }
 
     private fun toggleActive(item: BatterySummary) {
         findViewById<TextView>(R.id.listStatusText).text = if (item.activeSince == null) "Встановлюю ${item.label}…" else "Знімаю ${item.label}…"
@@ -213,6 +365,7 @@ class MainActivity : AppCompatActivity() {
         configureVoltageEditor()
         createCells(item.cellCount)
         findViewById<EditText>(R.id.notesInput).setText(draftNotes)
+        findViewById<EditText>(R.id.notesInput).doAfterTextChanged { keepDraft() }
         findViewById<Button>(R.id.saveMeasurementButton).apply { isEnabled = false; setOnClickListener { saveMeasurement() } }
         updateSummary()
     }
@@ -249,7 +402,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun keepDraft() {
+        if (savingMeasurement) return
         draftNotes = findViewById<EditText>(R.id.notesInput).text.toString()
+        battery?.let { api.saveDraft(it.id, draft, draftNotes, manualReferenceCell, rejectedMeasurementId) }
     }
 
     private fun saveMeasurement() {
@@ -261,10 +416,16 @@ class MainActivity : AppCompatActivity() {
         if (cells.any { it !in min..max }) { error.text = String.format(Locale.US, "Допустимий діапазон: %.2f–%.2f V", min, max); return }
         if (!previewValid) { error.text = "Дочекайтеся перевірки вимірювання"; return }
         button.isEnabled = false; error.text = "Зберігаю…"
+        savingMeasurement = true
         val notes = findViewById<EditText>(R.id.notesInput).text.toString()
+        val replacingId = rejectedMeasurementId
         networkExecutor.execute {
-            runCatching { api.saveMeasurement(item.id, cells, notes); api.batteries().first { it.id == item.id } }.onSuccess { updated -> runOnUiThread { battery = updated; draft = MutableList(updated.cellCount) { "" }; draftNotes = ""; manualReferenceCell = null; showMeasurement() } }
-                .onFailure { runOnUiThread { error.text = it.message ?: "Не вдалося зберегти"; button.isEnabled = true } }
+            runCatching { api.saveMeasurement(item.id, cells, notes, replacingId); api.batteries().first { it.id == item.id } }.onSuccess { updated -> runOnUiThread {
+                savingMeasurement = false
+                if (isDestroyed || screen != Screen.MEASUREMENT || battery?.id != item.id) return@runOnUiThread
+                battery = updated; draft = MutableList(updated.cellCount) { "" }; draftNotes = ""; manualReferenceCell = null; rejectedMeasurementId = null
+                showMeasurement(); Toast.makeText(this, "Збережено на телефоні. Буде синхронізовано", Toast.LENGTH_SHORT).show()
+            } }.onFailure { runOnUiThread { savingMeasurement = false; error.text = it.message ?: "Не вдалося зберегти"; button.isEnabled = true } }
         }
     }
 
@@ -311,6 +472,7 @@ class MainActivity : AppCompatActivity() {
         if (manualReferenceCell == null) manualReferenceCell = selectedCell
         draft[selectedCell] = String.format(Locale.US, "%.2f", value)
         if (selectedCell == manualReferenceCell) clampDependentCellVoltages(draft, selectedCell)
+        keepDraft()
         findViewById<TextView>(R.id.selectedCellValue).text = String.format(Locale.US, "%.2f V", value)
         findViewById<SeekBar>(R.id.voltageSlider).progress = ((value * 100).roundToInt() - editorMinCentivolts).coerceIn(0, editorMaxCentivolts - editorMinCentivolts)
         updateSummary()
@@ -558,7 +720,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun Int?.orZero() = this ?: 0
-    override fun onDestroy() { networkExecutor.shutdown(); super.onDestroy() }
 
     companion object {
         private val HISTORY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy · HH:mm")

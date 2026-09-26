@@ -102,6 +102,15 @@ export const measurements = pgTable("measurements", {
   measuredAt: timestamp("measured_at", { withTimezone: true }).defaultNow().notNull()
 });
 
+// The receipt and mutation commit together, making offline retries safe.
+export const syncOperations = pgTable("sync_operations", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  payloadHash: text("payload_hash").notNull(),
+  result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()
+});
+
 export const cycleEvents = pgTable("cycle_events", {
   id: uuid("id").defaultRandom().primaryKey(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),

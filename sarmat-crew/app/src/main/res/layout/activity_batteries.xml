@@ -8,7 +8,9 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="96dp"
+        android:layout_height="wrap_content"
+        android:minHeight="96dp"
+        android:paddingVertical="12dp"
         android:background="@drawable/header_background"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -26,6 +28,16 @@
                 android:textColor="@color/text_primary"
                 android:textSize="25sp"
                 android:textStyle="bold" />
+            <TextView
+                android:id="@+id/syncTimeText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Ще не синхронізовано"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
             <TextView
                 android:id="@+id/crewNameText"
                 android:layout_width="wrap_content"
@@ -58,10 +70,15 @@
         android:textColor="@color/text_muted"
         android:textSize="13sp" />
 
-    <ScrollView
+    <com.sarmat.crew.PullSyncLayout
+        android:id="@+id/pullSync"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_weight="1">
+    <ScrollView
+        android:id="@+id/batteryScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:fillViewport="true">
         <LinearLayout
             android:id="@+id/batteryList"
@@ -72,4 +89,5 @@
             android:paddingEnd="14dp"
             android:paddingBottom="24dp" />
     </ScrollView>
+    </com.sarmat.crew.PullSyncLayout>
 </LinearLayout>

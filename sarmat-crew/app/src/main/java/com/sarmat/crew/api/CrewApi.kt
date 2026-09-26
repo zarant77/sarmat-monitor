@@ -18,27 +18,52 @@ class CrewApi(private val preferences: SharedPreferences) {
         }.apply()
 
     fun hasSession(): Boolean = baseUrl.isNotBlank() && !cookie.isNullOrBlank()
+    val accountScope: String? get() = preferences.getString("offline_scope", null)
+    val crewId: String get() = preferences.getString("offline_crew_id", "") ?: ""
+
+    fun ensureIdentity() {
+        if (accountScope == null) saveIdentity(requestObject("GET", "/api/auth/me"))
+    }
+
+    private fun saveIdentity(json: JSONObject) {
+        if (json.getString("role") != "CREW") throw ApiException("Потрібен обліковий запис екіпажу")
+        preferences.edit().putString("offline_scope", "$baseUrl|${json.getString("id")}|${json.getString("crewId")}")
+            .putString("offline_crew_id", json.getString("crewId")).commit()
+    }
 
     fun login(serverUrl: String, username: String, password: String): CrewUser {
-        baseUrl = normalizeUrl(serverUrl)
-        val body = JSONObject().put("username", username).put("password", password)
-        val json = requestObject("POST", "/api/auth/login", body, authenticated = false)
-        val user = CrewUser(
-            username = json.getString("username"),
-            role = json.getString("role"),
-            crewName = json.optString("crewName", ""),
-            crewNumber = if (json.isNull("crewNumber")) null else json.getInt("crewNumber"),
-        )
-        if (user.role != "CREW") {
-            runCatching { logout() }
-            throw ApiException("Цей застосунок призначений лише для облікового запису екіпажу")
+        val previous = preferences.all.toMap()
+        try {
+            baseUrl = normalizeUrl(serverUrl)
+            val body = JSONObject().put("username", username).put("password", password)
+            val json = requestObject("POST", "/api/auth/login", body, authenticated = false)
+            val user = CrewUser(
+                username = json.getString("username"),
+                role = json.getString("role"),
+                crewName = json.optString("crewName", ""),
+                crewNumber = if (json.isNull("crewNumber")) null else json.getInt("crewNumber"),
+            )
+            if (user.role != "CREW") {
+                runCatching { logout() }
+                throw ApiException("Цей застосунок призначений лише для облікового запису екіпажу")
+            }
+            preferences.edit()
+                .putString(KEY_CREW_NAME, user.crewName)
+                .putString(KEY_USERNAME, user.username)
+                .putInt(KEY_CREW_NUMBER, user.crewNumber ?: -1)
+                .apply()
+            saveIdentity(json)
+            return user
+        } catch (error: Exception) {
+            preferences.edit().clear().apply {
+                previous.forEach { (key, value) -> when (value) {
+                    is String -> putString(key, value)
+                    is Int -> putInt(key, value)
+                    is Boolean -> putBoolean(key, value)
+                } }
+            }.commit()
+            throw error
         }
-        preferences.edit()
-            .putString(KEY_CREW_NAME, user.crewName)
-            .putString(KEY_USERNAME, user.username)
-            .putInt(KEY_CREW_NUMBER, user.crewNumber ?: -1)
-            .apply()
-        return user
     }
 
     fun savedCrewLabel(): String {
@@ -49,6 +74,25 @@ class CrewApi(private val preferences: SharedPreferences) {
 
     fun batteries(): List<BatterySummary> {
         val array = requestArray("GET", "/api/batteries")
+        return parseBatteries(array)
+    }
+
+    fun fetchBatteriesJson(): JSONArray = requestArray("GET", "/api/batteries")
+    fun fetchThresholds(): JSONObject = requestObject("GET", "/api/settings/thresholds")
+    fun checkSyncIdentity() {
+        val identity = requestObject("GET", "/api/auth/me")
+        val currentScope = "$baseUrl|${identity.getString("id")}|${identity.getString("crewId")}"
+        if (currentScope != accountScope) throw ApiException("Екіпаж облікового запису змінився. Увійдіть повторно", 403)
+        try { requestObject("GET", "/api/crew/sync-capabilities") }
+        catch (error: ApiException) {
+            if (error.status == 404) throw ApiException("Потрібне оновлення бекенду для офлайн-синхронізації", 404)
+            throw error
+        }
+    }
+    fun fetchHistoryJson(id: String, offset: Int): JSONObject = requestObject("GET", "/api/batteries/$id/history?offset=$offset&limit=50")
+    fun syncOperation(body: JSONObject): JSONObject = requestObject("POST", "/api/crew/sync", body)
+
+    fun parseBatteries(array: JSONArray): List<BatterySummary> {
         return (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             val latest = item.optJSONObject("latestMeasurement")
@@ -103,6 +147,10 @@ class CrewApi(private val preferences: SharedPreferences) {
 
     fun batteryHistory(batteryId: String, offset: Int, limit: Int = 25): BatteryHistoryPage {
         val json = requestObject("GET", "/api/batteries/$batteryId/history?offset=$offset&limit=$limit")
+        return parseHistory(json)
+    }
+
+    fun parseHistory(json: JSONObject): BatteryHistoryPage {
         val array = json.getJSONArray("items")
         val items = (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
@@ -137,7 +185,8 @@ class CrewApi(private val preferences: SharedPreferences) {
 
     fun clearSession() {
         cookie = null
-        preferences.edit().remove(KEY_CREW_NAME).remove(KEY_CREW_NUMBER).remove(KEY_USERNAME).apply()
+        preferences.edit().remove(KEY_CREW_NAME).remove(KEY_CREW_NUMBER).remove(KEY_USERNAME)
+            .remove("offline_scope").remove("offline_crew_id").commit()
     }
 
     private fun requestObject(method: String, path: String, body: JSONObject? = null, authenticated: Boolean = true): JSONObject =
@@ -165,7 +214,7 @@ class CrewApi(private val preferences: SharedPreferences) {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (status !in 200..299) {
-                if (status == 401) clearSession()
+                if (status == 401) cookie = null // Keep offline data and account identity for reauthentication.
                 val message = runCatching { JSONObject(response).optString("error") }.getOrNull()
                 throw ApiException(message?.takeIf { it.isNotBlank() } ?: "Помилка сервера: $status", status)
             }

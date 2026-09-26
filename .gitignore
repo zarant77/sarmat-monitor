@@ -49,6 +49,7 @@ coverage.*
 # Android / Gradle
 .tools/
 .gradle/
+.kotlin/
 local.properties
 captures/
 **/build/
