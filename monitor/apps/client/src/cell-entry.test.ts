@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import { enterCells, isCompleteCell } from "./cell-entry";
 
 const empty = () => Array<string>(12).fill("");
-const enter = (cells: string[], index: number, text: string) => enterCells(cells, index, text, 3, 4.22);
+const enter = (cells: string[], index: number, text: string) => enterCells(cells, index, text, 3, 4.24);
 
 describe("continuous cell voltage entry", () => {
+  it("accepts 4.24 volts and rejects values above the upper limit", () => {
+    expect(enter(empty(), 0, "424").cells[0]).toBe("4.24");
+    expect(isCompleteCell("4.24", 3, 4.24)).toBe(true);
+    expect(enter(empty(), 0, "425").error).toBe("range");
+    expect(isCompleteCell("4.25", 3, 4.24)).toBe(false);
+  });
   it("distributes the requested digit stream and moves to the next empty cell", () => {
     const result = enter(empty(), 0, "421420422");
     expect(result.cells.slice(0, 4)).toEqual(["4.21", "4.20", "4.22", ""]);
@@ -42,7 +48,7 @@ describe("continuous cell voltage entry", () => {
     const result = enter(empty(), 0, "42142");
     expect(result.cells.slice(0, 2)).toEqual(["4.21", "42"]);
     expect(result.focusIndex).toBe(1);
-    for (const value of ["", "4", "42", "4.", "4.2"]) expect(isCompleteCell(value, 3, 4.22)).toBe(false);
+    for (const value of ["", "4", "42", "4.", "4.2"]) expect(isCompleteCell(value, 3, 4.24)).toBe(false);
   });
   it("does not discard extra pasted values or overwrite populated cells", () => {
     const cells = Array(12).fill("4.00"); cells[0] = "";

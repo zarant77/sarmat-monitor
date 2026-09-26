@@ -15,16 +15,16 @@ class MeasurementDraftTest {
 
     @Test fun `any first manual cell uses full voltage range`() {
         val draft = MutableList(12) { "" }
-        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 0, null))
-        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 6, null))
+        assertEquals(300..424, manualVoltageRangeCentivolts(draft, 0, null))
+        assertEquals(300..424, manualVoltageRangeCentivolts(draft, 6, null))
     }
 
     @Test fun `dependent cells use plus or minus point one from chosen reference cell`() {
         val draft = MutableList(12) { "" }.apply { this[6] = "4.05" }
         assertEquals(395..415, manualVoltageRangeCentivolts(draft, 0, 6))
-        assertEquals(300..422, manualVoltageRangeCentivolts(draft, 6, 6))
-        draft[6] = "4.22"
-        assertEquals(412..422, manualVoltageRangeCentivolts(draft, 11, 6))
+        assertEquals(300..424, manualVoltageRangeCentivolts(draft, 6, 6))
+        draft[6] = "4.24"
+        assertEquals(414..424, manualVoltageRangeCentivolts(draft, 11, 6))
     }
 
     @Test fun `changing reference cell clamps existing dependent values`() {

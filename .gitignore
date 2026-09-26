@@ -47,6 +47,7 @@ coverage.*
 *.iml
 
 # Android / Gradle
+.tools/
 .gradle/
 local.properties
 captures/

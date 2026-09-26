@@ -1,6 +1,8 @@
 package com.sarmat.crew
 
 import android.graphics.Typeface
+import android.icu.text.Collator
+import android.icu.text.RuleBasedCollator
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -32,6 +34,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var api: CrewApi
     private val networkExecutor = Executors.newSingleThreadExecutor()
+    private val batteryLabelComparator = (Collator.getInstance(Locale.ROOT) as RuleBasedCollator).apply {
+        setNumericCollation(true)
+    }
     private var screen = Screen.LOGIN
     private var battery: BatterySummary? = null
     private var draft = mutableListOf<String>()
@@ -41,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedCell = 0
     private var manualReferenceCell: Int? = null
     private var editorMinCentivolts = 300
-    private var editorMaxCentivolts = 422
+    private var editorMaxCentivolts = 424
     private var previewValid = false
     private var previewGeneration = 0
     private val previewHandler = Handler(Looper.getMainLooper())
@@ -106,7 +111,8 @@ class MainActivity : AppCompatActivity() {
                 if (screen != Screen.BATTERIES) return@runOnUiThread
                 statusView.text = if (items.isEmpty()) "У екіпажу немає активних батарей" else "${items.size} батарей"
                 list.removeAllViews()
-                items.sortedWith(compareByDescending<BatterySummary> { it.activeSince != null }.thenBy { it.label }).forEach { list.addView(batteryCard(it)) }
+                items.sortedWith(compareBy<BatterySummary, String>(batteryLabelComparator) { it.label }.thenBy { it.id })
+                    .forEach { list.addView(batteryCard(it)) }
             } }.onFailure { failure -> runOnUiThread {
                 if (failure is ApiException && failure.status == 401) showLogin("Сесія завершилась. Увійдіть знову.")
                 else statusView.text = failure.message ?: "Не вдалося завантажити батареї"
@@ -251,7 +257,7 @@ class MainActivity : AppCompatActivity() {
         val error = findViewById<TextView>(R.id.measurementError); val button = findViewById<Button>(R.id.saveMeasurementButton)
         val nullable = draft.map { it.toDoubleOrNull() }
         if (nullable.any { it == null }) { error.text = "Заповніть усі ${item.cellCount} комірок"; return }
-        val cells = nullable.filterNotNull(); val min = item.minVoltage / item.cellCount; val max = item.maxVoltage / item.cellCount + 0.02
+        val cells = nullable.filterNotNull(); val min = item.minVoltage / item.cellCount; val max = item.maxVoltage / item.cellCount + 0.04
         if (cells.any { it !in min..max }) { error.text = String.format(Locale.US, "Допустимий діапазон: %.2f–%.2f V", min, max); return }
         if (!previewValid) { error.text = "Дочекайтеся перевірки вимірювання"; return }
         button.isEnabled = false; error.text = "Зберігаю…"

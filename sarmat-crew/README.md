@@ -43,6 +43,30 @@ Workflow **Android APK** (`.github/workflows/android.yml`) збирає debug AP
 
 ## Збірка та встановлення на телефон
 
+### Windows
+
+1. Встановіть Android Studio. У **SDK Manager** встановіть **Android SDK Platform 36** і **Android SDK Platform-Tools**. Перед першою збіркою відкрийте папку `sarmat-crew` в Android Studio, дочекайтеся синхронізації та встановіть запропоновані компоненти SDK.
+2. Увімкніть на телефоні **USB debugging**, під’єднайте його кабелем із підтримкою передачі даних і підтвердьте дозвіл на телефоні.
+3. Двічі натисніть **build-and-install.bat** у папці `sarmat-crew`.
+
+Лаунчер перевірить телефон, збере APK, встановить або оновить застосунок і запустить його. Вікно залишиться відкритим, щоб можна було прочитати результат або помилку. Для першої збірки потрібен інтернет для завантаження залежностей.
+
+SDK шукається через `ANDROID_HOME`, `ANDROID_SDK_ROOT` та стандартну папку `%LOCALAPPDATA%\Android\Sdk`; також підтримується `adb.exe` у `PATH`. Лаунчер вибирає JDK 17 або 21: спочатку локальний `.tools\jdk-17`, потім `JAVA_HOME`, `PATH`, стандартні папки Android Studio та встановлених JDK. Java 25, яку можуть містити нові версії Android Studio, для цієї збірки не підходить. Для нестандартного розташування задайте `ANDROID_HOME` та `JAVA_HOME` (JDK 17 або 21). Вибір Java діє лише для процесу лаунчера.
+
+Якщо під’єднано кілька пристроїв, запустіть у PowerShell із папки `sarmat-crew`:
+
+```powershell
+.\build-and-install.bat DEVICE_SERIAL
+```
+
+Для запуску без паузи наприкінці, наприклад з автоматизації:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-and-install.ps1
+```
+
+### Linux / macOS
+
 Увімкніть на телефоні USB debugging, під’єднайте його кабелем і підтвердьте доступ. Потім виконайте з каталогу `sarmat-crew`:
 
 ```bash

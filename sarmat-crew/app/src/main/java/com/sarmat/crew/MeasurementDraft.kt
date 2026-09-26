@@ -8,10 +8,10 @@ internal fun isCompleteMeasurement(draft: List<String>, requiredCells: Int = 12)
 
 internal fun manualVoltageRangeCentivolts(draft: List<String>, cellIndex: Int, referenceCellIndex: Int?): IntRange? {
     if (cellIndex !in draft.indices) return null
-    if (referenceCellIndex == null || cellIndex == referenceCellIndex) return 300..422
-    val referenceVoltage = draft.getOrNull(referenceCellIndex)?.toDoubleOrNull() ?: return 300..422
+    if (referenceCellIndex == null || cellIndex == referenceCellIndex) return 300..424
+    val referenceVoltage = draft.getOrNull(referenceCellIndex)?.toDoubleOrNull() ?: return 300..424
     val center = (referenceVoltage * 100).roundToInt()
-    return (center - 10).coerceAtLeast(300)..(center + 10).coerceAtMost(422)
+    return (center - 10).coerceAtLeast(300)..(center + 10).coerceAtMost(424)
 }
 
 internal fun clampDependentCellVoltages(draft: MutableList<String>, referenceCellIndex: Int) {

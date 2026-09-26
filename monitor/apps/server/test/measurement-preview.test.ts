@@ -19,8 +19,8 @@ describe("structured measurement boundary", () => {
     expect(() => calculateMeasurementPreview(Array(6).fill(4.5), Array(6).fill(4.2), .1, .2, 36, 50.4)).toThrow("outside");
   });
 
-  it("accepts a small overcharge up to 4.22 volts per cell", () => {
-    expect(calculateMeasurementPreview(Array(6).fill(4.22), Array(6).fill(4.22), .1, .2, 36, 50.4).maxCellVoltage).toBe(4.22);
-    expect(() => calculateMeasurementPreview(Array(6).fill(4.23), Array(6).fill(4.2), .1, .2, 36, 50.4)).toThrow("outside");
+  it("accepts a small overcharge up to 4.24 volts per cell", () => {
+    expect(calculateMeasurementPreview(Array(6).fill(4.24), Array(6).fill(4.24), .1, .2, 36, 50.4).maxCellVoltage).toBe(4.24);
+    expect(() => calculateMeasurementPreview(Array(6).fill(4.25), Array(6).fill(4.2), .1, .2, 36, 50.4)).toThrow("outside");
   });
 });
