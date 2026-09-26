@@ -442,7 +442,7 @@
   "status": {
     "systemOk": "System OK",
     "issues": "{{count}} issues",
-    "issueBreakdown": "{{batteries}} battery issues · {{crews}} crews offline"
+    "batteryIssueCount": "Battery issues: {{count}}"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

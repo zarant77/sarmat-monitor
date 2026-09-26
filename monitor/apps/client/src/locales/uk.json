@@ -442,7 +442,7 @@
   "status": {
     "systemOk": "Система в нормі",
     "issues": "Проблем: {{count}}",
-    "issueBreakdown": "Проблем батарей: {{batteries}} · екіпажів офлайн: {{crews}}"
+    "batteryIssueCount": "Проблем батарей: {{count}}"
   },
   "errors": {
     "generic": "Щось пішло не так. Спробуйте ще раз.",

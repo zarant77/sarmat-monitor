@@ -13,15 +13,12 @@ import { DetachedTelemetryPage, TelemetryPage } from "./pages/Telemetry";
 import { api } from "./api";
 
 function OperationalStatus({ admin }: { admin: boolean }) {
-  const auth = useAuth(); const { t } = useI18n();
+  const { t } = useI18n();
   const batteries = useQuery({ queryKey: ["batteries", "header-status"], queryFn: () => api.batteries(), enabled: admin, refetchInterval: 30000 });
-  const telemetry = useQuery({ queryKey: ["telemetry", auth.user?.groupId], queryFn: () => api.telemetry(auth.user?.groupId ?? undefined), enabled: admin && Boolean(auth.user?.groupId), refetchInterval: 5000 });
   if (!admin) return null;
   const batteryIssues = batteries.data?.filter(item => item.latestMeasurement && item.latestMeasurement.health !== "good").length ?? 0;
-  const offlineCrews = telemetry.data?.crews.filter(crew => !crew.snapshot || crew.snapshot[0] !== 0).length ?? 0;
-  const issues = batteryIssues + offlineCrews;
-  return <NavLink className={`system-status ${issues ? "has-issues" : ""}`} to={batteryIssues ? "/admin/batteries?attention=1" : offlineCrews ? "/admin/telemetry" : "/admin"} title={issues ? t("status.issueBreakdown", { batteries: batteryIssues, crews: offlineCrews }) : t("status.systemOk")}>
-    <i/>{issues ? t("status.issues", { count: issues }) : t("status.systemOk")}
+  return <NavLink className={`system-status ${batteryIssues ? "has-issues" : ""}`} to={batteryIssues ? "/admin/batteries?attention=1" : "/admin"} title={batteryIssues ? t("status.batteryIssueCount", { count: batteryIssues }) : t("status.systemOk")}>
+    <i/>{batteryIssues ? t("status.issues", { count: batteryIssues }) : t("status.systemOk")}
   </NavLink>;
 }
 
