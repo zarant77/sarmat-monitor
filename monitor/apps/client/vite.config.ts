@@ -5,16 +5,7 @@ import react from "@vitejs/plugin-react";
 
 const monitorPackagePath = fileURLToPath(new URL("../../package.json", import.meta.url));
 const { version } = JSON.parse(fs.readFileSync(monitorPackagePath, "utf8")) as { version: string };
-const buildTimestamp = new Date();
-const buildDate = [
-  String(buildTimestamp.getDate()).padStart(2, "0"),
-  String(buildTimestamp.getMonth() + 1).padStart(2, "0"),
-  buildTimestamp.getFullYear(),
-].join(".");
-const buildTime = [
-  String(buildTimestamp.getHours()).padStart(2, "0"),
-  String(buildTimestamp.getMinutes()).padStart(2, "0"),
-].join(":");
+const buildTimestamp = new Date().toISOString();
 
 const certificatePath = "certs/dev.pem";
 const privateKeyPath = "certs/dev-key.pem";
@@ -30,8 +21,7 @@ export default defineConfig({
 
   define: {
     __APP_VERSION__: JSON.stringify(version),
-    __BUILD_DATE__: JSON.stringify(buildDate),
-    __BUILD_TIME__: JSON.stringify(buildTime),
+    __BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
   },
 
   server: {

@@ -7,7 +7,16 @@ import { AuthProvider } from "./auth";
 import { I18nProvider } from "./i18n";
 import "./styles.css";
 
-console.info(`Sarmat Monitor v${__APP_VERSION__} (build ${__BUILD_DATE__} ${__BUILD_TIME__})`);
+const buildParts = Object.fromEntries(new Intl.DateTimeFormat(undefined, {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+}).formatToParts(new Date(__BUILD_TIMESTAMP__)).map(({ type, value }) => [type, value]));
+const localBuildTimestamp = `${buildParts.day}.${buildParts.month}.${buildParts.year} ${buildParts.hour}:${buildParts.minute}`;
+console.info(`Sarmat Monitor v${__APP_VERSION__} (build ${localBuildTimestamp})`);
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, retry: 1 } } });
 ReactDOM.createRoot(document.getElementById("root")!).render(
