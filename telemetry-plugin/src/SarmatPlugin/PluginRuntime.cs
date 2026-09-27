@@ -26,6 +26,7 @@ namespace SarmatPlugin
         private SettingsForm settingsForm;
         private BatterySelectionForm batterySelectionForm;
         private readonly BatteryVoltageTracker batteryTracker = new BatteryVoltageTracker();
+        private readonly BatteryDialogConnection batteryConnection = new BatteryDialogConnection();
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private string aggregatorStatus = "Disabled";
@@ -49,13 +50,13 @@ namespace SarmatPlugin
             settings = store.Load();
             log = new AppLog(settings.DebugLogging);
             audio = new AudioService(settings);
-            VehicleConnected += ShowBatterySelection;
         }
 
         public SarmatPanel CreatePanel()
         {
             panel = new SarmatPanel { Visible = true, Dock = DockStyle.Top };
             panel.SettingsRequested += PanelSettingsRequested;
+            panel.BatterySelectionRequested += PanelBatterySelectionRequested;
             StartWorkers();
             return panel;
         }
@@ -79,14 +80,19 @@ namespace SarmatPlugin
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
+            bool offerBattery;
             lock (sync)
             {
+                offerBattery = batteryConnection.Update(telemetry.Connected, DateTime.UtcNow);
                 if (settings.AggregatorEnabled && settings.BatteryTrackingEnabled && telemetry.Connected)
                 {
                     if (batteryTracker.SessionId == null) batteryTracker.Connect(DateTime.UtcNow);
                 }
-                else { PersistVoltageEvents(); batteryTracker.Reset(); }
+                else if (!settings.AggregatorEnabled || !settings.BatteryTrackingEnabled || batteryConnection.Disconnected)
+                { PersistVoltageEvents(); batteryTracker.Reset(); }
             }
+            if (batteryConnection.Disconnected) CloseBatterySelection();
+            if (offerBattery) ShowBatterySelection();
             UpdateVehicleReconnect(telemetry);
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
@@ -106,7 +112,6 @@ namespace SarmatPlugin
             else if (!telemetry.Connected)
             {
                 wasConnected = false;
-                CloseBatterySelection();
             }
             var warning = takeoffModeWarning.Update(telemetry.Armed, telemetry.FlightMode,
                 settings.TakeoffModeWarningEnabled, settings.SafeArmingModes);
@@ -168,7 +173,7 @@ namespace SarmatPlugin
         private void StopWorkers(bool resetBattery = true)
         {
             if (resetBattery) CloseBatterySelection();
-            lock (sync) { PersistVoltageEvents(); if (resetBattery) batteryTracker.Reset(); }
+            lock (sync) { PersistVoltageEvents(); if (resetBattery) { batteryTracker.Reset(); batteryConnection.Reset(); } }
             cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null;
             audio.Stop();
         }
@@ -312,9 +317,13 @@ namespace SarmatPlugin
             string sessionId;
             lock (sync) sessionId = batteryTracker.SessionId;
             if (sessionId == null) return;
-            batterySelectionForm = new BatterySelectionForm(settings, sessionId);
+            batterySelectionForm = new BatterySelectionForm(settings, sessionId, () =>
+            {
+                lock (sync) return !disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled &&
+                    batteryTracker.SessionId == sessionId && new TelemetryReader(currentState).Read().Connected;
+            });
             batterySelectionForm.BatteryConfirmed += id => { lock (sync) { batteryTracker.Confirm(id); PersistVoltageEvents(); } };
-            batterySelectionForm.FormClosed += (sender, args) => { batterySelectionForm = null; };
+            batterySelectionForm.FormClosed += (sender, args) => { if (ReferenceEquals(batterySelectionForm, sender)) batterySelectionForm = null; };
             // Modeless: telemetry, reconnect handling and Mission Planner remain responsive.
             batterySelectionForm.Show(panel.FindForm());
         }
@@ -325,6 +334,33 @@ namespace SarmatPlugin
             if (form == null || form.IsDisposed) return;
             if (form.InvokeRequired) form.BeginInvoke(new Action(() => { if (!form.IsDisposed) form.Close(); }));
             else form.Close();
+        }
+
+        private void PanelBatterySelectionRequested(object sender, EventArgs e)
+        {
+            if (!settings.AggregatorEnabled || !settings.BatteryTrackingEnabled)
+            {
+                MessageBox.Show(panel.FindForm(), "Enable both Enabled and Automatic battery charge tracking on the API tab, then save the settings.", "Select battery");
+                return;
+            }
+            if (!new TelemetryReader(currentState).Read().Connected)
+            {
+                MessageBox.Show(panel.FindForm(), "Connect Mission Planner to the drone first.", "Select battery");
+                return;
+            }
+            if (batterySelectionForm == null || batterySelectionForm.IsDisposed)
+            {
+                lock (sync)
+                {
+                    PersistVoltageEvents();
+                    // A confirmed session cannot be rebound server-side. Explicit reselection
+                    // starts a new binding without inventing another connection measurement.
+                    if (batteryTracker.SessionId == null) batteryTracker.Connect(DateTime.UtcNow);
+                    else if (batteryTracker.IsConfirmed) batteryTracker.Connect(DateTime.UtcNow, false);
+                    batteryConnection.MarkOffered();
+                }
+            }
+            ShowBatterySelection();
         }
 
         private void LogFault(string worker, Task task)
@@ -344,7 +380,7 @@ namespace SarmatPlugin
         }
         public void ResetBatteryConnection()
         {
-            lock (sync) { PersistVoltageEvents(); batteryTracker.Reset(); }
+            lock (sync) { PersistVoltageEvents(); batteryTracker.Reset(); batteryConnection.Reset(); }
             wasConnected = false; connectionInitialized = false;
             CloseBatterySelection();
         }
@@ -393,6 +429,7 @@ namespace SarmatPlugin
             if (panel != null)
             {
                 panel.SettingsRequested -= PanelSettingsRequested;
+                panel.BatterySelectionRequested -= PanelBatterySelectionRequested;
                 panel.Dispose();
                 panel = null;
             }

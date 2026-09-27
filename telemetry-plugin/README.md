@@ -5,7 +5,7 @@ responsive widget grid displays flight telemetry and monitors OBS Studio recordi
 a Ruijie wireless bridge.
 All warnings and audio are gated by the vehicle's `ARMED` state.
 
-At the `DISARMED → ARMED` transition, Sarmat checks the Mission Planner flight mode. If the
+At the `DISARMED в†’ ARMED` transition, Sarmat checks the Mission Planner flight mode. If the
 vehicle was armed outside the configured safe modes, a translucent red warning blinks at the
 bottom of the main HUD for five seconds. Safe modes are case-insensitive, configurable as a
 comma-separated list, and default to `PosHold`; the check can also be disabled. Reaching any safe
@@ -37,11 +37,11 @@ files that predate these switches.
 The optional **API** settings tab streams the current Mission Planner telemetry to
 `monitor` once per second. Configure:
 
-- **Enabled** — master switch for all API access, including telemetry, battery selection and the connection test;
-- **Automatic battery charge tracking** — defaults to off; when enabled together with API access, opens a battery selection dialog when a vehicle connects;
-- **WebSocket URL** — normally `ws://<server>:8080/ws/station`;
-- **Station secret** — the secret of this station from the monitor `config.json`;
-- **Reconnect interval** — retry delay after a failed or closed connection.
+- **Enabled** вЂ” master switch for all API access, including telemetry, battery selection and the connection test;
+- **Automatic battery charge tracking** вЂ” defaults to off; when enabled together with API access, opens a battery selection dialog when a vehicle connects;
+- **WebSocket URL** вЂ” normally `ws://<server>:8080/ws/station`;
+- **Station secret** вЂ” the secret of this station from the monitor `config.json`;
+- **Reconnect interval** вЂ” retry delay after a failed or closed connection.
 
 The tab shows the current connection state and includes a connection test that uses the values
 currently entered in the form. The monitor obtains the station title and color from its own
@@ -55,7 +55,12 @@ Changes apply on Save. The battery dialog loads the crew's available batteries a
 the active battery chosen in Sarmat Crew. Confirm saves the selection to the server; confirming
 the existing active battery preserves its installation time. Concurrent changes in the app
 require reloading and confirming again. Cancel leaves the server selection unchanged.
-The dialog does not block Mission Planner and closes when the vehicle disconnects.
+The dialog does not block Mission Planner. It opens after two seconds of stable connection;
+brief connection gaps do not close it. A sustained disconnect of three seconds or a selected
+MAVLink vehicle change closes it. Right-click the Sarmat panel or a widget and select
+**Select battery** to reopen the dialog (or focus it if already open). A new selection creates
+a new battery binding without adding another connection-voltage event. Both API switches
+must be enabled; confirmation requires the drone to remain connected.
 If the API is unavailable, use Reload to retry. Recording starts only after confirmation.
 A connection has an immutable battery session, so delayed events cannot be assigned to the
 next active battery. Cancel skips recording for that connection. Reconnect and confirm again
@@ -112,7 +117,9 @@ Windows Mark-of-the-Web from all downloaded and installed files.
 
 ## Build
 
-The root `launcher.bat` mirrors the Monitor/Android commands in `launcher.sh`.
+The root `launcher.bat` includes option **11** to build the plugin, also available as
+`launcher.bat plugin [MissionPlannerDir]`. It detects a standard Mission Planner installation
+or asks for its directory. The matching `launcher.sh` option explains that Windows is required.
 Build the Mission Planner plugin with the scripts below. They build Release, run tests,
 and prepare `telemetry-plugin/dist`.
 
@@ -159,8 +166,8 @@ setup always shows the Mission Planner directory screen, initially set to
 `C:\Program Files (x86)\Mission Planner`; select the exact Mission Planner copy you want to modify.
 Use **Browse** from any selected Sarmat feature to choose the shared Mission Planner root folder
 that already contains `MissionPlanner.exe`.
-The **Sarmat Telemetry** feature can be installed or removed through Windows Apps → Sarmat Plugins
-→ Modify. Uninstalling the complete product removes the telemetry plugin DLL.
+The **Sarmat Telemetry** feature can be installed or removed through Windows Apps в†’ Sarmat Plugins
+в†’ Modify. Uninstalling the complete product removes the telemetry plugin DLL.
 
 The optional **SarmatTheme** feature is disabled by default. When selected, it installs every
 branding asset from the repository-level `theme` directory (`icon.png`, `logo.txt`, `logo2.png`,
@@ -176,7 +183,7 @@ dotnet build ..\installer\SarmatPlugins.Installer.wixproj -c Release -p:ProductV
 
 The MSI is written to the repository-level `artifacts` directory.
 
-For a build without creating a GitHub Release, open **GitHub → Actions → Release build → Run
+For a build without creating a GitHub Release, open **GitHub в†’ Actions в†’ Release build в†’ Run
 workflow**. The resulting release packages are available in the run's **Artifacts** section.
 
 ## Install
@@ -207,7 +214,7 @@ Settings and logs are intentionally preserved.
 
 ## OBS WebSocket setup
 
-1. In OBS, open **Tools → WebSocket Server Settings**.
+1. In OBS, open **Tools в†’ WebSocket Server Settings**.
 2. Enable the WebSocket server.
 3. Keep the default port `4455`, or enter the matching endpoint in Sarmat settings.
 4. Copy the OBS WebSocket password into the plugin.
@@ -216,8 +223,8 @@ Settings and logs are intentionally preserved.
 Default endpoint: `ws://127.0.0.1:4455`.
 
 The implementation uses OBS WebSocket v5 Hello/Identify authentication and `GetRecordStatus`.
-The plugin sends `StartRecord` once on the `DISARMED → ARMED` transition and `StopRecord` once on
-the `ARMED → DISARMED` transition. Between those edges it only reads `GetRecordStatus`, so manual
+The plugin sends `StartRecord` once on the `DISARMED в†’ ARMED` transition and `StopRecord` once on
+the `ARMED в†’ DISARMED` transition. Between those edges it only reads `GetRecordStatus`, so manual
 OBS Start/Stop remains available and the dashboard shows the actual recording state. A transition
 that occurs while OBS is disconnected stays pending and is retried after reconnect.
 
@@ -255,7 +262,7 @@ Activation and recovery use fixed two-second debounce periods. All red boundarie
 repository-level `shared/telemetry-thresholds.json`, which is embedded into the plugin build.
 A sound is played once whenever an alert kind transitions into its bad state. Recovery is silent.
 After playback, new alert sounds are suppressed for the configured cooldown (default `10 s`, range
-`1–300 s`). Disarming resets alert transitions and cancels pending playback.
+`1вЂ“300 s`). Disarming resets alert transitions and cancels pending playback.
 The Audio tab also accepts a custom PCM WAV warning file. An empty path uses the embedded sound;
 missing, unreadable, or invalid custom files safely fall back to the embedded `warning.wav`.
 
@@ -265,7 +272,7 @@ Every dashboard item uses the same title/value/status widget. Status colors are 
 yellow (normal), and red (bad). The grid calculates its column count from the available width and
 automatically wraps widgets into additional rows. Header and value fonts are measured against the
 actual visible text and reduced automatically so every item fits without scrolling. Under
-**Settings → Widgets**, each widget can be shown or hidden independently. Available widgets are Sat Count, GPS HDOP, Dist to Home, Bat used,
+**Settings в†’ Widgets**, each widget can be shown or hidden independently. Available widgets are Sat Count, GPS HDOP, Dist to Home, Bat used,
 Ruijie, OBS, Ground Speed, Vertical Speed, Air Speed, Altitude, Battery, and Current. The Battery
 widget combines voltage and present current, for example `44,2V 10A`.
 OBS uses the compact values `REC`, `NR`, and `DIS`.
@@ -281,7 +288,7 @@ HUD resize routine.
 
 In addition to the built-in widgets, the plugin discovers every public scalar telemetry property
 and field exposed by the installed Mission Planner `CurrentState` at startup. Numeric, Boolean,
-text, enum, and timestamp values become optional entries in **Settings → Widgets**. This includes
+text, enum, and timestamp values become optional entries in **Settings в†’ Widgets**. This includes
 attitude, position, navigation, GPS2, sensor, RC, vibration, wind, EKF, mission, radio, and custom
 `NAMED_VALUE_FLOAT` slots when exposed by that Mission Planner version. Dynamically discovered
 items are off by default and only selected values are read during each telemetry update.

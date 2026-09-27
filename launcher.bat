@@ -128,6 +128,26 @@ function Install-Android {
     Write-Host 'Sarmat Crew installed and running.' -ForegroundColor Green
 }
 
+function Build-Plugin {
+    param([string]$Requested)
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+        throw 'Install .NET SDK (8 or newer) and the .NET Framework 4.7.2 targeting pack.'
+    }
+    $mp = $Requested
+    if (-not $mp) {
+        $mp = @($env:MISSION_PLANNER_PATH, "${env:ProgramFiles(x86)}\Mission Planner", "$env:ProgramFiles\Mission Planner") |
+            Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'MissionPlanner.exe')) } | Select-Object -First 1
+    }
+    if (-not $mp -and $interactive) { $mp = (Read-Host 'Folder containing MissionPlanner.exe').Trim().Trim('"') }
+    if (-not $mp -or -not (Test-Path -LiteralPath (Join-Path $mp 'MissionPlanner.exe'))) {
+        throw 'Mission Planner not found. Use launcher.bat plugin "C:\path\to\Mission Planner".'
+    }
+    $mp = (Resolve-Path -LiteralPath $mp).Path
+    Write-Host "Building plugin for Mission Planner: $mp"
+    & (Join-Path $projectRoot 'telemetry-plugin\scripts\build.ps1') -MissionPlannerPath $mp -Configuration Release
+    Write-Host "Plugin ready: $(Join-Path $projectRoot 'telemetry-plugin\dist\plugins\SarmatTelemetry.dll')" -ForegroundColor Green
+}
+
 function Invoke-Action {
     param([string]$Action, [string]$Argument)
     switch -CaseSensitive -Regex ($Action) {
@@ -151,6 +171,7 @@ function Invoke-Action {
         '^(typecheck|check)$' { Run-Web -Arguments @('run', 'typecheck'); break }
         '^(db-migrate|migrate)$' { Run-Web -Arguments @('run', 'db:migrate'); break }
         '^(db-seed|seed)$' { Run-Web -Arguments @('run', 'db:seed'); break }
+        '^plugin$' { Build-Plugin $Argument; break }
         '^install$' { Run-Web -Arguments @('ci'); break }
         '^(help|-h|--help)$' {
             Write-Host 'Sarmat launcher'
@@ -165,6 +186,7 @@ function Invoke-Action {
             Write-Host 'launcher.bat db-migrate              database migrations'
             Write-Host 'launcher.bat db-seed                 seed the database'
             Write-Host 'launcher.bat install                 npm ci'
+            Write-Host 'launcher.bat plugin [MissionPlannerDir] build Mission Planner plugin (Windows)'
             Write-Host 'launcher.bat help                    show this help'
             break
         }
@@ -189,13 +211,14 @@ while ($true) {
     Write-Host '  8. Apply database migrations'
     Write-Host '  9. Seed the database'
     Write-Host ' 10. Install Node.js dependencies'
+    Write-Host ' 11. Build Mission Planner plugin (Windows)'
     Write-Host '  0. Exit'
     $choice = Read-Host 'Select an action'
     if ($choice -eq '0' -or $null -eq $choice) { exit 0 }
     $action = switch ($choice) {
         '1' { 'dev' }; '2' { 'build' }; '3' { 'android-release' }; '4' { 'android-install' }
         '5' { 'android-debug' }; '6' { 'test' }; '7' { 'typecheck' }; '8' { 'db-migrate' }
-        '9' { 'db-seed' }; '10' { 'install' }; default { $null }
+        '9' { 'db-seed' }; '10' { 'install' }; '11' { 'plugin' }; default { $null }
     }
     if (-not $action) { Write-Host "Unknown option: $choice"; continue }
     try { Invoke-Action $action '' }

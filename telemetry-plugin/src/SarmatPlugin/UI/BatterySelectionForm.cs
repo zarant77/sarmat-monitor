@@ -21,12 +21,14 @@ namespace SarmatPlugin.UI
         private string activeId, activeSince;
         private bool busy;
         private readonly string sessionId;
+        private readonly Func<bool> canConfirm;
         public event Action<string> BatteryConfirmed;
 
-        public BatterySelectionForm(PluginSettings settings, string sessionId)
+        public BatterySelectionForm(PluginSettings settings, string sessionId, Func<bool> canConfirm)
         {
             this.settings = settings;
             this.sessionId = sessionId;
+            this.canConfirm = canConfirm;
             Text = "Select battery in drone"; Width = 540; Height = 430;
             MinimumSize = new System.Drawing.Size(420, 300);
             StartPosition = FormStartPosition.CenterParent; MinimizeBox = false; MaximizeBox = false;
@@ -78,6 +80,7 @@ namespace SarmatPlugin.UI
         {
             var selected = choices.Controls.OfType<RadioButton>().FirstOrDefault(r => r.Checked);
             if (busy || selected == null) return;
+            if (!canConfirm()) { status.Text = "Drone connection is unavailable. Wait for reconnection before confirming."; return; }
             Busy(true); status.Text = "Saving selection…";
             bool conflict = false;
             try
@@ -85,7 +88,8 @@ namespace SarmatPlugin.UI
                 using (var api = new BatteryApiClient(settings))
                 {
                     if (await api.SelectAsync((string)selected.Tag, activeId, activeSince, sessionId, cancellation.Token))
-                    { if (!cancellation.IsCancellationRequested) { BatteryConfirmed?.Invoke(sessionId); Close(); } }
+                    { if (!cancellation.IsCancellationRequested && canConfirm()) { BatteryConfirmed?.Invoke(sessionId); Close(); }
+                      else if (!cancellation.IsCancellationRequested) status.Text = "Connection changed. Reload before confirming again."; }
                     else conflict = true;
                 }
             }

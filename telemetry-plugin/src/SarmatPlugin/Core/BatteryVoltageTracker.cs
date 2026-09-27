@@ -9,15 +9,16 @@ namespace SarmatPlugin.Core
     {
         public string SessionId { get; private set; }
         private bool confirmed;
+        public bool IsConfirmed => confirmed;
         private bool? armed;
         private DateTime heartbeatAt;
         private readonly List<KeyValuePair<string, DateTime>> pending = new List<KeyValuePair<string, DateTime>>();
         private readonly List<Dictionary<string, object>> captured = new List<Dictionary<string, object>>();
 
-        public void Connect(DateTime now)
+        public void Connect(DateTime now, bool recordConnection = true)
         {
             Reset(); SessionId = Guid.NewGuid().ToString();
-            pending.Add(new KeyValuePair<string, DateTime>("vehicle_connected", now));
+            if (recordConnection) pending.Add(new KeyValuePair<string, DateTime>("vehicle_connected", now));
         }
         public void Reset()
         {

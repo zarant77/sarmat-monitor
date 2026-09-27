@@ -18,6 +18,7 @@ namespace SarmatPlugin.Tests
         {
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
+            Run("Battery dialog waits for stable connection and tolerates brief gaps", BatteryDialogTiming);
             Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
             Run("Battery outbox survives reload and isolates API identities", BatteryOutbox);
             Run("Disabled integrations do not generate alerts", DisabledAlerts);
@@ -140,6 +141,23 @@ namespace SarmatPlugin.Tests
                 if (Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) && Directory.Exists(root))
                     Directory.Delete(root, true);
             }
+        }
+
+        private static void BatteryDialogTiming()
+        {
+            var gate = new BatteryDialogConnection(); var now = DateTime.UtcNow;
+            True(!gate.Update(true, now)); True(!gate.Update(false, now.AddSeconds(.5)));
+            True(!gate.Disconnected); True(!gate.Update(true, now.AddSeconds(1)));
+            True(gate.Update(true, now.AddSeconds(3))); True(!gate.Update(true, now.AddSeconds(4)));
+            True(!gate.Update(false, now.AddSeconds(5))); True(!gate.Disconnected);
+            True(!gate.Update(true, now.AddSeconds(6))); True(!gate.Update(true, now.AddSeconds(9)));
+            gate.Update(false, now.AddSeconds(10)); gate.Update(false, now.AddSeconds(13)); True(gate.Disconnected);
+            True(!gate.Update(true, now.AddSeconds(14))); True(gate.Update(true, now.AddSeconds(16)));
+            gate.Reset(); gate.MarkOffered(); True(!gate.Update(true, now)); True(!gate.Update(true, now.AddSeconds(3)));
+            var tracker = new BatteryVoltageTracker(); tracker.Connect(now); var old = tracker.SessionId;
+            tracker.Confirm(old); True(tracker.IsConfirmed); tracker.Connect(now, false);
+            True(old != tracker.SessionId); True(!tracker.IsConfirmed); tracker.Confirm(tracker.SessionId);
+            tracker.Heartbeat(false, now); tracker.Voltage(48, now.AddSeconds(1)); Equal(0, tracker.Ready().Length);
         }
 
         private static void BatteryApiSettings()

@@ -106,6 +106,11 @@ command_install_dependencies() {
     success "Dependencies installed."
 }
 
+command_plugin() {
+    info "Building the Mission Planner plugin requires Windows."
+    printf 'On Windows, run launcher.bat and select option 11, or run launcher.bat plugin.\n'
+}
+
 show_help() {
     cat <<'EOF'
 Sarmat launcher
@@ -122,6 +127,7 @@ Usage:
   ./launcher.sh db-migrate              database migrations
   ./launcher.sh db-seed                 seed the database
   ./launcher.sh install                 npm ci
+  ./launcher.sh plugin                  explain Windows requirement for plugin build
   ./launcher.sh help                    show this help
 EOF
 }
@@ -140,6 +146,7 @@ run_command() {
         db-migrate|migrate) command_db_migrate ;;
         db-seed|seed) command_db_seed ;;
         install) command_install_dependencies ;;
+        plugin) command_plugin ;;
         help|-h|--help) show_help ;;
         *) fail "unknown command '$command'. Run ./launcher.sh help." ;;
     esac
@@ -159,6 +166,7 @@ show_menu() {
   8. Apply database migrations
   9. Seed the database
  10. Install Node.js dependencies
+ 11. Build Mission Planner plugin (Windows)
   0. Exit
 EOF
         printf '\nSelect an action: '
@@ -174,6 +182,7 @@ EOF
             8) command_db_migrate ;;
             9) command_db_seed ;;
             10) command_install_dependencies ;;
+            11) command_plugin ;;
             0) exit 0 ;;
             *) printf 'Unknown option: %s\n' "$choice" >&2 ;;
         esac

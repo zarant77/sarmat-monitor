@@ -16,6 +16,7 @@ namespace SarmatPlugin.UI
         private readonly ToolStripItem reconnectCamera;
 
         public event EventHandler SettingsRequested;
+        public event EventHandler BatterySelectionRequested;
         public event EventHandler VideoSourceRequested;
         public event EventHandler VehicleReconnectRequested;
 
@@ -45,6 +46,7 @@ namespace SarmatPlugin.UI
 
             var menu = new ContextMenuStrip();
             menu.Items.Add("Settings", null, (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty));
+            menu.Items.Add("Select battery", null, (s, e) => BatterySelectionRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add(new ToolStripSeparator());
             reconnectCamera = menu.Items.Add("Reconnect camera", null,
                 (s, e) => VideoSourceRequested?.Invoke(this, EventArgs.Empty));
