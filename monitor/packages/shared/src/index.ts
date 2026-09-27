@@ -96,7 +96,7 @@ export const thresholdInputSchema = z.object({
   warningCellDeltaV: z.coerce.number().positive().max(2),
   dangerCellDeltaV: z.coerce.number().positive().max(3),
   chargedThresholdPercent: z.coerce.number().int().min(51).max(100),
-  dischargedThresholdPercent: z.coerce.number().int().min(0).max(50),
+  dischargedThresholdPercent: z.coerce.number().int().min(0).max(70),
   chargeEventDeadbandPercent: z.coerce.number().int().min(1).max(20)
 }).superRefine((value, context) => {
   if (value.dangerCellDeltaV <= value.warningCellDeltaV) context.addIssue({ code: "custom", message: "Danger threshold must be greater than warning threshold", path: ["dangerCellDeltaV"] });
