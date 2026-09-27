@@ -112,13 +112,9 @@ Windows Mark-of-the-Web from all downloaded and installed files.
 
 ## Build
 
-On Windows, double-click `launcher.bat` in the repository root and select **2** (plugin)
-or **3** (plugin and Android). The launcher detects the standard Mission Planner installation
-or asks for its directory. It builds Release, runs tests, and prepares `telemetry-plugin/dist`.
-For command-line use: `launcher.bat plugin "C:\Program Files (x86)\Mission Planner"`.
-This builds the DLL; it does not install it or build an MSI.
-
-The lower-level scripts remain available:
+The root `launcher.bat` mirrors the Monitor/Android commands in `launcher.sh`.
+Build the Mission Planner plugin with the scripts below. They build Release, run tests,
+and prepare `telemetry-plugin/dist`.
 
 From PowerShell:
 

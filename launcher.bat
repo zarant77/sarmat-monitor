@@ -67,39 +67,38 @@ function Initialize-Android {
 }
 
 function Build-Android {
+    Run-Gradle -Tasks @(':app:assembleDebug')
+    Write-Host 'Android debug build completed:' -ForegroundColor Green
+    Show-AndroidArtifacts debug
+}
+
+function Run-Gradle {
+    param([string[]]$Tasks)
     Initialize-Android
     Push-Location $androidRoot
     try {
-        Invoke-Checked -Executable (Join-Path $androidRoot 'gradlew.bat') -Arguments @("-Dorg.gradle.java.home=$env:JAVA_HOME", ':app:assembleDebug')
+        Invoke-Checked -Executable (Join-Path $androidRoot 'gradlew.bat') -Arguments (@("-Dorg.gradle.java.home=$env:JAVA_HOME") + $Tasks)
     } finally { Pop-Location }
-    $apk = Join-Path $androidRoot 'app\build\outputs\apk\debug\app-debug.apk'
-    if (-not (Test-Path -LiteralPath $apk)) { throw "APK not found: $apk" }
-    Write-Host "APK ready: $apk" -ForegroundColor Green
 }
 
-function Find-MissionPlanner {
-    param([string]$Requested)
-    if ($Requested) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Requested 'MissionPlanner.exe'))) { throw "MissionPlanner.exe not found in: $Requested" }
-        return (Resolve-Path -LiteralPath $Requested).Path
-    }
-    foreach ($candidate in @($env:MISSION_PLANNER_PATH, "${env:ProgramFiles(x86)}\Mission Planner", "$env:ProgramFiles\Mission Planner")) {
-        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate 'MissionPlanner.exe'))) { return $candidate }
-    }
-    if (-not $interactive) { throw 'Mission Planner not found. Pass its directory as the second argument.' }
-    $selected = (Read-Host 'Path to the folder containing MissionPlanner.exe').Trim().Trim('"')
-    if (-not $selected) { throw 'Mission Planner directory was not selected.' }
-    return Find-MissionPlanner $selected
+function Run-Web {
+    param([string[]]$Arguments)
+    $npm = Get-Command npm.cmd -ErrorAction Stop
+    Push-Location $projectRoot
+    try { Invoke-Checked -Executable $npm.Source -Arguments $Arguments }
+    finally { Pop-Location }
 }
 
-function Build-Plugin {
-    param([string]$Requested)
-    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Install .NET SDK (8 or newer), then reopen the launcher.' }
-    $mp = Find-MissionPlanner $Requested
-    Write-Host "Mission Planner: $mp"
-    # Reuse the existing build/test/package workflow. This does not install the DLL.
-    & (Join-Path $projectRoot 'telemetry-plugin\scripts\build.ps1') -MissionPlannerPath $mp -Configuration Release
-    Write-Host "Plugin ready: $(Join-Path $projectRoot 'telemetry-plugin\dist\plugins\SarmatTelemetry.dll')" -ForegroundColor Green
+function Show-AndroidArtifacts {
+    param([string]$Variant)
+    $outputRoot = Join-Path $androidRoot 'app\build\outputs'
+    $files = @(if (Test-Path -LiteralPath $outputRoot) {
+        Get-ChildItem -LiteralPath $outputRoot -Recurse -File | Where-Object {
+            $_.Extension -in @('.apk', '.aab') -and $_.FullName -match "[\\/]$Variant[\\/]"
+        } | Sort-Object FullName
+    })
+    if ($files.Count) { $files | ForEach-Object { Write-Host "  $($_.FullName)" } }
+    else { Write-Host '  No artifacts found.' }
 }
 
 function Install-Android {
@@ -131,24 +130,45 @@ function Install-Android {
 
 function Invoke-Action {
     param([string]$Action, [string]$Argument)
-    switch ($Action) {
-        'android' { Build-Android }
-        'plugin' { Build-Plugin $Argument }
-        'all' {
-            $failures = @()
-            try { Build-Plugin $Argument } catch { $failures += "Plugin: $($_.Exception.Message)"; Write-Host $failures[-1] -ForegroundColor Red }
-            try { Build-Android } catch { $failures += "Android: $($_.Exception.Message)"; Write-Host $failures[-1] -ForegroundColor Red }
-            if ($failures.Count) { throw ($failures -join [Environment]::NewLine) }
+    switch -CaseSensitive -Regex ($Action) {
+        '^dev$' { Run-Web -Arguments @('run', 'dev'); break }
+        '^build$' { Run-Web -Arguments @('run', 'build'); break }
+        '^(android-release|release)$' {
+            Run-Gradle -Tasks @(':app:assembleRelease', ':app:bundleRelease')
+            Write-Host 'Android release build completed:' -ForegroundColor Green
+            Show-AndroidArtifacts release
+            Write-Host 'Note: release APK/AAB artifacts are unsigned unless a signingConfig is configured.'
+            break
         }
-        'android-install' { Install-Android $Argument }
-        'help' {
-            Write-Host 'launcher.bat                            Interactive menu'
-            Write-Host 'launcher.bat android                    Build debug APK (no phone needed)'
-            Write-Host 'launcher.bat plugin [MissionPlannerDir]  Build Release DLL and run tests'
-            Write-Host 'launcher.bat all [MissionPlannerDir]     Build both components'
-            Write-Host 'launcher.bat android-install [serial]    Build, install and launch Android'
+        '^(android-debug|debug)$' { Build-Android; break }
+        '^(android-install|install-android)$' { Install-Android $Argument; break }
+        '^(test|tests)$' {
+            Run-Web -Arguments @('test')
+            Run-Gradle -Tasks @(':app:testDebugUnitTest')
+            Write-Host 'All tests completed.' -ForegroundColor Green
+            break
         }
-        default { throw "Unknown action: $Action. Use launcher.bat help" }
+        '^(typecheck|check)$' { Run-Web -Arguments @('run', 'typecheck'); break }
+        '^(db-migrate|migrate)$' { Run-Web -Arguments @('run', 'db:migrate'); break }
+        '^(db-seed|seed)$' { Run-Web -Arguments @('run', 'db:seed'); break }
+        '^install$' { Run-Web -Arguments @('ci'); break }
+        '^(help|-h|--help)$' {
+            Write-Host 'Sarmat launcher'
+            Write-Host 'launcher.bat                         interactive menu'
+            Write-Host 'launcher.bat dev                     development frontend + backend'
+            Write-Host 'launcher.bat build                   Monitor production build'
+            Write-Host 'launcher.bat android-release         release APK + AAB'
+            Write-Host 'launcher.bat android-debug           debug APK'
+            Write-Host 'launcher.bat android-install [serial] debug APK + install + launch'
+            Write-Host 'launcher.bat test                    all Monitor and Android tests'
+            Write-Host 'launcher.bat typecheck               TypeScript typecheck'
+            Write-Host 'launcher.bat db-migrate              database migrations'
+            Write-Host 'launcher.bat db-seed                 seed the database'
+            Write-Host 'launcher.bat install                 npm ci'
+            Write-Host 'launcher.bat help                    show this help'
+            break
+        }
+        default { throw "Unknown command: $Action. Run launcher.bat help." }
     }
 }
 
@@ -158,17 +178,26 @@ if (-not $interactive) {
 }
 while ($true) {
     Write-Host ''
-    Write-Host 'SARMAT - WINDOWS LAUNCHER' -ForegroundColor Cyan
-    Write-Host '  1. Build Sarmat Crew (debug APK)'
-    Write-Host '  2. Build Mission Planner plugin (Release DLL + tests)'
-    Write-Host '  3. Build both'
-    Write-Host '  4. Build and install Sarmat Crew on a phone'
+    Write-Host 'SARMAT - LAUNCHER' -ForegroundColor Cyan
+    Write-Host '  1. Start Monitor in development mode'
+    Write-Host '  2. Build Monitor for production'
+    Write-Host '  3. Build Android release (APK + AAB)'
+    Write-Host '  4. Build and install Android debug'
+    Write-Host '  5. Build Android debug APK'
+    Write-Host '  6. Run all tests'
+    Write-Host '  7. Run TypeScript checks'
+    Write-Host '  8. Apply database migrations'
+    Write-Host '  9. Seed the database'
+    Write-Host ' 10. Install Node.js dependencies'
     Write-Host '  0. Exit'
-    $choice = Read-Host 'Select action'
+    $choice = Read-Host 'Select an action'
     if ($choice -eq '0' -or $null -eq $choice) { exit 0 }
-    $action = switch ($choice) { '1' { 'android' }; '2' { 'plugin' }; '3' { 'all' }; '4' { 'android-install' }; default { $null } }
-    if (-not $action) { Write-Host 'Select 0, 1, 2, 3 or 4.'; continue }
-    try { Invoke-Action $action ''; Write-Host 'Done.' -ForegroundColor Green }
-    catch { Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red }
-    [void](Read-Host 'Press Enter to return to the menu')
+    $action = switch ($choice) {
+        '1' { 'dev' }; '2' { 'build' }; '3' { 'android-release' }; '4' { 'android-install' }
+        '5' { 'android-debug' }; '6' { 'test' }; '7' { 'typecheck' }; '8' { 'db-migrate' }
+        '9' { 'db-seed' }; '10' { 'install' }; default { $null }
+    }
+    if (-not $action) { Write-Host "Unknown option: $choice"; continue }
+    try { Invoke-Action $action '' }
+    catch { Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red; exit 1 }
 }

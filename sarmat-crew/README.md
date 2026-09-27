@@ -65,8 +65,8 @@ Workflow **Android APK** (`.github/workflows/android.yml`) збирає debug AP
 
 Запустіть **`launcher.bat` у корені репозиторію** подвійним кліком:
 
-- пункт **1** збирає debug APK без підключення телефона;
-- пункт **3** збирає Android-застосунок і плагін Mission Planner;
+- пункт **5** збирає debug APK без підключення телефона;
+- пункт **3** збирає Android release APK та AAB;
 - пункт **4** збирає, встановлює та запускає застосунок на телефоні.
 
 Для встановлення увімкніть USB debugging, підключіть телефон кабелем і підтвердьте доступ. Якщо пристроїв декілька, лаунчер запропонує вибрати serial. Дані застосунку при оновленні зберігаються; автоматичного видалення застосунку немає.
@@ -76,7 +76,7 @@ Workflow **Android APK** (`.github/workflows/android.yml`) збирає debug AP
 Із PowerShell у корені можна виконувати без меню:
 
 ```powershell
-.\launcher.bat android
+.\launcher.bat android-debug
 .\launcher.bat android-install DEVICE_SERIAL
 ```
 
