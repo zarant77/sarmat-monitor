@@ -11,6 +11,10 @@ const buildDate = [
   String(buildTimestamp.getMonth() + 1).padStart(2, "0"),
   buildTimestamp.getFullYear(),
 ].join(".");
+const buildTime = [
+  String(buildTimestamp.getHours()).padStart(2, "0"),
+  String(buildTimestamp.getMinutes()).padStart(2, "0"),
+].join(":");
 
 const certificatePath = "certs/dev.pem";
 const privateKeyPath = "certs/dev-key.pem";
@@ -27,6 +31,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
     __BUILD_DATE__: JSON.stringify(buildDate),
+    __BUILD_TIME__: JSON.stringify(buildTime),
   },
 
   server: {
