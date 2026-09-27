@@ -39,7 +39,7 @@ namespace SarmatPlugin.UI
             tabs.TabPages.Add(Page("Mission Planner UI", MissionPlannerUi(currentHudElements)));
             tabs.TabPages.Add(Page("Ruijie", Ruijie()));
             tabs.TabPages.Add(Page("Camera", Camera()));
-            tabs.TabPages.Add(Page("Monitor", Aggregator()));
+            tabs.TabPages.Add(Page("API", Aggregator()));
             tabs.TabPages.Add(Page("OBS", Obs()));
             tabs.TabPages.Add(Page("Audio", Audio()));
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
@@ -90,6 +90,7 @@ namespace SarmatPlugin.UI
         {
             var p = Grid();
             Check(p, "Enabled", "AggregatorEnabled", settings.AggregatorEnabled);
+            Check(p, "Automatic battery charge tracking", "BatteryTrackingEnabled", settings.BatteryTrackingEnabled);
             TextBox(p, "WebSocket URL", "AggregatorUrl", settings.AggregatorUrl);
             TextBox(p, "Station secret", "AggregatorSecret", settings.AggregatorSecret);
             Number(p, "Reconnect interval (s)", "AggregatorReconnectSeconds",
@@ -103,6 +104,7 @@ namespace SarmatPlugin.UI
             };
             test.Click += async (s, e) =>
             {
+                if (!B("AggregatorEnabled")) return;
                 test.Enabled = false;
                 status.Text = "Testing…";
                 try
@@ -112,10 +114,11 @@ namespace SarmatPlugin.UI
                             T("AggregatorSecret"), cancellation.Token);
                 }
                 catch (Exception ex) { status.Text = "Current status: Disconnected — " + ex.Message; }
-                finally { test.Enabled = true; }
+                finally { test.Enabled = B("AggregatorEnabled"); }
             };
             p.Controls.Add(test);
             p.Controls.Add(status);
+            BindFeatureControls(p, "AggregatorEnabled");
             return p;
         }
         private Control Audio()
@@ -250,6 +253,7 @@ namespace SarmatPlugin.UI
                 RuijiePassword=T("RuijiePassword"), RuijiePollSeconds=N("RuijiePollSeconds"),
                 RuijieRequestTimeoutSeconds=N("RuijieRequestTimeoutSeconds"), RuijieStaleSeconds=N("RuijieStaleSeconds"),
                 AggregatorEnabled=B("AggregatorEnabled"), AggregatorUrl=T("AggregatorUrl"),
+                BatteryTrackingEnabled=B("BatteryTrackingEnabled"),
                 AggregatorSecret=T("AggregatorSecret"),
                 AggregatorReconnectSeconds=N("AggregatorReconnectSeconds"),
                 AudioEnabled=B("AudioEnabled"), AudioVolume=N("AudioVolume")/100,

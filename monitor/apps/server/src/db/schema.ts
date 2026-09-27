@@ -102,6 +102,25 @@ export const measurements = pgTable("measurements", {
   measuredAt: timestamp("measured_at", { withTimezone: true }).defaultNow().notNull()
 });
 
+// Immutable binding established by the plugin's battery selection dialog.
+export const batteryTelemetrySessions = pgTable("battery_telemetry_sessions", {
+  id: uuid("id").primaryKey(),
+  batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
+  crewId: uuid("crew_id").references(() => crews.id, { onDelete: "restrict" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const batteryVoltageEvents = pgTable("battery_voltage_events", {
+  id: uuid("id").primaryKey(),
+  sessionId: uuid("session_id").references(() => batteryTelemetrySessions.id, { onDelete: "cascade" }).notNull(),
+  batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
+  type: varchar("type", { length: 32 }).$type<"vehicle_connected" | "vehicle_disarmed">().notNull(),
+  totalVoltage: numeric("total_voltage", { precision: 8, scale: 3 }).notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()
+}, table => [index("battery_voltage_events_history_idx").on(table.batteryId, table.measuredAt)]);
+
 // The receipt and mutation commit together, making offline retries safe.
 export const syncOperations = pgTable("sync_operations", {
   id: uuid("id").primaryKey(),

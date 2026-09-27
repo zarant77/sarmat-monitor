@@ -34,21 +34,55 @@ files that predate these switches.
 
 ## Sarmat Monitor
 
-The optional **Monitor** settings tab streams the current Mission Planner telemetry to
+The optional **API** settings tab streams the current Mission Planner telemetry to
 `monitor` once per second. Configure:
 
-- **Enabled** — starts the background connection;
+- **Enabled** — master switch for all API access, including telemetry, battery selection and the connection test;
+- **Automatic battery charge tracking** — defaults to off; when enabled together with API access, opens a battery selection dialog when a vehicle connects;
 - **WebSocket URL** — normally `ws://<server>:8080/ws/station`;
 - **Station secret** — the secret of this station from the monitor `config.json`;
 - **Reconnect interval** — retry delay after a failed or closed connection.
 
 The tab shows the current connection state and includes a connection test that uses the values
 currently entered in the form. The monitor obtains the station title and color from its own
-configuration. The secret is sent only in the WebSocket `Authorization: Bearer` header. Telemetry
+configuration. The secret is sent only in the `Authorization: Bearer` header for API and WebSocket requests. Telemetry
 uses compact binary MessagePack frames once per second and contains voltage,
 current, satellite count, HDOP, heading, relative altitude, Ruijie RSSI, OBS recording state,
 and armed state. Network failures do not block Mission Planner, OBS, Ruijie polling, or the plugin
 UI.
+
+Changes apply on Save. The battery dialog loads the crew's available batteries and preselects
+the active battery chosen in Sarmat Crew. Confirm saves the selection to the server; confirming
+the existing active battery preserves its installation time. Concurrent changes in the app
+require reloading and confirming again. Cancel leaves the server selection unchanged.
+The dialog does not block Mission Planner and closes when the vehicle disconnects.
+If the API is unavailable, use Reload to retry. Recording starts only after confirmation.
+A connection has an immutable battery session, so delayed events cannot be assigned to the
+next active battery. Cancel skips recording for that connection. Reconnect and confirm again
+after replacing the physical battery; changing the active battery in the app alone does not
+rebind an already confirmed plugin connection.
+
+With both API switches enabled, the plugin records `vehicle_connected` and
+`vehicle_disarmed` voltage events. It observes fresh HEARTBEAT and SYS_STATUS packets from
+Mission Planner's selected vehicle, without opening another MAVLink connection. The first valid
+pack voltage within 30 seconds after the trigger is captured (millivolts converted to volts).
+The connection sample can wait in memory for the battery dialog confirmation. A disarm requires
+an observed armed-to-disarmed heartbeat transition with no gap over five seconds. Initial disarmed
+state and loss of connection are not disarm events. Missing/zero/unknown voltage is not recorded;
+no sample is synthesized when the timeout expires. A reconnect is a new connection event, not
+proof of a battery replacement or a completed flight.
+
+Confirmed events are saved to `%APPDATA%/SarmatPlugin/battery-events` and sent in the background.
+Delivery is retried every five seconds; the event ID makes retries idempotent. Queues are isolated
+by server URL and station secret and retained when API access is disabled. Permanent rejections
+are retained as `.rejected` files and logged. The queue is flushed on normal disconnect/shutdown;
+abrupt termination before a captured sample reaches the disk queue can still lose that sample.
+These events store total pack voltage only and do not alter cell health or inferred cycle counts.
+
+Battery requests use HTTP(S) on the same host and port as the WebSocket URL
+(`ws` becomes `http`, `wss` becomes `https`), at `/station/batteries` and
+`/station/batteries/active`, plus POST `/station/batteries/voltage-events`, authenticated with the station secret. Update the server
+and apply database migration `0008_battery_voltage_events` before updating the plugin. One active battery per crew is supported.
 
 The plugin does not open its own MAVLink connection and does not run or communicate with
 `meow-monitor`.
@@ -77,6 +111,14 @@ installed into the Mission Planner root. Existing files are replaced. The instal
 Windows Mark-of-the-Web from all downloaded and installed files.
 
 ## Build
+
+On Windows, double-click `launcher.bat` in the repository root and select **2** (plugin)
+or **3** (plugin and Android). The launcher detects the standard Mission Planner installation
+or asks for its directory. It builds Release, runs tests, and prepares `telemetry-plugin/dist`.
+For command-line use: `launcher.bat plugin "C:\Program Files (x86)\Mission Planner"`.
+This builds the DLL; it does not install it or build an MSI.
+
+The lower-level scripts remain available:
 
 From PowerShell:
 

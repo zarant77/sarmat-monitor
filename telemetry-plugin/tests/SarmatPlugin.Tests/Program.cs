@@ -17,6 +17,9 @@ namespace SarmatPlugin.Tests
         private static void Main()
         {
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
+            Run("Battery API endpoints and disabled guards", BatteryApiSettings);
+            Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
+            Run("Battery outbox survives reload and isolates API identities", BatteryOutbox);
             Run("Disabled integrations do not generate alerts", DisabledAlerts);
             Run("Alert engine enforces ARMED and grace", ArmedAndGrace);
             Run("Alert engine debounce and recovery", DebounceRecovery);
@@ -66,12 +69,14 @@ namespace SarmatPlugin.Tests
                 True(settings.ObsEnabled && settings.RuijieEnabled && settings.CameraEnabled &&
                     settings.TakeoffModeWarningEnabled);
                 Equal("PosHold", settings.SafeArmingModes);
+                True(!settings.BatteryTrackingEnabled);
             }
             using (var stream = new MemoryStream())
             {
                 serializer.WriteObject(stream, new PluginSettings
                 {
                     ObsEnabled = false, RuijieEnabled = false, CameraEnabled = false,
+                    BatteryTrackingEnabled = true,
                     TakeoffModeWarningEnabled = false, SafeArmingModes = "Loiter, PosHold"
                 });
                 stream.Position = 0;
@@ -79,7 +84,74 @@ namespace SarmatPlugin.Tests
                 settings.Normalize();
                 True(!settings.ObsEnabled && !settings.RuijieEnabled && !settings.CameraEnabled);
                 True(!settings.TakeoffModeWarningEnabled);
+                True(settings.BatteryTrackingEnabled);
                 Equal("Loiter, PosHold", settings.SafeArmingModes);
+            }
+        }
+
+        private static void BatteryVoltageEvents()
+        {
+            var tracker = new BatteryVoltageTracker();
+            var now = DateTime.UtcNow;
+            tracker.Connect(now); var session = tracker.SessionId;
+            tracker.Voltage(50, now.AddSeconds(1)); // No heartbeat: reject cached/unsourced state.
+            tracker.Heartbeat(false, now.AddSeconds(1));
+            tracker.Voltage(0, now.AddSeconds(2));
+            tracker.Voltage(double.NaN, now.AddSeconds(2));
+            tracker.Voltage(50.123, now.AddSeconds(2));
+            Equal(0, tracker.Ready().Length);
+            tracker.Confirm(Guid.NewGuid().ToString()); Equal(0, tracker.Ready().Length);
+            tracker.Confirm(session);
+            var connected = tracker.Ready().Single();
+            Equal("vehicle_connected", (string)connected["type"]); Equal(50.123, (double)connected["totalVoltage"]);
+            tracker.Stored(connected); tracker.Voltage(49, now.AddSeconds(3)); Equal(0, tracker.Ready().Length);
+            tracker.Heartbeat(true, now.AddSeconds(3)); tracker.Heartbeat(false, now.AddSeconds(4));
+            Equal(0, tracker.Ready().Length); // A new sample must arrive after disarm.
+            tracker.Voltage(43, now.AddSeconds(5));
+            var disarm = tracker.Ready().Single(); Equal("vehicle_disarmed", (string)disarm["type"]);
+            Equal(session, (string)disarm["sessionId"]); tracker.Stored(disarm);
+            tracker.Heartbeat(false, now.AddSeconds(6)); tracker.Voltage(44, now.AddSeconds(7)); Equal(0, tracker.Ready().Length);
+            tracker.Heartbeat(true, now.AddSeconds(8)); tracker.Heartbeat(false, now.AddSeconds(20));
+            tracker.Voltage(44, now.AddSeconds(21)); Equal(0, tracker.Ready().Length); // Gap does not infer a landing.
+            tracker.Reset(); tracker.Heartbeat(false, now.AddSeconds(22)); tracker.Voltage(44, now.AddSeconds(23)); Equal(0, tracker.Ready().Length);
+            tracker.Connect(now); tracker.Confirm(tracker.SessionId);
+            tracker.Heartbeat(false, now.AddSeconds(31)); tracker.Voltage(44, now.AddSeconds(32)); Equal(0, tracker.Ready().Length);
+        }
+
+        private static void BatteryOutbox()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "sarmat-outbox-test-" + Guid.NewGuid());
+            try
+            {
+                var item = new Dictionary<string, object> { ["id"] = Guid.NewGuid().ToString(), ["totalVoltage"] = 48.5 };
+                var first = new BatteryEventOutbox(root, "wss://one/ws/station", "secret-one");
+                first.Store(item); first.Store(item); Equal(1, first.Pending().Length);
+                var reloaded = new BatteryEventOutbox(root, "wss://one/ws/station", "secret-one");
+                Equal(1, reloaded.Pending().Length);
+                Equal(0, new BatteryEventOutbox(root, "wss://one/ws/station", "secret-two").Pending().Length);
+                Equal(0, new BatteryEventOutbox(root, "wss://two/ws/station", "secret-one").Pending().Length);
+                var path = reloaded.Pending().Single();
+                True(reloaded.Read(path).Contains("48.5")); reloaded.Acknowledge(path); Equal(0, reloaded.Pending().Length);
+                first.Store(item); path = first.Pending().Single(); first.Reject(path);
+                Equal(0, first.Pending().Length); True(File.Exists(path + ".rejected"));
+            }
+            finally
+            {
+                if (Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) && Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+        }
+
+        private static void BatteryApiSettings()
+        {
+            Equal("https://example.com/station/batteries", BatteryApiClient.ApiRoot("wss://example.com/ws/station").AbsoluteUri);
+            Equal("http://localhost:3000/station/batteries", BatteryApiClient.ApiRoot("ws://localhost:3000/ws/station").AbsoluteUri);
+            foreach (var enabled in new[] { false, true })
+            {
+                var rejected = false;
+                try { using (var api = new BatteryApiClient(new PluginSettings { AggregatorEnabled = enabled, BatteryTrackingEnabled = !enabled })) { } }
+                catch (InvalidOperationException) { rejected = true; }
+                True(rejected);
             }
         }
 

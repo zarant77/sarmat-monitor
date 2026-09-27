@@ -24,6 +24,8 @@ namespace SarmatPlugin
         private CancellationTokenSource cancellation;
         private SarmatPanel panel;
         private SettingsForm settingsForm;
+        private BatterySelectionForm batterySelectionForm;
+        private readonly BatteryVoltageTracker batteryTracker = new BatteryVoltageTracker();
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private string aggregatorStatus = "Disabled";
@@ -47,6 +49,7 @@ namespace SarmatPlugin
             settings = store.Load();
             log = new AppLog(settings.DebugLogging);
             audio = new AudioService(settings);
+            VehicleConnected += ShowBatterySelection;
         }
 
         public SarmatPanel CreatePanel()
@@ -76,6 +79,14 @@ namespace SarmatPlugin
         {
             if (disposed || panel == null) return;
             var telemetry = new TelemetryReader(currentState).Read(settings.EnabledWidgets);
+            lock (sync)
+            {
+                if (settings.AggregatorEnabled && settings.BatteryTrackingEnabled && telemetry.Connected)
+                {
+                    if (batteryTracker.SessionId == null) batteryTracker.Connect(DateTime.UtcNow);
+                }
+                else { PersistVoltageEvents(); batteryTracker.Reset(); }
+            }
             UpdateVehicleReconnect(telemetry);
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
@@ -93,7 +104,10 @@ namespace SarmatPlugin
                 VehicleConnected?.Invoke();
             }
             else if (!telemetry.Connected)
+            {
                 wasConnected = false;
+                CloseBatterySelection();
+            }
             var warning = takeoffModeWarning.Update(telemetry.Armed, telemetry.FlightMode,
                 settings.TakeoffModeWarningEnabled, settings.SafeArmingModes);
             if (warning != takeoffWarningVisible)
@@ -137,7 +151,7 @@ namespace SarmatPlugin
 
         private void StartWorkers()
         {
-            StopWorkers();
+            StopWorkers(false);
             cancellation = new CancellationTokenSource();
             var token = cancellation.Token;
             lock (sync) { obs = new ObsStatus(); ruijie = new RuijieStatus(); }
@@ -145,9 +159,16 @@ namespace SarmatPlugin
             if (settings.RuijieEnabled) Task.Run(() => RuijieLoop(token), token).ContinueWith(t => LogFault("Ruijie worker", t), TaskScheduler.Default);
             Task.Run(() => AggregatorLoop(token), token)
                 .ContinueWith(t => LogFault("Aggregator worker", t), TaskScheduler.Default);
+            if (settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
+            {
+                var apiSettings = settings;
+                Task.Run(() => BatteryEventLoop(apiSettings, token), token).ContinueWith(t => LogFault("Battery events worker", t), TaskScheduler.Default);
+            }
         }
-        private void StopWorkers()
+        private void StopWorkers(bool resetBattery = true)
         {
+            if (resetBattery) CloseBatterySelection();
+            lock (sync) { PersistVoltageEvents(); if (resetBattery) batteryTracker.Reset(); }
             cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null;
             audio.Stop();
         }
@@ -255,6 +276,11 @@ namespace SarmatPlugin
             {
                 result = settingsForm.ShowDialog(owner ?? panel?.FindForm());
                 if (result != DialogResult.OK || settingsForm.Result == null) return;
+                var next = settingsForm.Result;
+                var resetBattery = settings.AggregatorEnabled != next.AggregatorEnabled || settings.BatteryTrackingEnabled != next.BatteryTrackingEnabled ||
+                    settings.AggregatorUrl != next.AggregatorUrl || settings.AggregatorSecret != next.AggregatorSecret;
+                StopWorkers(resetBattery); // Flush with the old API identity before applying new settings.
+                if (resetBattery) connectionInitialized = false;
                 settings = settingsForm.Result;
             }
             finally
@@ -273,9 +299,87 @@ namespace SarmatPlugin
             log.Info("Settings updated");
         }
 
+        private void ShowBatterySelection()
+        {
+            if (disposed || !settings.AggregatorEnabled || !settings.BatteryTrackingEnabled || panel == null) return;
+            if (panel.InvokeRequired)
+            {
+                panel.BeginInvoke(new Action(ShowBatterySelection));
+                return;
+            }
+            if (!new TelemetryReader(currentState).Read().Connected) return;
+            if (batterySelectionForm != null && !batterySelectionForm.IsDisposed) { batterySelectionForm.Activate(); return; }
+            string sessionId;
+            lock (sync) sessionId = batteryTracker.SessionId;
+            if (sessionId == null) return;
+            batterySelectionForm = new BatterySelectionForm(settings, sessionId);
+            batterySelectionForm.BatteryConfirmed += id => { lock (sync) { batteryTracker.Confirm(id); PersistVoltageEvents(); } };
+            batterySelectionForm.FormClosed += (sender, args) => { batterySelectionForm = null; };
+            // Modeless: telemetry, reconnect handling and Mission Planner remain responsive.
+            batterySelectionForm.Show(panel.FindForm());
+        }
+
+        private void CloseBatterySelection()
+        {
+            var form = batterySelectionForm;
+            if (form == null || form.IsDisposed) return;
+            if (form.InvokeRequired) form.BeginInvoke(new Action(() => { if (!form.IsDisposed) form.Close(); }));
+            else form.Close();
+        }
+
         private void LogFault(string worker, Task task)
         {
             if (task.IsFaulted && task.Exception != null && !disposed) log.Error(worker + " stopped", task.Exception.Flatten());
+        }
+
+        public void ObserveBatteryVoltage(double voltage)
+        {
+            lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
+                batteryTracker.Voltage(voltage, DateTime.UtcNow);
+        }
+        public void ObserveBatteryHeartbeat(bool armed)
+        {
+            lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
+                batteryTracker.Heartbeat(armed, DateTime.UtcNow);
+        }
+        public void ResetBatteryConnection()
+        {
+            lock (sync) { PersistVoltageEvents(); batteryTracker.Reset(); }
+            wasConnected = false; connectionInitialized = false;
+            CloseBatterySelection();
+        }
+        private void PersistVoltageEvents()
+        {
+            foreach (var item in batteryTracker.Ready())
+            {
+                try
+                {
+                    var outbox = new BatteryEventOutbox(AppPaths.Root, settings.AggregatorUrl, settings.AggregatorSecret);
+                    outbox.Store(item); batteryTracker.Stored(item);
+                }
+                catch (Exception ex) { log.Warn("Could not persist battery voltage event: " + ex.Message); }
+            }
+        }
+        private async Task BatteryEventLoop(PluginSettings apiSettings, CancellationToken token)
+        {
+            var outbox = new BatteryEventOutbox(AppPaths.Root, apiSettings.AggregatorUrl, apiSettings.AggregatorSecret);
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    lock (sync) { if (token.IsCancellationRequested) return; PersistVoltageEvents(); }
+                    using (var api = new BatteryApiClient(apiSettings))
+                    foreach (var path in outbox.Pending())
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (await api.SendVoltageAsync(outbox.Read(path), token).ConfigureAwait(false)) outbox.Acknowledge(path);
+                        else { outbox.Reject(path); log.Warn("Battery voltage event rejected; retained in " + path + ".rejected"); }
+                    }
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+                catch (Exception ex) { log.Warn("Battery voltage delivery pending: " + ex.Message); }
+                await Task.Delay(TimeSpan.FromSeconds(5), token).ConfigureAwait(false);
+            }
         }
         public void Dispose()
         {

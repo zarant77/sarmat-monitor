@@ -51,6 +51,7 @@ beforeAll(async () => {
   await pg.exec("DELETE FROM cycle_events WHERE type = 'maintenance'");
   await pg.transaction(async tx => { await tx.exec(migration("0005_battery_lifecycle")); });
   await pg.transaction(async tx => { await tx.exec(migration("0006_dynamic_charge_percent")); });
+  await pg.exec(migration("0008_battery_voltage_events"));
   app = await buildApp();
 }, 30000);
 

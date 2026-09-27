@@ -167,7 +167,7 @@ Crew users are rejected by the browser client after authentication and the sessi
 
 ## MissionPlanner telemetry
 
-Administrators configure a visible, unique telemetry secret in the crew edit form. In the Sarmat MissionPlanner plugin, enable **Monitor** and set:
+Administrators configure a visible, unique telemetry secret in the crew edit form. In the Sarmat MissionPlanner plugin, enable **API** and set:
 
 - WebSocket URL: `ws://<server>:3000/ws/station` locally, or the deployed `wss://<host>/ws/station` URL;
 - Station secret: the secret from that crew's settings.
@@ -175,6 +175,22 @@ Administrators configure a visible, unique telemetry secret in the crew edit for
 The server accepts the plugin's existing 9-field MessagePack packet once per second and keeps only the latest reading in memory. It does not store telemetry history. The **Telemetry** page polls live snapshots, marks delayed data stale after 5 seconds and offline after 10 seconds, and applies the same voltage, current, satellite, HDOP, and link thresholds as Sarmat Monitor.
 
 `GROUP_ADMIN` users only receive crews from their own group. `SUPER_ADMIN` users select a group. Crew accounts cannot access the page or `GET /api/telemetry`. Disabled crews and groups cannot establish a telemetry WebSocket connection.
+
+### Automatic drone voltage records
+
+The plugin's API battery-tracking switch enables two separate events: voltage on connection
+and voltage on disarm. Migration `0008_battery_voltage_events` adds immutable battery-session
+bindings and voltage event history. Run `npm run db:migrate` before deploying the new plugin.
+The station-secret-authenticated POST `/station/batteries/voltage-events` stores an event ID,
+session, total voltage, trigger time, sample time and server receipt time. Repeated identical
+IDs return the original receipt; conflicting payloads are rejected.
+
+Automatic events appear alongside cell checks, charge/discharge, lifecycle and transfers in
+one chronological history table. The latest drone voltage is exposed separately as
+`latestVoltageEvent`; the full detail response includes `voltageEvents`. `latestMeasurement`
+continues to mean the last cell check. Automatic readings neither fabricate cell values nor
+change cell health or cycle inference. Sarmat Crew shows them in the same all-events history
+and shows the latest drone voltage separately from the checker data.
 
 ## Localization
 
@@ -190,6 +206,7 @@ The React client detects Ukrainian browser locales (`uk` and `uk-*`) automatical
 - `GET/POST /api/crews`, `PATCH/DELETE /api/crews/:id` (scoped administrator)
 - `GET /api/telemetry` (group-scoped administrator snapshots)
 - `GET /ws/station` (MissionPlanner plugin WebSocket authenticated by crew secret)
+- `GET /station/batteries`, `PUT /station/batteries/active` (plugin battery selection using the same crew secret; optimistic concurrency protects changes made in Sarmat Crew)
 - `GET /api/admin/users`, `POST /api/admin/crews/:id/users`, `PATCH/DELETE /api/admin/users/:id`
 - `POST /api/admin/group-users` (`SUPER_ADMIN` creates group administrators)
 - `GET/POST /api/batteries`, `GET/PATCH /api/batteries/:id`

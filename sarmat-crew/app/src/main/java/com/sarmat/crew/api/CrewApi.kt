@@ -115,6 +115,8 @@ class CrewApi(private val preferences: SharedPreferences) {
                 latestChargePercent = latest?.optIntOrNull("chargePercent"),
                 latestDelta = latest?.optDoubleOrNull("cellDelta"),
                 latestHealth = latest?.optString("health"),
+                droneVoltage = item.optJSONObject("latestVoltageEvent")?.optDoubleOrNull("totalVoltage"),
+                droneVoltageAt = item.optJSONObject("latestVoltageEvent")?.optStringOrNull("measuredAt"),
             )
         }
     }

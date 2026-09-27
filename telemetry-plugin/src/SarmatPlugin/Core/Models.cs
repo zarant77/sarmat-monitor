@@ -101,6 +101,7 @@ namespace SarmatPlugin.Core
         [DataMember] public double RuijieRequestTimeoutSeconds { get; set; } = 12;
         [DataMember] public double RuijieStaleSeconds { get; set; } = 8;
         [DataMember] public bool AggregatorEnabled { get; set; }
+        [DataMember] public bool BatteryTrackingEnabled { get; set; }
         [DataMember] public string AggregatorUrl { get; set; } = "ws://127.0.0.1:8080/ws/station";
         [DataMember] public string AggregatorSecret { get; set; } = "";
         [DataMember] public double AggregatorReconnectSeconds { get; set; } = 5;

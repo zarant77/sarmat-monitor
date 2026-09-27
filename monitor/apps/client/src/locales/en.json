@@ -157,6 +157,7 @@
     "saveBattery": "Save battery"
   },
   "battery": {
+    "voltage": {"latest": "Latest voltage from drone", "vehicle_connected": "Voltage on connection", "vehicle_disarmed": "Voltage on disarm", "sampleTime": "Sample time", "noCells": "No cell data"},
     "loading": "Loading battery record…",
     "loadError": "Battery record could not be loaded.",
     "back": "Back to fleet",
@@ -206,6 +207,10 @@
       "empty": "No usage events yet."
     },
     "history": {
+      "date": "Event time",
+      "event": "Event",
+      "details": "Details",
+
       "title": "Battery history",
       "subtitle": "Unified timeline · {{count}} cycles",
       "add": "Add event",

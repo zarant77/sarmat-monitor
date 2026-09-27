@@ -15,7 +15,23 @@ Telemetry plugin і Monitor використовують компактний Me
 
 Детальні інструкції запуску є в [`monitor/README.md`](./monitor/README.md). Із кореня монорепозиторію доступні команди `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`, `npm run db:migrate` і `npm run db:seed`.
 
-Для швидкого запуску використовуйте кореневий launcher:
+У Windows двічі натисніть **`launcher.bat`** у корені проєкту й виберіть дію:
+
+1. Зібрати Sarmat Crew — debug APK, телефон не потрібен.
+2. Зібрати плагін Mission Planner — Release DLL із запуском тестів.
+3. Зібрати обидва компоненти.
+4. Зібрати, встановити та запустити Sarmat Crew на підключеному телефоні.
+
+Лаунчер автоматично знаходить JDK 17/21, Android SDK 36 та стандартну інсталяцію Mission Planner. Якщо Mission Planner встановлено в іншій папці, лаунчер попросить указати шлях. Для плагіна потрібні .NET SDK і targeting pack .NET Framework 4.7.2. Перша збірка потребує інтернету для залежностей. Звичайна збірка плагіна не встановлює його в Mission Planner.
+
+Готові файли:
+
+- APK: `sarmat-crew/app/build/outputs/apk/debug/app-debug.apk`;
+- DLL: `telemetry-plugin/dist/plugins/SarmatTelemetry.dll`.
+
+Без меню: `launcher.bat android`, `launcher.bat plugin`, `launcher.bat all`, `launcher.bat android-install DEVICE_SERIAL`. Нестандартний шлях: `launcher.bat plugin "D:\Mission Planner"` (також для `all`). Старий кореневий `build.bat` залишається спеціалізованим скриптом збірки MSI.
+
+Для Linux/macOS використовуйте кореневий launcher:
 
 ```bash
 ./launcher.sh

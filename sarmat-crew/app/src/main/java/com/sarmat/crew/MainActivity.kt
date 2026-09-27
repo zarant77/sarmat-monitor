@@ -386,6 +386,11 @@ class MainActivity : AppCompatActivity() {
             append("${item.typeName} · ${item.serialNumber}")
             append("\n${item.cellCount}S ${item.chemistry} · ${formatCapacity(item.capacityAh)} Ah")
             append(" · ${String.format(Locale.US, "%.2f–%.2f V", item.minVoltage, item.maxVoltage)}")
+            item.droneVoltage?.let { voltage ->
+                append("\nНапруга з дрона: ${String.format(Locale.US, "%.2f V", voltage)}")
+                item.droneVoltageAt?.let { append(" · ${formatHistoryTime(it)}") }
+                append("\nMission Planner · Без даних комірок")
+            }
         }
         findViewById<TextView>(R.id.detailBatteryCharge).apply {
             text = item.latestChargePercent?.let { "$it%" } ?: "—"
@@ -782,6 +787,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun historyTitle(item: BatteryHistoryItem) = when (item.kind) {
+        "vehicle_connected" -> "Напруга при підключенні"
+        "vehicle_disarmed" -> "Напруга при дізармі"
         "measurement" -> "Вимірювання"
         "charge" -> "Заряд"
         "discharge" -> "Розряд"
@@ -794,6 +801,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun historyDetails(item: BatteryHistoryItem): String = buildString {
         when (item.kind) {
+            "vehicle_connected", "vehicle_disarmed" -> {
+                item.totalVoltage?.let { append(String.format(Locale.US, "%.2f V · Mission Planner · Без даних комірок", it)) }
+            }
             "measurement" -> append(listOfNotNull(
                 item.chargePercent?.let { "$it%" },
                 item.totalVoltage?.let { String.format(Locale.US, "%.2f V", it) },

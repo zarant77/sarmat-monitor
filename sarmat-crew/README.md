@@ -63,25 +63,24 @@ Workflow **Android APK** (`.github/workflows/android.yml`) збирає debug AP
 
 ### Windows
 
-1. Встановіть Android Studio. У **SDK Manager** встановіть **Android SDK Platform 36** і **Android SDK Platform-Tools**. Перед першою збіркою відкрийте папку `sarmat-crew` в Android Studio, дочекайтеся синхронізації та встановіть запропоновані компоненти SDK.
-2. Увімкніть на телефоні **USB debugging**, під’єднайте його кабелем із підтримкою передачі даних і підтвердьте дозвіл на телефоні.
-3. Двічі натисніть **build-and-install.bat** у папці `sarmat-crew`.
+Запустіть **`launcher.bat` у корені репозиторію** подвійним кліком:
 
-Лаунчер перевірить телефон, збере APK, встановить або оновить застосунок і запустить його. Вікно залишиться відкритим, щоб можна було прочитати результат або помилку. Для першої збірки потрібен інтернет для завантаження залежностей.
+- пункт **1** збирає debug APK без підключення телефона;
+- пункт **3** збирає Android-застосунок і плагін Mission Planner;
+- пункт **4** збирає, встановлює та запускає застосунок на телефоні.
 
-SDK шукається через `ANDROID_HOME`, `ANDROID_SDK_ROOT` та стандартну папку `%LOCALAPPDATA%\Android\Sdk`; також підтримується `adb.exe` у `PATH`. Лаунчер вибирає JDK 17 або 21: спочатку локальний `.tools\jdk-17`, потім `JAVA_HOME`, `PATH`, стандартні папки Android Studio та встановлених JDK. Java 25, яку можуть містити нові версії Android Studio, для цієї збірки не підходить. Для нестандартного розташування задайте `ANDROID_HOME` та `JAVA_HOME` (JDK 17 або 21). Вибір Java діє лише для процесу лаунчера.
+Для встановлення увімкніть USB debugging, підключіть телефон кабелем і підтвердьте доступ. Якщо пристроїв декілька, лаунчер запропонує вибрати serial. Дані застосунку при оновленні зберігаються; автоматичного видалення застосунку немає.
 
-Якщо під’єднано кілька пристроїв, запустіть у PowerShell із папки `sarmat-crew`:
+Лаунчер автоматично шукає JDK 17/21 (включно з `sarmat-crew/.tools/jdk-17`) та Android SDK 36. Для нестандартного розташування задайте `JAVA_HOME` і `ANDROID_HOME`; також підтримується `sdk.dir` у `local.properties`. Зміни середовища діють лише в процесі лаунчера. Java 25 для цієї збірки не підходить.
 
-```powershell
-.\build-and-install.bat DEVICE_SERIAL
-```
-
-Для запуску без паузи наприкінці, наприклад з автоматизації:
+Із PowerShell у корені можна виконувати без меню:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-and-install.ps1
+.\launcher.bat android
+.\launcher.bat android-install DEVICE_SERIAL
 ```
+
+Готовий APK: `sarmat-crew/app/build/outputs/apk/debug/app-debug.apk`.
 
 ### Linux / macOS
 

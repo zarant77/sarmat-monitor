@@ -15,6 +15,8 @@ namespace SarmatPlugin
     public sealed class SarmatMissionPlannerPlugin : Plugin
     {
         private PluginRuntime runtime;
+        private MissionPlanner.MAVLinkInterface batteryPort;
+        private int batterySystemId, batteryComponentId;
         private object flightData;
         private object sarmatVideoStream;
         private SarmatPlugin.UI.SarmatPanel panel;
@@ -189,6 +191,7 @@ namespace SarmatPlugin
                         }
                     });
                 }
+                UpdateBatteryPacketSource();
                 runtime?.Tick();
             }
             catch (Exception ex) { TryLog("Plugin loop failed", ex); }
@@ -265,6 +268,8 @@ namespace SarmatPlugin
 
         private void DisposeRuntime()
         {
+            if (batteryPort != null) batteryPort.OnPacketReceived -= BatteryPacketReceived;
+            batteryPort = null;
             if (panel != null)
             {
                 panel.VideoSourceRequested -= PanelVideoSourceRequested;
@@ -282,6 +287,36 @@ namespace SarmatPlugin
                 runtime = null;
             }
             panel = null;
+        }
+
+        private void UpdateBatteryPacketSource()
+        {
+            var port = Host?.comPort;
+            if (port == batteryPort && (port == null || (port.sysidcurrent == batterySystemId && port.compidcurrent == batteryComponentId))) return;
+            if (batteryPort != null) batteryPort.OnPacketReceived -= BatteryPacketReceived;
+            runtime?.ResetBatteryConnection();
+            batteryPort = port;
+            if (port == null) return;
+            batterySystemId = port.sysidcurrent; batteryComponentId = port.compidcurrent;
+            port.OnPacketReceived += BatteryPacketReceived;
+        }
+
+        private void BatteryPacketReceived(object sender, MAVLink.MAVLinkMessage packet)
+        {
+            try
+            {
+                var port = batteryPort;
+                if (port == null || packet.sysid != batterySystemId || packet.compid != batteryComponentId ||
+                    port.sysidcurrent != batterySystemId || port.compidcurrent != batteryComponentId) return;
+                if (packet.msgid == (uint)MAVLink.MAVLINK_MSG_ID.HEARTBEAT)
+                    runtime?.ObserveBatteryHeartbeat((((MAVLink.mavlink_heartbeat_t)packet.data).base_mode & 128) != 0);
+                else if (packet.msgid == (uint)MAVLink.MAVLINK_MSG_ID.SYS_STATUS)
+                {
+                    var millivolts = ((MAVLink.mavlink_sys_status_t)packet.data).voltage_battery;
+                    if (millivolts != ushort.MaxValue && millivolts > 0) runtime?.ObserveBatteryVoltage(millivolts / 1000.0);
+                }
+            }
+            catch (Exception ex) { TryLog("Battery packet processing failed", ex); }
         }
 
         private void TryLog(string message, Exception error = null)

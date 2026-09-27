@@ -10,8 +10,9 @@ import {
   measurementInputSchema, thresholdInputSchema, transferInputSchema
 } from "@sbm/shared";
 import { ZodError } from "zod";
+import { registerStationBatteries } from "./station-batteries.js";
 import { db } from "./db/index.js";
-import { batteries, batteryTypes, crews, cycleEvents, groups, measurements, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
+import { batteries, batteryTypes, batteryVoltageEvents, crews, cycleEvents, groups, measurements, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
 import { syncOperationSchema, syncPayloadHash } from "./offline-sync.js";
 import { calculateChargePercent } from "./charge-percent.js";
 import { calculateCellHealth } from "./health.js";
@@ -35,6 +36,11 @@ const validateCellVoltageRange = (cells: number[], packMinVoltage: number, packM
     throw Object.assign(new Error("One or more cell voltages are outside the battery type voltage range"), { statusCode: 400 });
   }
 };
+function mapVoltageEvent(row: typeof batteryVoltageEvents.$inferSelect) {
+  return { ...row, totalVoltage: Number(row.totalVoltage), source: "mission_planner" as const,
+    occurredAt: iso(row.occurredAt), measuredAt: iso(row.measuredAt), receivedAt: iso(row.receivedAt) };
+}
+
 function mapMeasurement(row: typeof measurements.$inferSelect, limits: { minVoltage: number; maxVoltage: number }) {
   return {
     id: row.id, batteryId: row.batteryId, totalVoltage: Number(row.totalVoltage),
@@ -92,6 +98,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
   });
 
   app.get("/health", async () => ({ status: "ok" }));
+  await registerStationBatteries(app);
 
   app.get("/ws/station", {
     websocket: true,
@@ -342,7 +349,9 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     }).from(batteries).innerJoin(crews, eq(batteries.crewId, crews.id)).innerJoin(groups, eq(crews.groupId, groups.id)).innerJoin(batteryTypes, eq(batteries.typeId, batteryTypes.id)).where(filters).orderBy(asc(batteries.label));
     return Promise.all(rows.map(async row => {
       const [latest] = await db.select().from(measurements).where(eq(measurements.batteryId, row.battery.id)).orderBy(desc(measurements.measuredAt)).limit(1);
-      return { ...row.battery, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
+      const [latestVoltage] = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, row.battery.id))
+        .orderBy(desc(batteryVoltageEvents.measuredAt), desc(batteryVoltageEvents.id)).limit(1);
+      return { latestVoltageEvent: latestVoltage ? mapVoltageEvent(latestVoltage) : null, ...row.battery, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
         cycleCount: row.cycleCount, latestMeasurement: latest ? mapMeasurement(latest, { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage) }) : null,
         createdAt: iso(row.battery.createdAt), updatedAt: iso(row.battery.updatedAt) };
     }));
@@ -371,6 +380,8 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     const battery = await requireBattery(request.params.id, request.actor!);
     const [crew] = await db.select().from(crews).where(eq(crews.id, battery.crewId));
     const measurementRows = await db.select().from(measurements).where(eq(measurements.batteryId, battery.id)).orderBy(desc(measurements.measuredAt));
+    const voltageRows = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, battery.id))
+      .orderBy(desc(batteryVoltageEvents.measuredAt), desc(batteryVoltageEvents.id));
     const eventRows = await db.select().from(cycleEvents).where(eq(cycleEvents.batteryId, battery.id)).orderBy(desc(cycleEvents.occurredAt));
     const transferRows = await db.select().from(transfers).where(eq(transfers.batteryId, battery.id)).orderBy(desc(transfers.transferredAt));
     const crewRows = await db.select().from(crews);
@@ -380,6 +391,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       ...battery, crewNumber: crew.number, crewName: crew.name, crewColor: crew.color,
       cycleCount, latestMeasurement: measurementRows[0] ? mapMeasurement(measurementRows[0], battery) : null,
       measurements: measurementRows.map(row => mapMeasurement(row, battery)),
+      voltageEvents: voltageRows.map(mapVoltageEvent), latestVoltageEvent: voltageRows[0] ? mapVoltageEvent(voltageRows[0]) : null,
       cycleEvents: eventRows.map(e => ({ ...e, occurredAt: iso(e.occurredAt) })),
       transfers: transferRows.map(transfer => ({ ...transfer, fromCrewName: transfer.fromCrewId ? crewNames.get(transfer.fromCrewId) ?? null : null, toCrewName: crewNames.get(transfer.toCrewId) ?? "Unknown crew", transferredAt: iso(transfer.transferredAt) })),
       createdAt: iso(battery.createdAt), updatedAt: iso(battery.updatedAt)
@@ -401,6 +413,11 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
             'dangerThresholdV', ${measurements.dangerThresholdV}, 'notes', ${measurements.notes}) as "data"
         from ${measurements}
         union all
+        select ${batteryVoltageEvents.id}::text, ${batteryVoltageEvents.batteryId}, ${batteryVoltageEvents.type}::text, ${batteryVoltageEvents.occurredAt},
+          jsonb_build_object('totalVoltage', ${batteryVoltageEvents.totalVoltage}, 'source', 'mission_planner',
+            'measuredAt', ${batteryVoltageEvents.measuredAt}, 'receivedAt', ${batteryVoltageEvents.receivedAt})
+        from ${batteryVoltageEvents}
+        union all
         select ${cycleEvents.id}::text, ${cycleEvents.batteryId}, ${cycleEvents.type}::text, ${cycleEvents.occurredAt},
           jsonb_build_object('cycleDelta', ${cycleEvents.cycleDelta}, 'flightMinutes', ${cycleEvents.flightMinutes},
             'notes', ${cycleEvents.notes}, 'inferred', ${cycleEvents.inferred})
@@ -418,7 +435,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
         "id" desc
       limit ${limit + 1} offset ${offset}
     `);
-    const rows = Array.from(result as unknown as Iterable<HistoryRow>);
+    const rows = Array.from(((result as unknown as { rows?: HistoryRow[] }).rows ?? result) as Iterable<HistoryRow>);
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit).map(row => ({
       id: row.id, kind: row.kind,

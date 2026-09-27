@@ -182,14 +182,20 @@ export interface TransferEvent {
   id: string; batteryId: string; fromCrewId: string | null; fromCrewName: string | null;
   toCrewId: string; toCrewName: string; notes: string; transferredAt: string;
 }
+export interface BatteryVoltageEvent {
+  id: string; batteryId: string; sessionId: string; type: "vehicle_connected" | "vehicle_disarmed";
+  totalVoltage: number; source: "mission_planner"; occurredAt: string; measuredAt: string; receivedAt: string;
+}
 export interface Battery {
   id: string; crewId: string; groupId: string; groupName: string; crewNumber: number; crewName: string; crewColor: string; typeId: string; typeName: string; serialNumber: string;
   label: string; capacityAh: number; minVoltage: number; maxVoltage: number; cellCount: number; chemistry: string; state: BatteryState;
   notes: string; cycleCount: number; latestMeasurement: Measurement | null;
+  latestVoltageEvent?: BatteryVoltageEvent | null;
   activeSince: string | null;
   archivedAt?: string | null; createdAt: string; updatedAt: string;
 }
 export interface BatteryDetail extends Battery {
+  voltageEvents?: BatteryVoltageEvent[];
   measurements: Measurement[]; cycleEvents: CycleEvent[]; transfers: TransferEvent[];
 }
 export interface Thresholds { warningCellDeltaV: number; dangerCellDeltaV: number; chargedThresholdPercent: number; dischargedThresholdPercent: number; chargeEventDeadbandPercent: number }
