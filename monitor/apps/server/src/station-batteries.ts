@@ -1,13 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db/index.js";
-import { batteries, batteryTelemetrySessions, batteryVoltageEvents, crews, groups } from "./db/schema.js";
+import { batteries, batteryTelemetrySessions, batteryVoltageEvents, crews, droneFlightEvents, droneFlights, drones, flightMotors, groups, motorInstallations } from "./db/schema.js";
 import { assertBatteryOperational } from "./battery-lifecycle.js";
 
 const selectionSchema = z.object({
-  batteryId: z.uuid(), sessionId: z.uuid().optional(), expectedActiveId: z.uuid().nullable(),
+  batteryId: z.uuid(), droneId: z.uuid().optional(), sessionId: z.uuid().optional(), expectedActiveId: z.uuid().nullable(),
   expectedActiveSince: z.iso.datetime({ offset: true }).nullable()
+});
+const flightEventSchema = z.object({
+  id: z.uuid(), flightId: z.uuid(), sessionId: z.uuid(), type: z.enum(["armed", "disarmed"]),
+  occurredAt: z.iso.datetime({ offset: true })
 });
 const voltageSchema = z.object({
   id: z.uuid(), sessionId: z.uuid(), type: z.enum(["vehicle_connected", "vehicle_disarmed"]),
@@ -33,7 +37,9 @@ export async function registerStationBatteries(app: FastifyInstance) {
         .where(and(eq(batteries.crewId, request.telemetryCrew!.id), isNull(batteries.archivedAt), ne(batteries.state, "retired")))
         .orderBy(asc(batteries.label), asc(batteries.id));
       const active = rows.find(row => row.activeSince !== null);
-      return { batteries: rows, activeBatteryId: active?.id ?? null, activeSince: active?.activeSince ?? null };
+      const availableDrones = await db.select({ id: drones.id, name: drones.name, model: drones.model, motorCount: drones.motorCount })
+        .from(drones).where(and(eq(drones.crewId, request.telemetryCrew!.id), isNull(drones.retiredAt))).orderBy(asc(drones.name));
+      return { batteries: rows, drones: availableDrones, activeBatteryId: active?.id ?? null, activeSince: active?.activeSince ?? null };
     });
     station.put("/station/batteries/active", async request => {
       const data = selectionSchema.parse(request.body);
@@ -44,10 +50,17 @@ export async function registerStationBatteries(app: FastifyInstance) {
           .where(and(eq(batteries.id, data.batteryId), eq(batteries.crewId, crewId))).for("update");
         if (!target) throw Object.assign(new Error("Battery not found"), { statusCode: 404 });
         assertBatteryOperational(target);
+        if (data.droneId) {
+          const [targetDrone] = await tx.select({ id: drones.id }).from(drones)
+            .where(and(eq(drones.id, data.droneId), eq(drones.crewId, crewId), isNull(drones.retiredAt)));
+          if (!targetDrone) throw Object.assign(new Error("Drone not found"), { statusCode: 404 });
+        }
         if (data.sessionId) {
           const [previous] = await tx.select().from(batteryTelemetrySessions).where(eq(batteryTelemetrySessions.id, data.sessionId));
-          if (previous && (previous.batteryId !== target.id || previous.crewId !== crewId))
-            throw Object.assign(new Error("Session already bound to another battery"), { statusCode: 409 });
+          if (previous && (previous.batteryId !== target.id || previous.crewId !== crewId || (previous.droneId && previous.droneId !== data.droneId)))
+            throw Object.assign(new Error("Session already bound to other equipment"), { statusCode: 409 });
+          if (previous && !previous.droneId && data.droneId)
+            await tx.update(batteryTelemetrySessions).set({ droneId: data.droneId }).where(eq(batteryTelemetrySessions.id, previous.id));
         }
         const [active] = await tx.select().from(batteries)
           .where(and(eq(batteries.crewId, crewId), sql`${batteries.activeSince} is not null`));
@@ -56,16 +69,16 @@ export async function registerStationBatteries(app: FastifyInstance) {
           throw Object.assign(new Error("Active battery changed. Reload and select again."), { statusCode: 409 });
         // Selecting the existing battery is idempotent, never a toggle.
         if (data.sessionId) {
-          await tx.insert(batteryTelemetrySessions).values({ id: data.sessionId, batteryId: target.id, crewId }).onConflictDoNothing();
+          await tx.insert(batteryTelemetrySessions).values({ id: data.sessionId, batteryId: target.id, crewId, droneId: data.droneId }).onConflictDoNothing();
           const [bound] = await tx.select().from(batteryTelemetrySessions).where(eq(batteryTelemetrySessions.id, data.sessionId));
-          if (bound.batteryId !== target.id || bound.crewId !== crewId)
-            throw Object.assign(new Error("Session already bound to another battery"), { statusCode: 409 });
+          if (bound.batteryId !== target.id || bound.crewId !== crewId || (data.droneId && bound.droneId !== data.droneId))
+            throw Object.assign(new Error("Session already bound to other equipment"), { statusCode: 409 });
         }
-        if (active?.id === target.id) return { activeBatteryId: active.id, activeSince: active.activeSince, sessionId: data.sessionId };
+        if (active?.id === target.id) return { activeBatteryId: active.id, activeSince: active.activeSince, sessionId: data.sessionId, droneId: data.droneId };
         await tx.update(batteries).set({ activeSince: null }).where(eq(batteries.crewId, crewId));
         const activeSince = new Date();
         await tx.update(batteries).set({ activeSince }).where(eq(batteries.id, target.id));
-        return { activeBatteryId: target.id, activeSince, sessionId: data.sessionId };
+        return { activeBatteryId: target.id, activeSince, sessionId: data.sessionId, droneId: data.droneId };
       });
     });
     station.post("/station/batteries/voltage-events", async (request, reply) => {
@@ -87,6 +100,49 @@ export async function registerStationBatteries(app: FastifyInstance) {
             existing.occurredAt.getTime() !== occurredAt.getTime() || existing.measuredAt.getTime() !== measuredAt.getTime())
           throw Object.assign(new Error("Event ID already used with different data"), { statusCode: 409 });
         return { id: existing.id, duplicate: true };
+      });
+      return reply.status(result.duplicate ? 200 : 201).send(result);
+    });
+
+    station.post("/station/flights/events", async (request, reply) => {
+      const data = flightEventSchema.parse(request.body);
+      const occurredAt = new Date(data.occurredAt);
+      if (occurredAt.getTime() > Date.now() + 300_000) throw Object.assign(new Error("Invalid flight event time"), { statusCode: 400 });
+      const result = await db.transaction(async tx => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${data.flightId}))`);
+        const [session] = await tx.select().from(batteryTelemetrySessions)
+          .where(and(eq(batteryTelemetrySessions.id, data.sessionId), eq(batteryTelemetrySessions.crewId, request.telemetryCrew!.id)));
+        if (!session?.droneId) throw Object.assign(new Error("Drone session not found"), { statusCode: 404 });
+        const [existingEvent] = await tx.select().from(droneFlightEvents).where(eq(droneFlightEvents.id, data.id));
+        if (existingEvent) {
+          if (existingEvent.flightId !== data.flightId || existingEvent.telemetrySessionId !== data.sessionId || existingEvent.type !== data.type || existingEvent.occurredAt.getTime() !== occurredAt.getTime())
+            throw Object.assign(new Error("Event ID already used with different data"), { statusCode: 409 });
+          return { id: existingEvent.id, flightId: data.flightId, duplicate: true };
+        }
+
+        if (data.type === "armed") {
+          const [existingFlight] = await tx.select().from(droneFlights).where(eq(droneFlights.id, data.flightId));
+          if (existingFlight) {
+            if (existingFlight.telemetrySessionId !== data.sessionId || existingFlight.droneId !== session.droneId || existingFlight.armedAt.getTime() !== occurredAt.getTime())
+              throw Object.assign(new Error("Flight ID already used with different data"), { statusCode: 409 });
+          } else {
+            await tx.insert(droneFlights).values({ id: data.flightId, telemetrySessionId: data.sessionId, droneId: session.droneId, armedAt: occurredAt });
+            const installed = await tx.select().from(motorInstallations).where(and(
+              eq(motorInstallations.droneId, session.droneId), lte(motorInstallations.installedAt, occurredAt),
+              or(isNull(motorInstallations.removedAt), gt(motorInstallations.removedAt, occurredAt))
+            ));
+            if (installed.length) await tx.insert(flightMotors).values(installed.map(item => ({ flightId: data.flightId, motorId: item.motorId, installationId: item.id, positionNumber: item.positionNumber })));
+          }
+        } else {
+          const [flight] = await tx.select().from(droneFlights).where(and(eq(droneFlights.id, data.flightId), eq(droneFlights.telemetrySessionId, data.sessionId))).for("update");
+          if (!flight) throw Object.assign(new Error("Armed event not found"), { statusCode: 409 });
+          const durationSeconds = Math.floor((occurredAt.getTime() - flight.armedAt.getTime()) / 1000);
+          if (durationSeconds < 0 || durationSeconds > 172_800) throw Object.assign(new Error("Invalid flight duration"), { statusCode: 400 });
+          if (flight.disarmedAt && flight.disarmedAt.getTime() !== occurredAt.getTime()) throw Object.assign(new Error("Flight already completed with different data"), { statusCode: 409 });
+          if (!flight.disarmedAt) await tx.update(droneFlights).set({ disarmedAt: occurredAt, durationSeconds }).where(eq(droneFlights.id, flight.id));
+        }
+        await tx.insert(droneFlightEvents).values({ id: data.id, flightId: data.flightId, telemetrySessionId: data.sessionId, type: data.type, occurredAt });
+        return { id: data.id, flightId: data.flightId, duplicate: false };
       });
       return reply.status(result.duplicate ? 200 : 201).send(result);
     });

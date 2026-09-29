@@ -64,6 +64,34 @@
       "when": 1790503636395,
       "tag": "0008_battery_voltage_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790665442504,
+      "tag": "0009_faithful_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790688509375,
+      "tag": "0010_flashy_sentry",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790689310097,
+      "tag": "0011_bouncy_gorilla_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790689864831,
+      "tag": "0012_bizarre_bastion",
+      "breakpoints": true
     }
   ]
 }

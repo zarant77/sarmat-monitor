@@ -51,14 +51,14 @@ current, satellite count, HDOP, heading, relative altitude, Ruijie RSSI, OBS rec
 and armed state. Network failures do not block Mission Planner, OBS, Ruijie polling, or the plugin
 UI.
 
-Changes apply on Save. The battery dialog loads the crew's available batteries and preselects
-the active battery chosen in Sarmat Crew. Confirm saves the selection to the server; confirming
+Changes apply on Save. The equipment dialog loads the crew's available drones and batteries and preselects
+the active battery chosen in Sarmat Crew. Confirm binds both selections to the connection session; confirming
 the existing active battery preserves its installation time. Concurrent changes in the app
 require reloading and confirming again. Cancel leaves the server selection unchanged.
 The dialog does not block Mission Planner. It opens after two seconds of stable connection;
 brief connection gaps do not close it. A sustained disconnect of three seconds or a selected
 MAVLink vehicle change closes it. Right-click the Sarmat panel or a widget and select
-**Select battery** to reopen the dialog (or focus it if already open). A new selection creates
+**Select battery** to reopen the dialog (or focus it if already open). Selection is allowed only while disarmed. A new selection creates
 a new battery binding without adding another connection-voltage event. Both API switches
 must be enabled; confirmation requires the drone to remain connected.
 If the API is unavailable, use Reload to retry. Recording starts only after confirmation.
@@ -84,10 +84,16 @@ are retained as `.rejected` files and logged. The queue is flushed on normal dis
 abrupt termination before a captured sample reaches the disk queue can still lose that sample.
 These events store total pack voltage only and do not alter cell health or inferred cycle counts.
 
+The same confirmed session records every fresh `DISARMED → ARMED → DISARMED` pair as a flight.
+Flight events are durably queued in `%APPDATA%/SarmatPlugin/flight-events`. The monitor snapshots
+the motors installed at arming time and adds the completed duration to the drone and each snapped
+motor. A heartbeat gap never invents a landing time, so an interrupted flight remains open for
+later reconciliation instead of adding uncertain hours.
+
 Battery requests use HTTP(S) on the same host and port as the WebSocket URL
 (`ws` becomes `http`, `wss` becomes `https`), at `/station/batteries` and
-`/station/batteries/active`, plus POST `/station/batteries/voltage-events`, authenticated with the station secret. Update the server
-and apply database migration `0008_battery_voltage_events` before updating the plugin. One active battery per crew is supported.
+`/station/batteries/active`, plus POST `/station/batteries/voltage-events` and `/station/flights/events`, authenticated with the station secret. Update the server
+and apply database migrations through `0012_bizarre_bastion` before updating the plugin. One active battery per crew is supported.
 
 The plugin does not open its own MAVLink connection and does not run or communicate with
 `meow-monitor`.

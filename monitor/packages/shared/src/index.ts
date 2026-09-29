@@ -5,6 +5,7 @@ export const healthStates = ["good", "warning", "danger"] as const;
 export const cycleEventTypes = ["charge", "discharge", "archive", "restore", "retirement"] as const;
 export const checkerModules = ["A", "B"] as const;
 export const userRoles = ["SUPER_ADMIN", "GROUP_ADMIN", "CREW"] as const;
+export const motorStatuses = ["stock", "installed", "retired"] as const;
 
 export const groupInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -50,6 +51,50 @@ export const batteryInputSchema = z.object({
 
 export const batteryUpdateSchema = batteryInputSchema.omit({ crewId: true }).partial();
 export const transferInputSchema = z.object({ crewId: z.uuid(), notes: z.string().trim().max(500).optional() });
+
+const equipmentHoursSchema = z.coerce.number().int().min(0).max(2147483647).default(0);
+
+export const droneInputSchema = z.object({
+  crewId: z.uuid(),
+  name: z.string().trim().min(1).max(100),
+  model: z.string().trim().min(1).max(120),
+  motorCount: z.coerce.number().int().refine(value => value === 4 || value === 6, "Motor count must be 4 or 6"),
+  initialFlightSeconds: equipmentHoursSchema,
+  notes: z.string().trim().max(2000).optional().default("")
+});
+
+export const droneUpdateSchema = droneInputSchema.partial().refine(
+  value => Object.keys(value).length > 0,
+  "At least one change is required"
+);
+
+export const motorInputSchema = z.object({
+  groupId: z.uuid().optional(),
+  serialNumber: z.string().trim().min(1).max(100),
+  initialFlightSeconds: equipmentHoursSchema,
+  notes: z.string().trim().max(2000).optional().default("")
+});
+
+export const motorUpdateSchema = motorInputSchema.omit({ groupId: true }).partial().refine(
+  value => Object.keys(value).length > 0,
+  "At least one change is required"
+);
+
+export const motorAssignmentSchema = z.object({
+  motorId: z.uuid(),
+  notes: z.string().trim().max(1000).optional().default("")
+});
+
+export const motorRemovalSchema = z.object({
+  notes: z.string().trim().max(1000).optional().default("")
+});
+
+export const flightCorrectionSchema = z.object({
+  armedAt: z.iso.datetime({ offset: true }).optional(),
+  disarmedAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  excluded: z.boolean().optional(),
+  notes: z.string().trim().min(1).max(1000)
+}).refine(value => value.armedAt !== undefined || value.disarmedAt !== undefined || value.excluded !== undefined, "At least one flight change is required");
 
 const batteryTypeFields = {
   name: z.string().trim().min(2).max(100),
@@ -133,6 +178,13 @@ export type GroupUpdate = z.infer<typeof groupUpdateSchema>;
 export type CrewUpdate = z.infer<typeof crewUpdateSchema>;
 export type BatteryInput = z.infer<typeof batteryInputSchema>;
 export type BatteryUpdate = z.infer<typeof batteryUpdateSchema>;
+export type DroneInput = z.infer<typeof droneInputSchema>;
+export type DroneUpdate = z.infer<typeof droneUpdateSchema>;
+export type MotorInput = z.infer<typeof motorInputSchema>;
+export type MotorUpdate = z.infer<typeof motorUpdateSchema>;
+export type MotorAssignment = z.infer<typeof motorAssignmentSchema>;
+export type MotorRemoval = z.infer<typeof motorRemovalSchema>;
+export type FlightCorrectionInput = z.infer<typeof flightCorrectionSchema>;
 export type BatteryTypeInput = z.infer<typeof batteryTypeInputSchema>;
 export type BatteryTypeUpdate = z.infer<typeof batteryTypeUpdateSchema>;
 export type MeasurementInput = z.infer<typeof measurementInputSchema>;
@@ -145,6 +197,7 @@ export type GroupAdminCredentialInput = z.infer<typeof groupAdminCredentialInput
 export type BatteryState = typeof batteryStates[number];
 export type HealthState = typeof healthStates[number];
 export type CheckerModule = typeof checkerModules[number];
+export type MotorStatus = typeof motorStatuses[number];
 
 export interface MeasurementPreview {
   cells: number[];
@@ -164,6 +217,34 @@ export interface Group extends GroupInput {
   id: string; crewCount: number; batteryCount: number; warningCount: number; adminCount: number; createdAt: string; updatedAt: string;
 }
 export interface Crew extends CrewInput { id: string; groupId: string; groupName?: string; batteryCount: number; userCount?: number; createdAt: string; updatedAt: string }
+export interface Drone extends Omit<DroneInput, "initialFlightSeconds"> {
+  id: string; groupId: string; groupName: string; crewNumber: number; crewName: string;
+  initialFlightSeconds: number; totalFlightSeconds: number; status: "active" | "retired";
+  installedMotorCount: number; openFlightStartedAt: string | null; retiredAt: string | null; createdAt: string; updatedAt: string;
+}
+export interface Motor extends Omit<MotorInput, "groupId" | "initialFlightSeconds"> {
+  id: string; groupId: string; groupName: string; initialFlightSeconds: number; totalFlightSeconds: number;
+  currentDroneId: string | null; currentDroneName: string | null; positionNumber: number | null;
+  status: MotorStatus; retiredAt: string | null; createdAt: string; updatedAt: string;
+}
+export interface MotorInstallation {
+  id: string; motorId: string; serialNumber: string; droneId: string; droneName: string; positionNumber: number;
+  installedAt: string; removedAt: string | null; installedByUsername: string | null; removedByUsername: string | null;
+  installNotes: string; removalNotes: string; active: boolean;
+}
+export interface FlightMotorSnapshot { motorId: string; serialNumber: string; positionNumber: number }
+export interface FlightCorrection {
+  id: string; previousArmedAt: string; previousDisarmedAt: string | null; newArmedAt: string;
+  newDisarmedAt: string | null; previousExcluded: boolean; newExcluded: boolean;
+  notes: string; correctedByUsername: string | null; correctedAt: string;
+}
+export interface DroneFlight {
+  id: string; droneId: string; armedAt: string; disarmedAt: string | null; durationSeconds: number | null;
+  excludedAt: string | null; status: "armed" | "completed" | "excluded"; motors: FlightMotorSnapshot[]; corrections: FlightCorrection[];
+}
+export interface DroneMotorSlot { positionNumber: number; installation: MotorInstallation | null }
+export interface DroneDetail extends Drone { slots: DroneMotorSlot[]; installationHistory: MotorInstallation[]; flights: DroneFlight[] }
+export interface MotorDetail extends Motor { installationHistory: MotorInstallation[] }
 export interface BatteryType extends BatteryTypeInput {
   id: string; batteryCount?: number; createdAt: string; updatedAt: string;
 }

@@ -20,6 +20,8 @@ namespace SarmatPlugin.Tests
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery dialog waits for stable connection and tolerates brief gaps", BatteryDialogTiming);
             Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
+            Run("Flight tracker emits durable armed and disarmed pairs", FlightEvents);
+            Run("Flight outbox survives reload and isolates API identities", FlightOutbox);
             Run("Battery outbox survives reload and isolates API identities", BatteryOutbox);
             Run("Disabled integrations do not generate alerts", DisabledAlerts);
             Run("Alert engine enforces ARMED and grace", ArmedAndGrace);
@@ -119,6 +121,22 @@ namespace SarmatPlugin.Tests
             tracker.Heartbeat(false, now.AddSeconds(31)); tracker.Voltage(44, now.AddSeconds(32)); Equal(0, tracker.Ready().Length);
         }
 
+        private static void FlightEvents()
+        {
+            var tracker = new FlightTracker(); var now = DateTime.UtcNow; var session = Guid.NewGuid().ToString();
+            tracker.Heartbeat(false, now); tracker.Confirm(session);
+            tracker.Heartbeat(true, now.AddSeconds(1));
+            var armed = tracker.Ready().Single(); Equal("armed", (string)armed["type"]); Equal(session, (string)armed["sessionId"]);
+            var flightId = (string)armed["flightId"]; tracker.Stored(armed);
+            tracker.Heartbeat(true, now.AddSeconds(2)); Equal(0, tracker.Ready().Length);
+            tracker.Heartbeat(false, now.AddSeconds(3));
+            var disarmed = tracker.Ready().Single(); Equal("disarmed", (string)disarmed["type"]); Equal(flightId, (string)disarmed["flightId"]);
+            tracker.Stored(disarmed); tracker.Heartbeat(false, now.AddSeconds(4)); Equal(0, tracker.Ready().Length);
+            tracker.Heartbeat(true, now.AddSeconds(5)); tracker.Heartbeat(false, now.AddSeconds(20));
+            Equal(1, tracker.Ready().Length); // Only armed: a heartbeat gap must not invent a landing time.
+            tracker.Reset(); Equal(0, tracker.Ready().Length);
+        }
+
         private static void BatteryOutbox()
         {
             var root = Path.Combine(Path.GetTempPath(), "sarmat-outbox-test-" + Guid.NewGuid());
@@ -133,6 +151,34 @@ namespace SarmatPlugin.Tests
                 Equal(0, new BatteryEventOutbox(root, "wss://two/ws/station", "secret-one").Pending().Length);
                 var path = reloaded.Pending().Single();
                 True(reloaded.Read(path).Contains("48.5")); reloaded.Acknowledge(path); Equal(0, reloaded.Pending().Length);
+                first.Store(item); path = first.Pending().Single(); first.Reject(path);
+                Equal(0, first.Pending().Length); True(File.Exists(path + ".rejected"));
+            }
+            finally
+            {
+                if (Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) && Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+        }
+
+        private static void FlightOutbox()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "sarmat-flight-outbox-test-" + Guid.NewGuid());
+            try
+            {
+                var item = new Dictionary<string, object> {
+                    ["id"] = Guid.NewGuid().ToString(), ["flightId"] = Guid.NewGuid().ToString(),
+                    ["sessionId"] = Guid.NewGuid().ToString(), ["type"] = "armed",
+                    ["occurredAt"] = DateTime.UtcNow.ToString("o")
+                };
+                var first = new FlightEventOutbox(root, "wss://one/ws/station", "secret-one");
+                first.Store(item); first.Store(item); Equal(1, first.Pending().Length);
+                var reloaded = new FlightEventOutbox(root, "wss://one/ws/station", "secret-one");
+                Equal(1, reloaded.Pending().Length);
+                Equal(0, new FlightEventOutbox(root, "wss://one/ws/station", "secret-two").Pending().Length);
+                Equal(0, new FlightEventOutbox(root, "wss://two/ws/station", "secret-one").Pending().Length);
+                var path = reloaded.Pending().Single();
+                True(reloaded.Read(path).Contains("armed")); reloaded.Acknowledge(path); Equal(0, reloaded.Pending().Length);
                 first.Store(item); path = first.Pending().Single(); first.Reject(path);
                 Equal(0, first.Pending().Length); True(File.Exists(path + ".rejected"));
             }
@@ -164,6 +210,7 @@ namespace SarmatPlugin.Tests
         {
             Equal("https://example.com/station/batteries", BatteryApiClient.ApiRoot("wss://example.com/ws/station").AbsoluteUri);
             Equal("http://localhost:3000/station/batteries", BatteryApiClient.ApiRoot("ws://localhost:3000/ws/station").AbsoluteUri);
+            Equal("https://example.com/station/flights/events", BatteryApiClient.FlightEventsRoot("wss://example.com/ws/station").AbsoluteUri);
             foreach (var enabled in new[] { false, true })
             {
                 var rejected = false;

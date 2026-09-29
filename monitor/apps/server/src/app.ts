@@ -12,7 +12,7 @@ import {
 import { ZodError } from "zod";
 import { registerStationBatteries } from "./station-batteries.js";
 import { db } from "./db/index.js";
-import { batteries, batteryTypes, batteryVoltageEvents, crews, cycleEvents, groups, measurements, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
+import { batteries, batteryTypes, batteryVoltageEvents, crews, cycleEvents, drones, groups, measurements, motors, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
 import { syncOperationSchema, syncPayloadHash } from "./offline-sync.js";
 import { calculateChargePercent } from "./charge-percent.js";
 import { calculateCellHealth } from "./health.js";
@@ -24,6 +24,7 @@ import { assertBatteryOperational, lifecycleChange } from "./battery-lifecycle.j
 import { cellVoltageBounds } from "./voltage-limits.js";
 import { parseHistoryPagination } from "./history.js";
 import { TELEMETRY_THRESHOLDS, TelemetryHub, type TelemetryCrew } from "./telemetry.js";
+import { registerEquipment } from "./equipment.js";
 
 declare module "fastify" { interface FastifyRequest { telemetryCrew: TelemetryCrew | null } }
 
@@ -90,7 +91,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) return reply.status(400).send({ error: "Validation failed", issues: error.issues });
-    const code = (error as { code?: string }).code;
+    const code = (error as { code?: string; cause?: { code?: string } }).code ?? (error as { cause?: { code?: string } }).cause?.code;
     if (code === "23505") return reply.status(409).send({ error: "A record with that unique value already exists" });
     const status = (error as { statusCode?: number }).statusCode ?? 500;
     const message = error instanceof Error ? error.message : "Request failed";
@@ -133,6 +134,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
 
   app.get("/api/auth/me", async request => publicActor(request.actor!));
   app.post("/api/auth/logout", async (request, reply) => { await revokeSession(request, reply); return { ok: true }; });
+  await registerEquipment(app);
 
   app.get<{ Querystring: { groupId?: string } }>("/api/telemetry", async request => {
     assertGroupAdministrator(request.actor);
@@ -185,10 +187,10 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
 
   app.delete<{ Params: { id: string } }>("/api/groups/:id", async (request, reply) => {
     assertSuperAdmin(request.actor);
-    const [counts] = await db.select({ crews: sql<number>`count(distinct ${crews.id})::int`, users: sql<number>`count(distinct ${users.id})::int` }).from(groups)
-      .leftJoin(crews, eq(crews.groupId, groups.id)).leftJoin(users, eq(users.groupId, groups.id)).where(eq(groups.id, request.params.id)).groupBy(groups.id);
+    const [counts] = await db.select({ crews: sql<number>`count(distinct ${crews.id})::int`, users: sql<number>`count(distinct ${users.id})::int`, motors: sql<number>`count(distinct ${motors.id})::int` }).from(groups)
+      .leftJoin(crews, eq(crews.groupId, groups.id)).leftJoin(users, eq(users.groupId, groups.id)).leftJoin(motors, eq(motors.groupId, groups.id)).where(eq(groups.id, request.params.id)).groupBy(groups.id);
     if (!counts) throw Object.assign(new Error("Group not found"), { statusCode: 404 });
-    if (counts.crews || counts.users) throw Object.assign(new Error("Group can only be deleted when it has no crews or accounts"), { statusCode: 409 });
+    if (counts.crews || counts.users || counts.motors) throw Object.assign(new Error("Group can only be deleted when it has no crews, accounts, or equipment"), { statusCode: 409 });
     await db.delete(groups).where(eq(groups.id, request.params.id)); return reply.status(204).send();
   });
 
@@ -229,10 +231,10 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     const [target] = await db.select().from(crews).where(eq(crews.id, request.params.id));
     if (!target) throw Object.assign(new Error("Crew not found"), { statusCode: 404 });
     assertGroupAccess(request.actor!, target.groupId);
-    const [counts] = await db.select({ batteries: sql<number>`count(distinct ${batteries.id})::int`, users: sql<number>`count(distinct ${users.id})::int` })
-      .from(crews).leftJoin(batteries, eq(batteries.crewId, crews.id)).leftJoin(users, eq(users.crewId, crews.id)).where(eq(crews.id, request.params.id)).groupBy(crews.id);
+    const [counts] = await db.select({ batteries: sql<number>`count(distinct ${batteries.id})::int`, users: sql<number>`count(distinct ${users.id})::int`, drones: sql<number>`count(distinct ${drones.id})::int` })
+      .from(crews).leftJoin(batteries, eq(batteries.crewId, crews.id)).leftJoin(users, eq(users.crewId, crews.id)).leftJoin(drones, eq(drones.crewId, crews.id)).where(eq(crews.id, request.params.id)).groupBy(crews.id);
     if (!counts) throw Object.assign(new Error("Crew not found"), { statusCode: 404 });
-    if (counts.batteries || counts.users) throw Object.assign(new Error("Crew can only be deleted after its batteries and credentials are removed or reassigned"), { statusCode: 409 });
+    if (counts.batteries || counts.users || counts.drones) throw Object.assign(new Error("Crew can only be deleted after its batteries, drones, and credentials are removed or reassigned"), { statusCode: 409 });
     await db.delete(crews).where(eq(crews.id, request.params.id));
     return reply.status(204).send();
   });

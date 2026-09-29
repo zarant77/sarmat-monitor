@@ -1,4 +1,4 @@
-import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, MeasurementPreview, MeasurementPreviewInput, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
+import type { AuthUser, Battery, BatteryDetail, BatteryInput, BatteryType, BatteryTypeInput, BatteryTypeUpdate, BatteryUpdate, Crew, CrewInput, CrewUpdate, CredentialInput, CredentialUpdate, Drone, DroneDetail, DroneInput, DroneUpdate, FlightCorrectionInput, Group, GroupAdminCredentialInput, GroupInput, GroupUpdate, ManagedUser, MeasurementInput, MeasurementPreview, MeasurementPreviewInput, Motor, MotorAssignment, MotorDetail, MotorInput, MotorStatus, MotorUpdate, TelemetryResponse, ThresholdInput, Thresholds } from "@sbm/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "";
 export class ApiError extends Error {
@@ -33,6 +33,21 @@ export const api = {
   createCrew: (data: CrewInput) => request<Crew>("/api/crews", json("POST", data)),
   updateCrew: (id: string, data: CrewUpdate) => request<Crew>(`/api/crews/${id}`, json("PATCH", data)),
   deleteCrew: (id: string) => request<void>(`/api/crews/${id}`, { method: "DELETE" }),
+  drones: (filters: { groupId?: string; crewId?: string; includeRetired?: boolean } = {}) => request<Drone[]>(`/api/drones?${new URLSearchParams({ ...(filters.groupId ? { groupId: filters.groupId } : {}), ...(filters.crewId ? { crewId: filters.crewId } : {}), ...(filters.includeRetired ? { includeRetired: "true" } : {}) })}`),
+  drone: (id: string) => request<DroneDetail>(`/api/drones/${id}`),
+  createDrone: (data: DroneInput) => request<Drone>("/api/drones", json("POST", data)),
+  updateDrone: (id: string, data: DroneUpdate) => request<Drone>(`/api/drones/${id}`, json("PATCH", data)),
+  retireDrone: (id: string) => request<Drone>(`/api/admin/drones/${id}/retire`, json("POST", {})),
+  restoreDrone: (id: string) => request<Drone>(`/api/admin/drones/${id}/restore`, json("POST", {})),
+  installMotor: (droneId: string, position: number, data: MotorAssignment) => request<DroneDetail>(`/api/drones/${droneId}/motor-positions/${position}`, json("POST", data)),
+  removeMotor: (droneId: string, position: number, data: { notes?: string } = {}) => request<DroneDetail>(`/api/drones/${droneId}/motor-positions/${position}/remove`, json("POST", data)),
+  correctFlight: (flightId: string, data: FlightCorrectionInput) => request<DroneDetail>(`/api/admin/flights/${flightId}`, json("PATCH", data)),
+  motors: (filters: { groupId?: string; status?: MotorStatus; search?: string } = {}) => request<Motor[]>(`/api/motors?${new URLSearchParams({ ...(filters.groupId ? { groupId: filters.groupId } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.search ? { search: filters.search } : {}) })}`),
+  motor: (id: string) => request<MotorDetail>(`/api/motors/${id}`),
+  createMotor: (data: MotorInput) => request<Motor>("/api/motors", json("POST", data)),
+  updateMotor: (id: string, data: MotorUpdate) => request<Motor>(`/api/motors/${id}`, json("PATCH", data)),
+  retireMotor: (id: string) => request<Motor>(`/api/admin/motors/${id}/retire`, json("POST", {})),
+  restoreMotor: (id: string) => request<Motor>(`/api/admin/motors/${id}/restore`, json("POST", {})),
   batteryTypes: () => request<BatteryType[]>("/api/battery-types"),
   createBatteryType: (data: BatteryTypeInput) => request<BatteryType>("/api/battery-types", json("POST", data)),
   updateBatteryType: (id: string, data: BatteryTypeUpdate) => request<BatteryType>(`/api/battery-types/${id}`, json("PATCH", data)),

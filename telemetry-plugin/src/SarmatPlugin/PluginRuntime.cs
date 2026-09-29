@@ -26,6 +26,7 @@ namespace SarmatPlugin
         private SettingsForm settingsForm;
         private BatterySelectionForm batterySelectionForm;
         private readonly BatteryVoltageTracker batteryTracker = new BatteryVoltageTracker();
+        private readonly FlightTracker flightTracker = new FlightTracker();
         private readonly BatteryDialogConnection batteryConnection = new BatteryDialogConnection();
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
@@ -89,7 +90,7 @@ namespace SarmatPlugin
                     if (batteryTracker.SessionId == null) batteryTracker.Connect(DateTime.UtcNow);
                 }
                 else if (!settings.AggregatorEnabled || !settings.BatteryTrackingEnabled || batteryConnection.Disconnected)
-                { PersistVoltageEvents(); batteryTracker.Reset(); }
+                { PersistVoltageEvents(); PersistFlightEvents(); batteryTracker.Reset(); flightTracker.Reset(); }
             }
             if (batteryConnection.Disconnected) CloseBatterySelection();
             if (offerBattery) ShowBatterySelection();
@@ -173,7 +174,7 @@ namespace SarmatPlugin
         private void StopWorkers(bool resetBattery = true)
         {
             if (resetBattery) CloseBatterySelection();
-            lock (sync) { PersistVoltageEvents(); if (resetBattery) { batteryTracker.Reset(); batteryConnection.Reset(); } }
+            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); if (resetBattery) { batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); } }
             cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null;
             audio.Stop();
         }
@@ -320,9 +321,9 @@ namespace SarmatPlugin
             batterySelectionForm = new BatterySelectionForm(settings, sessionId, () =>
             {
                 lock (sync) return !disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled &&
-                    batteryTracker.SessionId == sessionId && new TelemetryReader(currentState).Read().Connected;
+                    batteryTracker.SessionId == sessionId && new TelemetryReader(currentState).Read().Connected && !new TelemetryReader(currentState).Read().Armed;
             });
-            batterySelectionForm.BatteryConfirmed += id => { lock (sync) { batteryTracker.Confirm(id); PersistVoltageEvents(); } };
+            batterySelectionForm.BatteryConfirmed += id => { lock (sync) { batteryTracker.Confirm(id); flightTracker.Confirm(id); PersistVoltageEvents(); PersistFlightEvents(); } };
             batterySelectionForm.FormClosed += (sender, args) => { if (ReferenceEquals(batterySelectionForm, sender)) batterySelectionForm = null; };
             // Modeless: telemetry, reconnect handling and Mission Planner remain responsive.
             batterySelectionForm.Show(panel.FindForm());
@@ -352,11 +353,11 @@ namespace SarmatPlugin
             {
                 lock (sync)
                 {
-                    PersistVoltageEvents();
+                    PersistVoltageEvents(); PersistFlightEvents();
                     // A confirmed session cannot be rebound server-side. Explicit reselection
                     // starts a new binding without inventing another connection measurement.
                     if (batteryTracker.SessionId == null) batteryTracker.Connect(DateTime.UtcNow);
-                    else if (batteryTracker.IsConfirmed) batteryTracker.Connect(DateTime.UtcNow, false);
+                    else if (batteryTracker.IsConfirmed) { batteryTracker.Connect(DateTime.UtcNow, false); flightTracker.Reset(); }
                     batteryConnection.MarkOffered();
                 }
             }
@@ -376,11 +377,15 @@ namespace SarmatPlugin
         public void ObserveBatteryHeartbeat(bool armed)
         {
             lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
-                batteryTracker.Heartbeat(armed, DateTime.UtcNow);
+            {
+                var now = DateTime.UtcNow;
+                batteryTracker.Heartbeat(armed, now); flightTracker.Heartbeat(armed, now);
+                PersistFlightEvents();
+            }
         }
         public void ResetBatteryConnection()
         {
-            lock (sync) { PersistVoltageEvents(); batteryTracker.Reset(); batteryConnection.Reset(); }
+            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); }
             wasConnected = false; connectionInitialized = false;
             CloseBatterySelection();
         }
@@ -396,20 +401,40 @@ namespace SarmatPlugin
                 catch (Exception ex) { log.Warn("Could not persist battery voltage event: " + ex.Message); }
             }
         }
+        private void PersistFlightEvents()
+        {
+            foreach (var item in flightTracker.Ready())
+            {
+                try
+                {
+                    var outbox = new FlightEventOutbox(AppPaths.Root, settings.AggregatorUrl, settings.AggregatorSecret);
+                    outbox.Store(item); flightTracker.Stored(item);
+                }
+                catch (Exception ex) { log.Warn("Could not persist flight event: " + ex.Message); }
+            }
+        }
         private async Task BatteryEventLoop(PluginSettings apiSettings, CancellationToken token)
         {
             var outbox = new BatteryEventOutbox(AppPaths.Root, apiSettings.AggregatorUrl, apiSettings.AggregatorSecret);
+            var flightOutbox = new FlightEventOutbox(AppPaths.Root, apiSettings.AggregatorUrl, apiSettings.AggregatorSecret);
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    lock (sync) { if (token.IsCancellationRequested) return; PersistVoltageEvents(); }
+                    lock (sync) { if (token.IsCancellationRequested) return; PersistVoltageEvents(); PersistFlightEvents(); }
                     using (var api = new BatteryApiClient(apiSettings))
                     foreach (var path in outbox.Pending())
                     {
                         token.ThrowIfCancellationRequested();
                         if (await api.SendVoltageAsync(outbox.Read(path), token).ConfigureAwait(false)) outbox.Acknowledge(path);
                         else { outbox.Reject(path); log.Warn("Battery voltage event rejected; retained in " + path + ".rejected"); }
+                    }
+                    using (var api = new BatteryApiClient(apiSettings))
+                    foreach (var path in flightOutbox.Pending())
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (await api.SendFlightAsync(flightOutbox.Read(path), token).ConfigureAwait(false)) flightOutbox.Acknowledge(path);
+                        else { flightOutbox.Reject(path); log.Warn("Flight event rejected; retained in " + path + ".rejected"); }
                     }
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }

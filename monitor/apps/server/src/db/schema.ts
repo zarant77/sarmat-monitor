@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const batteryStateEnum = pgEnum("battery_state", ["ready", "charging", "in_use", "storage", "service", "retired"]);
 export const healthStateEnum = pgEnum("health_state", ["good", "warning", "danger"]);
@@ -84,6 +84,54 @@ export const batteries = pgTable("batteries", {
   uniqueIndex("batteries_one_active_per_crew").on(table.crewId).where(sql`${table.activeSince} is not null`)
 ]);
 
+export const drones = pgTable("drones", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  crewId: uuid("crew_id").references(() => crews.id, { onDelete: "restrict" }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  model: varchar("model", { length: 120 }).notNull(),
+  motorCount: integer("motor_count").notNull(),
+  initialFlightSeconds: integer("initial_flight_seconds").default(0).notNull(),
+  notes: text("notes").default("").notNull(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  ...timestamps
+}, table => [
+  index("drones_crew_idx").on(table.crewId),
+  check("drones_motor_count_check", sql`${table.motorCount} in (4, 6)`),
+  check("drones_initial_flight_seconds_check", sql`${table.initialFlightSeconds} >= 0`)
+]);
+
+export const motors = pgTable("motors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  groupId: uuid("group_id").references(() => groups.id, { onDelete: "restrict" }).notNull(),
+  serialNumber: varchar("serial_number", { length: 100 }).notNull().unique(),
+  initialFlightSeconds: integer("initial_flight_seconds").default(0).notNull(),
+  notes: text("notes").default("").notNull(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  ...timestamps
+}, table => [
+  index("motors_group_idx").on(table.groupId),
+  check("motors_initial_flight_seconds_check", sql`${table.initialFlightSeconds} >= 0`)
+]);
+
+export const motorInstallations = pgTable("motor_installations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  motorId: uuid("motor_id").references(() => motors.id, { onDelete: "restrict" }).notNull(),
+  droneId: uuid("drone_id").references(() => drones.id, { onDelete: "restrict" }).notNull(),
+  positionNumber: integer("position_number").notNull(),
+  installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  installedByUserId: uuid("installed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  removedByUserId: uuid("removed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  installNotes: text("install_notes").default("").notNull(),
+  removalNotes: text("removal_notes").default("").notNull()
+}, table => [
+  check("motor_installations_position_check", sql`${table.positionNumber} > 0`),
+  index("motor_installations_drone_history_idx").on(table.droneId, table.installedAt),
+  index("motor_installations_motor_history_idx").on(table.motorId, table.installedAt),
+  uniqueIndex("motor_installations_active_motor_unique").on(table.motorId).where(sql`${table.removedAt} is null`),
+  uniqueIndex("motor_installations_active_position_unique").on(table.droneId, table.positionNumber).where(sql`${table.removedAt} is null`)
+]);
+
 export const measurements = pgTable("measurements", {
   id: uuid("id").defaultRandom().primaryKey(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
@@ -107,6 +155,7 @@ export const batteryTelemetrySessions = pgTable("battery_telemetry_sessions", {
   id: uuid("id").primaryKey(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
   crewId: uuid("crew_id").references(() => crews.id, { onDelete: "restrict" }).notNull(),
+  droneId: uuid("drone_id").references(() => drones.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 
@@ -120,6 +169,57 @@ export const batteryVoltageEvents = pgTable("battery_voltage_events", {
   measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()
 }, table => [index("battery_voltage_events_history_idx").on(table.batteryId, table.measuredAt)]);
+
+export const droneFlights = pgTable("drone_flights", {
+  id: uuid("id").primaryKey(),
+  telemetrySessionId: uuid("telemetry_session_id").references(() => batteryTelemetrySessions.id, { onDelete: "restrict" }).notNull(),
+  droneId: uuid("drone_id").references(() => drones.id, { onDelete: "restrict" }).notNull(),
+  armedAt: timestamp("armed_at", { withTimezone: true }).notNull(),
+  disarmedAt: timestamp("disarmed_at", { withTimezone: true }),
+  durationSeconds: integer("duration_seconds"),
+  excludedAt: timestamp("excluded_at", { withTimezone: true }),
+  excludedByUserId: uuid("excluded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, table => [
+  index("drone_flights_drone_history_idx").on(table.droneId, table.armedAt),
+  index("drone_flights_session_idx").on(table.telemetrySessionId),
+  check("drone_flights_duration_check", sql`${table.durationSeconds} is null or ${table.durationSeconds} >= 0`)
+]);
+
+export const flightCorrections = pgTable("flight_corrections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  flightId: uuid("flight_id").references(() => droneFlights.id, { onDelete: "cascade" }).notNull(),
+  previousArmedAt: timestamp("previous_armed_at", { withTimezone: true }).notNull(),
+  previousDisarmedAt: timestamp("previous_disarmed_at", { withTimezone: true }),
+  previousExcludedAt: timestamp("previous_excluded_at", { withTimezone: true }),
+  newArmedAt: timestamp("new_armed_at", { withTimezone: true }).notNull(),
+  newDisarmedAt: timestamp("new_disarmed_at", { withTimezone: true }),
+  newExcludedAt: timestamp("new_excluded_at", { withTimezone: true }),
+  notes: text("notes").notNull(),
+  correctedByUserId: uuid("corrected_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  correctedAt: timestamp("corrected_at", { withTimezone: true }).defaultNow().notNull()
+}, table => [index("flight_corrections_flight_idx").on(table.flightId, table.correctedAt)]);
+
+export const flightMotors = pgTable("flight_motors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  flightId: uuid("flight_id").references(() => droneFlights.id, { onDelete: "cascade" }).notNull(),
+  motorId: uuid("motor_id").references(() => motors.id, { onDelete: "restrict" }).notNull(),
+  installationId: uuid("installation_id").references(() => motorInstallations.id, { onDelete: "restrict" }).notNull(),
+  positionNumber: integer("position_number").notNull()
+}, table => [
+  uniqueIndex("flight_motors_flight_motor_unique").on(table.flightId, table.motorId),
+  uniqueIndex("flight_motors_flight_position_unique").on(table.flightId, table.positionNumber),
+  index("flight_motors_motor_idx").on(table.motorId)
+]);
+
+export const droneFlightEvents = pgTable("drone_flight_events", {
+  id: uuid("id").primaryKey(),
+  flightId: uuid("flight_id").references(() => droneFlights.id, { onDelete: "cascade" }).notNull(),
+  telemetrySessionId: uuid("telemetry_session_id").references(() => batteryTelemetrySessions.id, { onDelete: "restrict" }).notNull(),
+  type: varchar("type", { length: 16 }).$type<"armed" | "disarmed">().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()
+}, table => [index("drone_flight_events_flight_idx").on(table.flightId)]);
 
 // The receipt and mutation commit together, making offline retries safe.
 export const syncOperations = pgTable("sync_operations", {

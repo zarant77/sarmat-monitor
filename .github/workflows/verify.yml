@@ -1,0 +1,68 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: monitor/package-lock.json
+      - name: Install dependencies
+        working-directory: monitor
+        run: npm ci
+      - name: Typecheck
+        working-directory: monitor
+        run: npm run typecheck
+      - name: Test
+        working-directory: monitor
+        run: npm test
+      - name: Build
+        working-directory: monitor
+        run: npm run build
+
+  mission-planner-plugin:
+    runs-on: windows-latest
+    env:
+      MP_VERSION: "1.3.83"
+      MP_URL: "https://firmware.ardupilot.org/Tools/MissionPlanner/MissionPlanner-1.3.83.zip"
+      MP_CACHE: "${{ github.workspace }}\\.ci\\mission-planner-1.3.83"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Cache Mission Planner
+        id: mission-planner-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MP_CACHE }}
+          key: mission-planner-${{ runner.os }}-${{ env.MP_VERSION }}
+      - name: Download Mission Planner build references
+        if: steps.mission-planner-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "MissionPlanner-$env:MP_VERSION.zip"
+          New-Item -ItemType Directory -Force -Path $env:MP_CACHE | Out-Null
+          Invoke-WebRequest -Uri $env:MP_URL -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:MP_CACHE -Force
+      - name: Locate Mission Planner
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -LiteralPath $env:MP_CACHE -Filter MissionPlanner.exe -Recurse | Select-Object -First 1
+          if ($null -eq $exe) { throw "MissionPlanner.exe was not found in the downloaded archive." }
+          "MISSION_PLANNER_PATH=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build plugin and run tests
+        shell: pwsh
+        run: .\telemetry-plugin\scripts\build.ps1 -MissionPlannerPath $env:MISSION_PLANNER_PATH -Configuration Release
