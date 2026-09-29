@@ -72,7 +72,7 @@ async function installationHistory(where: ReturnType<typeof eq>) {
     .leftJoin(installedUsers, eq(motorInstallations.installedByUserId, installedUsers.id)).leftJoin(removedUsers, eq(motorInstallations.removedByUserId, removedUsers.id))
     .where(where).orderBy(desc(motorInstallations.installedAt));
   return rows.map(({ installation, motor, drone, installedByUsername, removedByUsername }) => ({
-    id: installation.id, motorId: motor.id, serialNumber: motor.serialNumber, droneId: drone.id, droneName: drone.name,
+    id: installation.id, motorId: motor.id, serialNumber: motor.serialNumber, type: motor.type, droneId: drone.id, droneName: drone.name,
     positionNumber: installation.positionNumber, installedAt: iso(installation.installedAt), removedAt: installation.removedAt ? iso(installation.removedAt) : null,
     installedByUsername, removedByUsername, installNotes: installation.installNotes, removalNotes: installation.removalNotes, active: !installation.removedAt
   }));
@@ -93,7 +93,7 @@ async function motorDetail(id: string, actor: Actor) {
 async function flightHistory(droneId: string) {
   const flights = await db.select().from(droneFlights).where(eq(droneFlights.droneId, droneId)).orderBy(desc(droneFlights.armedAt));
   if (!flights.length) return [];
-  const snapshots = await db.select({ flightId: flightMotors.flightId, motorId: motors.id, serialNumber: motors.serialNumber, positionNumber: flightMotors.positionNumber })
+  const snapshots = await db.select({ flightId: flightMotors.flightId, motorId: motors.id, serialNumber: motors.serialNumber, type: motors.type, positionNumber: flightMotors.positionNumber })
     .from(flightMotors).innerJoin(motors, eq(flightMotors.motorId, motors.id)).where(inArray(flightMotors.flightId, flights.map(item => item.id))).orderBy(asc(flightMotors.positionNumber));
   const corrections = await db.select({ correction: flightCorrections, correctedByUsername: correctionUsers.username }).from(flightCorrections)
     .leftJoin(correctionUsers, eq(flightCorrections.correctedByUserId, correctionUsers.id))

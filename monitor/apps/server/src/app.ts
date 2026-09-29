@@ -669,19 +669,19 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
 
   app.get("/api/settings/thresholds", async () => {
     const [row] = await db.select().from(settings).where(eq(settings.id, 1));
-    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
+    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, criticalChargePercent: row.criticalChargePercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
   });
 
   app.put("/api/settings/thresholds", async request => {
     assertSuperAdmin(request.actor);
     const data = thresholdInputSchema.parse(request.body);
     const row = await db.transaction(async tx => {
-      const [row] = await tx.update(settings).set({ warningCellDeltaV: data.warningCellDeltaV.toString(), dangerCellDeltaV: data.dangerCellDeltaV.toString(), chargedThresholdPercent: data.chargedThresholdPercent, dischargedThresholdPercent: data.dischargedThresholdPercent, chargeEventDeadbandPercent: data.chargeEventDeadbandPercent, updatedAt: new Date() }).where(eq(settings.id, 1)).returning();
+      const [row] = await tx.update(settings).set({ warningCellDeltaV: data.warningCellDeltaV.toString(), dangerCellDeltaV: data.dangerCellDeltaV.toString(), chargedThresholdPercent: data.chargedThresholdPercent, dischargedThresholdPercent: data.dischargedThresholdPercent, criticalChargePercent: data.criticalChargePercent, chargeEventDeadbandPercent: data.chargeEventDeadbandPercent, updatedAt: new Date() }).where(eq(settings.id, 1)).returning();
       const batteryRows = await tx.select({ id: batteries.id }).from(batteries).orderBy(asc(batteries.id));
       for (const battery of batteryRows) await rebuildCycleHistory(battery.id, row, tx);
       return row;
     });
-    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
+    return { warningCellDeltaV: Number(row.warningCellDeltaV), dangerCellDeltaV: Number(row.dangerCellDeltaV), chargedThresholdPercent: row.chargedThresholdPercent, dischargedThresholdPercent: row.dischargedThresholdPercent, criticalChargePercent: row.criticalChargePercent, chargeEventDeadbandPercent: row.chargeEventDeadbandPercent };
   });
 
   return app;

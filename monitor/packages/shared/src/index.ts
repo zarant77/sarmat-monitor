@@ -6,6 +6,7 @@ export const cycleEventTypes = ["charge", "discharge", "archive", "restore", "re
 export const checkerModules = ["A", "B"] as const;
 export const userRoles = ["SUPER_ADMIN", "GROUP_ADMIN", "CREW"] as const;
 export const motorStatuses = ["stock", "installed", "retired"] as const;
+export const motorTypes = ["CV", "CCV"] as const;
 
 export const groupInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -71,6 +72,7 @@ export const droneUpdateSchema = droneInputSchema.partial().refine(
 export const motorInputSchema = z.object({
   groupId: z.uuid().optional(),
   serialNumber: z.string().trim().min(1).max(100),
+  type: z.enum(motorTypes),
   initialFlightSeconds: equipmentHoursSchema,
   notes: z.string().trim().max(2000).optional().default("")
 });
@@ -142,10 +144,12 @@ export const thresholdInputSchema = z.object({
   dangerCellDeltaV: z.coerce.number().positive().max(3),
   chargedThresholdPercent: z.coerce.number().int().min(51).max(100),
   dischargedThresholdPercent: z.coerce.number().int().min(0).max(70),
+  criticalChargePercent: z.coerce.number().int().min(0).max(69),
   chargeEventDeadbandPercent: z.coerce.number().int().min(1).max(20)
 }).superRefine((value, context) => {
   if (value.dangerCellDeltaV <= value.warningCellDeltaV) context.addIssue({ code: "custom", message: "Danger threshold must be greater than warning threshold", path: ["dangerCellDeltaV"] });
   if (value.chargedThresholdPercent <= value.dischargedThresholdPercent) context.addIssue({ code: "custom", message: "Charged threshold must be greater than discharged threshold", path: ["chargedThresholdPercent"] });
+  if (value.criticalChargePercent >= value.dischargedThresholdPercent) context.addIssue({ code: "custom", message: "Critical charge threshold must be lower than discharged threshold", path: ["criticalChargePercent"] });
 });
 
 export const loginInputSchema = z.object({
@@ -198,6 +202,7 @@ export type BatteryState = typeof batteryStates[number];
 export type HealthState = typeof healthStates[number];
 export type CheckerModule = typeof checkerModules[number];
 export type MotorStatus = typeof motorStatuses[number];
+export type MotorType = typeof motorTypes[number];
 
 export interface MeasurementPreview {
   cells: number[];
@@ -228,11 +233,11 @@ export interface Motor extends Omit<MotorInput, "groupId" | "initialFlightSecond
   status: MotorStatus; retiredAt: string | null; createdAt: string; updatedAt: string;
 }
 export interface MotorInstallation {
-  id: string; motorId: string; serialNumber: string; droneId: string; droneName: string; positionNumber: number;
+  id: string; motorId: string; serialNumber: string; type: MotorType; droneId: string; droneName: string; positionNumber: number;
   installedAt: string; removedAt: string | null; installedByUsername: string | null; removedByUsername: string | null;
   installNotes: string; removalNotes: string; active: boolean;
 }
-export interface FlightMotorSnapshot { motorId: string; serialNumber: string; positionNumber: number }
+export interface FlightMotorSnapshot { motorId: string; serialNumber: string; type: MotorType; positionNumber: number }
 export interface FlightCorrection {
   id: string; previousArmedAt: string; previousDisarmedAt: string | null; newArmedAt: string;
   newDisarmedAt: string | null; previousExcluded: boolean; newExcluded: boolean;
@@ -279,7 +284,7 @@ export interface BatteryDetail extends Battery {
   voltageEvents?: BatteryVoltageEvent[];
   measurements: Measurement[]; cycleEvents: CycleEvent[]; transfers: TransferEvent[];
 }
-export interface Thresholds { warningCellDeltaV: number; dangerCellDeltaV: number; chargedThresholdPercent: number; dischargedThresholdPercent: number; chargeEventDeadbandPercent: number }
+export interface Thresholds { warningCellDeltaV: number; dangerCellDeltaV: number; chargedThresholdPercent: number; dischargedThresholdPercent: number; criticalChargePercent: number; chargeEventDeadbandPercent: number }
 export type TelemetrySnapshot = [status: number, ageMs: number, sequence: number, voltage: number | null, current: number | null, satellites: number | null, hdop: number | null, heading: number | null, altitude: number | null, linkRssi: number | null, flags: number];
 export interface TelemetryThresholds {
   voltage: { goodMin: number; normalMin: number };

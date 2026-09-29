@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "critical_charge_percent" integer DEFAULT 20 NOT NULL;

@@ -29,6 +29,9 @@ class CrewRepository(
     fun dischargedThresholdPercent(): Int = store.snapshot(scope).optJSONObject("thresholds")
         ?.optInt("dischargedThresholdPercent", DEFAULT_DISCHARGED_THRESHOLD_PERCENT)
         ?: DEFAULT_DISCHARGED_THRESHOLD_PERCENT
+    fun criticalChargePercent(): Int = store.snapshot(scope).optJSONObject("thresholds")
+        ?.optInt("criticalChargePercent", com.sarmat.crew.DEFAULT_CRITICAL_CHARGE_PERCENT)
+        ?: com.sarmat.crew.DEFAULT_CRITICAL_CHARGE_PERCENT
 
     fun login(url: String, username: String, password: String): CrewUser = synchronized(syncLock) {
         remote.login(url, username, password).also { schedule(context); store.changed() }

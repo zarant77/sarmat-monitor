@@ -161,7 +161,7 @@ Administrators can use `/admin` to:
 - issue, reset, disable, or delete crew credentials;
 - inspect and manage batteries across crews, including transfers and archived packs;
 - correct measurements while retaining correction metadata;
-- edit global health and charged/discharged state thresholds (`SUPER_ADMIN` only).
+- edit global health, charged/discharged state, and critical widget charge thresholds (`SUPER_ADMIN` only).
 
 Crew users are rejected by the browser client after authentication and the session is immediately revoked. Their operational workflow is available only in Sarmat Crew.
 

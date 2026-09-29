@@ -5,11 +5,13 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.lifecycle.MutableLiveData
+import com.sarmat.crew.widget.BatteryWidgetProvider
 import org.json.JSONObject
 
 data class PendingOperation(val id: String, val body: JSONObject, val state: String, val error: String?)
 
 class OfflineStore internal constructor(context: Context) : SQLiteOpenHelper(context, "crew-offline.db", null, 1) {
+    private val applicationContext = context.applicationContext
     val changes = MutableLiveData(0L)
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE snapshots(scope TEXT PRIMARY KEY, data TEXT NOT NULL DEFAULT '{}', error TEXT)")
@@ -18,7 +20,10 @@ class OfflineStore internal constructor(context: Context) : SQLiteOpenHelper(con
         db.execSQL("CREATE TABLE drafts(scope TEXT NOT NULL, battery TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(scope,battery))")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
-    fun changed() { changes.postValue(System.nanoTime()) }
+    fun changed() {
+        changes.postValue(System.nanoTime())
+        runCatching { BatteryWidgetProvider.updateAll(applicationContext) }
+    }
 
     @Synchronized fun snapshot(scope: String): JSONObject = readableDatabase.rawQuery(
         "SELECT data FROM snapshots WHERE scope=?", arrayOf(scope)

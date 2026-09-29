@@ -104,12 +104,14 @@ export const motors = pgTable("motors", {
   id: uuid("id").defaultRandom().primaryKey(),
   groupId: uuid("group_id").references(() => groups.id, { onDelete: "restrict" }).notNull(),
   serialNumber: varchar("serial_number", { length: 100 }).notNull().unique(),
+  type: varchar("type", { length: 3 }).$type<"CV" | "CCV">().default("CV").notNull(),
   initialFlightSeconds: integer("initial_flight_seconds").default(0).notNull(),
   notes: text("notes").default("").notNull(),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
   ...timestamps
 }, table => [
   index("motors_group_idx").on(table.groupId),
+  check("motors_type_check", sql`${table.type} in ('CV', 'CCV')`),
   check("motors_initial_flight_seconds_check", sql`${table.initialFlightSeconds} >= 0`)
 ]);
 
@@ -257,6 +259,7 @@ export const settings = pgTable("settings", {
   dangerCellDeltaV: numeric("danger_cell_delta_v", { precision: 6, scale: 3 }).default("0.200").notNull(),
   chargedThresholdPercent: integer("charged_threshold_percent").default(90).notNull(),
   dischargedThresholdPercent: integer("discharged_threshold_percent").default(50).notNull(),
+  criticalChargePercent: integer("critical_charge_percent").default(20).notNull(),
   chargeEventDeadbandPercent: integer("charge_event_deadband_percent").default(2).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });

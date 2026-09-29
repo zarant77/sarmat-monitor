@@ -52,6 +52,7 @@ beforeAll(async () => {
   await pg.transaction(async tx => { await tx.exec(migration("0005_battery_lifecycle")); });
   await pg.transaction(async tx => { await tx.exec(migration("0006_dynamic_charge_percent")); });
   await pg.exec(migration("0008_battery_voltage_events"));
+  await pg.exec(migration("0013_freezing_quasimodo"));
   app = await buildApp();
 }, 30000);
 

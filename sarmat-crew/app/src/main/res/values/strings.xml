@@ -16,4 +16,7 @@
     <string name="notes">Примітка</string>
     <string name="loading">Завантаження…</string>
     <string name="cell_number">Комірка %1$d</string>
+    <string name="widget_description">Компактний стан усіх батарей екіпажу</string>
+    <string name="widget_battery">Батарея</string>
+    <string name="widget_no_batteries">Немає даних</string>
 </resources>
