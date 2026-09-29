@@ -38,6 +38,7 @@ describe("hierarchical authorization policy", () => {
   it("scopes CREW lists to its authenticated crew", () => {
     expect(effectiveCrewId(crewA)).toBe("crew-a");
     expect(effectiveCrewId(crewA, "crew-b")).toBe("crew-a");
+    expect(() => effectiveCrewId({ ...crewA, crewId: null })).toThrowError("Crew account is not assigned to a crew");
   });
 
   it("allows CREW to access its battery and denies another crew in the same group", () => {

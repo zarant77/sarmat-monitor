@@ -1,5 +1,6 @@
 package com.sarmat.crew
 
+import android.content.Context
 import android.graphics.Typeface
 import android.icu.text.Collator
 import android.icu.text.RuleBasedCollator
@@ -10,6 +11,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var manualReferenceCell: Int? = null
     private var editorMinCentivolts = 300
     private var editorMaxCentivolts = 424
+    private var updatingVoltageInput = false
     private var previewValid = false
     private var previewGeneration = 0
     private val previewHandler = Handler(Looper.getMainLooper())
@@ -137,10 +140,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<TextView>(R.id.syncTimeText).setOnClickListener { showSyncDetails() }
+        val listStatus = findViewById<TextView>(R.id.listStatusText)
         findViewById<PullSyncLayout>(R.id.pullSync).apply {
-            onRefresh = { synchronizeNow() }
-            onProgress = { ready ->
-                findViewById<TextView>(R.id.listStatusText).text = when (ready) {
+            onRefresh = refresh@{
+                if (screen != Screen.BATTERIES || !isAttachedToWindow) return@refresh
+                synchronizeNow()
+            }
+            onProgress = progress@{ ready ->
+                if (screen != Screen.BATTERIES || !isAttachedToWindow) return@progress
+                listStatus.text = when (ready) {
                     true -> "Відпустіть для синхронізації"
                     false -> "Потягніть нижче для синхронізації"
                     null -> ""
@@ -547,9 +555,13 @@ class MainActivity : AppCompatActivity() {
         })
         findViewById<Button>(R.id.decreaseVoltage).apply { isEnabled = false; setOnClickListener { adjustSelected(-0.01) } }
         findViewById<Button>(R.id.increaseVoltage).apply { isEnabled = false; setOnClickListener { adjustSelected(0.01) } }
+        findViewById<EditText>(R.id.selectedCellValue).apply {
+            isEnabled = false
+            doAfterTextChanged { value -> if (!updatingVoltageInput) enterVoltageDigits(value?.toString().orEmpty()) }
+        }
     }
 
-    private fun selectCell(index: Int) {
+    private fun selectCell(index: Int, updateInput: Boolean = true) {
         if (index !in draft.indices) return
         val range = manualVoltageRangeCentivolts(draft, index, manualReferenceCell) ?: return
         selectedCell = index
@@ -561,9 +573,66 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.decreaseVoltage).isEnabled = true
         findViewById<Button>(R.id.increaseVoltage).isEnabled = true
         findViewById<TextView>(R.id.measurementError).text = ""
-        findViewById<TextView>(R.id.selectedCellTitle).text = String.format(Locale.US, "Комірка %d · Модуль %s\nДіапазон %.2f–%.2f V", index + 1, if (index < 6) "A" else "B", range.first / 100.0, range.last / 100.0)
-        findViewById<TextView>(R.id.selectedCellValue).text = draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f V", it) } ?: "—"
+        findViewById<TextView>(R.id.selectedCellTitle).text = String.format(Locale.US, "Комірка %d · Модуль %s · %.2f–%.2f V", index + 1, if (index < 6) "A" else "B", range.first / 100.0, range.last / 100.0)
+        findViewById<EditText>(R.id.selectedCellValue).isEnabled = true
+        if (updateInput) setVoltageInputText(draft[index].toDoubleOrNull()?.let { String.format(Locale.US, "%.2f", it) }.orEmpty(), selectAll = true)
         findViewById<SeekBar>(R.id.voltageSlider).progress = currentCentivolts - range.first
+    }
+
+    private fun enterVoltageDigits(text: String) {
+        val parsed = parseVoltageDigitStream(text)
+        if (parsed == null) {
+            findViewById<TextView>(R.id.measurementError).text = "Вводьте лише цифри напруги"
+            return
+        }
+        if (parsed.centivolts.isEmpty()) {
+            findViewById<TextView>(R.id.measurementError).text = ""
+            return
+        }
+        val availableCells = 1 + draft.indices.count { it != selectedCell && draft[it].isEmpty() }
+        if (parsed.centivolts.size > availableCells) {
+            findViewById<TextView>(R.id.measurementError).text = "У потоці більше значень, ніж вільних комірок"
+            setVoltageInputText(text, selectAll = true)
+            return
+        }
+        var target = selectedCell
+        var hasNext = false
+        for (centivolts in parsed.centivolts) {
+            selectCell(target, updateInput = false)
+            val range = manualVoltageRangeCentivolts(draft, target, manualReferenceCell) ?: return
+            if (centivolts !in range) {
+                findViewById<TextView>(R.id.measurementError).text = String.format(Locale.US, "Для комірки %d допустимо %.2f–%.2f V", target + 1, range.first / 100.0, range.last / 100.0)
+                setVoltageInputText(centivolts.toString(), selectAll = true)
+                return
+            }
+            setSelectedVoltage(centivolts / 100.0, updateInput = false)
+            val next = nextEmptyCellAfter(target)
+            hasNext = next != null
+            if (next == null) break
+            target = next
+        }
+        if (hasNext) {
+            selectCell(target, updateInput = false)
+            setVoltageInputText(parsed.remainder)
+        } else {
+            setVoltageInputText(draft[selectedCell], selectAll = true)
+        }
+    }
+
+    private fun nextEmptyCellAfter(index: Int): Int? {
+        for (offset in 1 until draft.size) {
+            val candidate = (index + offset) % draft.size
+            if (draft[candidate].isEmpty()) return candidate
+        }
+        return null
+    }
+
+    private fun setVoltageInputText(value: String, selectAll: Boolean = false) {
+        val input = findViewById<EditText>(R.id.selectedCellValue)
+        updatingVoltageInput = true
+        input.setText(value)
+        if (selectAll) input.selectAll() else input.setSelection(input.text.length)
+        updatingVoltageInput = false
     }
 
     private fun adjustSelected(delta: Double) {
@@ -574,13 +643,13 @@ class MainActivity : AppCompatActivity() {
         setSelectedVoltage((current + delta).coerceIn(min, max))
     }
 
-    private fun setSelectedVoltage(value: Double) {
+    private fun setSelectedVoltage(value: Double, updateInput: Boolean = true) {
         if (selectedCell !in draft.indices) return
         if (manualReferenceCell == null) manualReferenceCell = selectedCell
         draft[selectedCell] = String.format(Locale.US, "%.2f", value)
         if (selectedCell == manualReferenceCell) clampDependentCellVoltages(draft, selectedCell)
         keepDraft()
-        findViewById<TextView>(R.id.selectedCellValue).text = String.format(Locale.US, "%.2f V", value)
+        if (updateInput) setVoltageInputText(String.format(Locale.US, "%.2f", value), selectAll = true)
         findViewById<SeekBar>(R.id.voltageSlider).progress = ((value * 100).roundToInt() - editorMinCentivolts).coerceIn(0, editorMaxCentivolts - editorMinCentivolts)
         updateSummary()
     }
@@ -846,6 +915,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         selectCell(index)
+        val input = findViewById<EditText>(R.id.selectedCellValue)
+        input.requestFocus()
+        input.post { (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT) }
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

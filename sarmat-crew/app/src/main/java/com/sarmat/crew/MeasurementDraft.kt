@@ -3,6 +3,23 @@ package com.sarmat.crew
 import java.util.Locale
 import kotlin.math.roundToInt
 
+internal data class VoltageDigitStream(val centivolts: List<Int>, val remainder: String)
+
+internal fun parseVoltageDigitStream(text: String): VoltageDigitStream? {
+    val digits = buildString {
+        for (character in text) when {
+            character.isDigit() -> append(character)
+            character == '.' || character == ',' || character.isWhitespace() -> Unit
+            else -> return null
+        }
+    }
+    val completeLength = digits.length - digits.length % 3
+    return VoltageDigitStream(
+        centivolts = (0 until completeLength step 3).map { digits.substring(it, it + 3).toInt() },
+        remainder = digits.substring(completeLength)
+    )
+}
+
 internal fun isCompleteMeasurement(draft: List<String>, requiredCells: Int = 12): Boolean =
     draft.size == requiredCells && draft.all { it.toDoubleOrNull() != null }
 

@@ -6,6 +6,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MeasurementDraftTest {
+    @Test fun `continuous digits are split into cell voltages`() {
+        assertEquals(VoltageDigitStream(listOf(422, 421, 420), ""), parseVoltageDigitStream("422421420"))
+        assertEquals(VoltageDigitStream(listOf(422), "42"), parseVoltageDigitStream("42242"))
+        assertEquals(VoltageDigitStream(listOf(422, 421), ""), parseVoltageDigitStream("4.22 4,21"))
+    }
+
+    @Test fun `unsupported voltage input is rejected`() {
+        assertEquals(null, parseVoltageDigitStream("4x22"))
+    }
+
     @Test fun `manual measurement requires all 12 cells`() {
         val draft = MutableList(12) { "4.100" }
         assertTrue(isCompleteMeasurement(draft))

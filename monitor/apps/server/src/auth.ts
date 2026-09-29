@@ -83,7 +83,9 @@ export function assertTransferAccess(actor: Actor, sourceGroupId: string, target
 
 export function effectiveCrewId(actor: Actor, requestedCrewId?: string): string | undefined {
   assertActiveActor(actor);
-  return actor.role === "CREW" ? actor.crewId ?? undefined : requestedCrewId;
+  if (actor.role !== "CREW") return requestedCrewId;
+  if (!actor.crewId) throw Object.assign(new Error("Crew account is not assigned to a crew"), { statusCode: 403 });
+  return actor.crewId;
 }
 
 export async function loadActor(request: FastifyRequest): Promise<Actor | null> {

@@ -113,6 +113,12 @@
       "capacity": "Total capacity",
       "attention": "Need attention"
     },
+    "crewActive": {
+      "inDrone": "In drone",
+      "activate": "USE IN DRONE",
+      "remove": "REMOVE",
+      "error": "Could not change the active battery. Please try again."
+    },
     "columns": {
       "battery": "Battery",
       "state": "State",

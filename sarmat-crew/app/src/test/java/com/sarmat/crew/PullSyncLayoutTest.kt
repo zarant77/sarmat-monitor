@@ -1,9 +1,12 @@
 package com.sarmat.crew
 
+import android.app.Activity
 import android.view.MotionEvent
+import android.widget.FrameLayout
 import android.widget.ScrollView
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.robolectric.Robolectric
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -14,6 +17,27 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [28])
 @LooperMode(LooperMode.Mode.PAUSED)
 class PullSyncLayoutTest {
+    @Test fun `detached screen no longer invokes pull callbacks`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val layout = PullSyncLayout(activity).apply { addView(ScrollView(activity)) }
+        var callbacks = 0
+        layout.onRefresh = { callbacks++ }
+        layout.onProgress = { callbacks++ }
+        activity.setContentView(layout)
+        activity.setContentView(FrameLayout(activity))
+
+        val scale = activity.resources.displayMetrics.density
+        listOf(
+            Triple(MotionEvent.ACTION_DOWN, 0f, 0f),
+            Triple(MotionEvent.ACTION_MOVE, 0f, 160f * scale),
+            Triple(MotionEvent.ACTION_UP, 0f, 160f * scale)
+        ).forEach { (action, x, y) ->
+            MotionEvent.obtain(0, 10, action, x, y, 0).also { layout.dispatchTouchEvent(it); it.recycle() }
+        }
+
+        assertEquals(0, callbacks)
+    }
+
     @Test fun `only long downward pull at top triggers one sync`() {
         val context = RuntimeEnvironment.getApplication()
         val layout = PullSyncLayout(context)

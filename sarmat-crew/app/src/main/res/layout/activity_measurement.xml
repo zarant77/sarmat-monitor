@@ -75,7 +75,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Торкніться комірки, щоб вказати напругу"
+                android:text="Торкніться комірки й вводьте по 3 цифри: 422421420"
                 android:textColor="@color/text_muted"
                 android:textSize="10sp" />
         </LinearLayout>
@@ -91,10 +91,10 @@
         android:id="@+id/manualEditor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="5dp"
         android:background="@drawable/cell_background"
         android:orientation="vertical"
-        android:padding="10dp">
+        android:padding="6dp">
         <TextView
             android:id="@+id/selectedCellTitle"
             android:layout_width="match_parent"
@@ -103,25 +103,32 @@
             android:text="Оберіть комірку"
             android:textColor="@color/text_muted"
             android:textSize="11sp" />
-        <TextView
+        <EditText
             android:id="@+id/selectedCellValue"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="36dp"
+            android:background="@null"
+            android:digits="0123456789.,"
+            android:enabled="false"
             android:gravity="center"
-            android:paddingVertical="1dp"
-            android:text="—"
+            android:hint="—"
+            android:imeOptions="actionNext"
+            android:inputType="numberDecimal"
+            android:padding="0dp"
+            android:selectAllOnFocus="true"
             android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_muted"
             android:textSize="23sp"
             android:textStyle="bold" />
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="42dp"
+            android:layout_height="34dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
             <Button
                 android:id="@+id/decreaseVoltage"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
+                android:layout_width="40dp"
+                android:layout_height="32dp"
                 android:background="@drawable/secondary_button_background"
                 android:backgroundTint="@null"
                 android:minWidth="0dp"
@@ -131,13 +138,13 @@
             <SeekBar
                 android:id="@+id/voltageSlider"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="28dp"
                 android:layout_marginHorizontal="4dp"
                 android:layout_weight="1" />
             <Button
                 android:id="@+id/increaseVoltage"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
+                android:layout_width="40dp"
+                android:layout_height="32dp"
                 android:background="@drawable/secondary_button_background"
                 android:backgroundTint="@null"
                 android:minWidth="0dp"

@@ -47,6 +47,7 @@ export const api = {
   createBattery: (data: BatteryInput) => request<Battery>("/api/batteries", json("POST", data)),
   updateBattery: (id: string, data: BatteryUpdate) => request<Battery>(`/api/batteries/${id}`, json("PATCH", data)),
   transfer: (id: string, crewId: string, notes = "") => request(`/api/batteries/${id}/transfer`, json("POST", { crewId, notes })),
+  toggleActiveBattery: (id: string) => request<{ activeBatteryId: string | null; activeSince: string | null }>(`/api/batteries/${id}/toggle-active`, json("POST", {})),
   measurement: (id: string, data: MeasurementInput) => request(`/api/batteries/${id}/measurements`, json("POST", data)),
   measurementPreview: (id: string, data: MeasurementPreviewInput) => request<MeasurementPreview>(`/api/batteries/${id}/measurement-preview`, json("POST", data)),
   correctMeasurement: (id: string, data: Partial<MeasurementInput>) => request(`/api/admin/measurements/${id}`, json("PATCH", data)),

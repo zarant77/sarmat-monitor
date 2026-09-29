@@ -58,5 +58,10 @@ class PullSyncLayout(context: Context, attrs: AttributeSet? = null) : FrameLayou
         getChildAt(0)?.animate()?.translationY(0f)?.setDuration(150)?.start()
         if (notifyProgress) onProgress?.invoke(null)
     }
+    override fun onDetachedFromWindow() {
+        onRefresh = null
+        onProgress = null
+        super.onDetachedFromWindow()
+    }
     override fun performClick(): Boolean { super.performClick(); return true }
 }
