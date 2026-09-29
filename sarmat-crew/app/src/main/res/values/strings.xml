@@ -18,5 +18,15 @@
     <string name="cell_number">Комірка %1$d</string>
     <string name="widget_description">Компактний стан усіх батарей екіпажу</string>
     <string name="widget_battery">Батарея</string>
+    <string name="widget_active_battery_number">⚡ %1$s</string>
+    <string name="widget_active_battery_preview">⚡ 2</string>
+    <string name="widget_battery_in_drone">%1$s, у дроні</string>
     <string name="widget_no_batteries">Немає даних</string>
+    <string name="widget_settings_title">Налаштування віджету</string>
+    <string name="widget_settings_title_uppercase">НАЛАШТУВАННЯ ВІДЖЕТУ</string>
+    <string name="widget_preview_title">ПОПЕРЕДНІЙ ПЕРЕГЛЯД</string>
+    <string name="widget_transparency_title">Прозорість фону</string>
+    <string name="widget_transparency_value">%1$d%%</string>
+    <string name="widget_transparency_hint">0% — суцільний темний фон · 100% — фон повністю прозорий. Зміни застосовуються автоматично.</string>
+    <string name="back">Назад</string>
 </resources>

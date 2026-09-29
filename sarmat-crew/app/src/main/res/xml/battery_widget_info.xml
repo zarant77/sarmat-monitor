@@ -2,9 +2,9 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"
     android:initialLayout="@layout/widget_batteries"
-    android:minHeight="70dp"
+    android:minHeight="80dp"
     android:minWidth="180dp"
-    android:previewLayout="@layout/widget_batteries"
+    android:previewLayout="@layout/widget_batteries_preview"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

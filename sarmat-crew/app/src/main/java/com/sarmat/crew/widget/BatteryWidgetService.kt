@@ -38,10 +38,17 @@ private class BatteryWidgetFactory(context: Context) : RemoteViewsService.Remote
             BatteryWidgetLevel.CRITICAL -> R.drawable.ic_widget_battery_critical
             BatteryWidgetLevel.UNKNOWN -> R.drawable.ic_widget_battery_unknown
         }
+        val number = batteryNumber(battery.label, position)
+        val isActive = battery.activeSince != null
         return RemoteViews(context.packageName, R.layout.widget_battery_item).apply {
             setImageViewResource(R.id.widgetBatteryIcon, icon)
-            setContentDescription(R.id.widgetBatteryIcon, battery.label)
-            setOnClickFillInIntent(R.id.widgetBatteryIcon, Intent())
+            setTextViewText(R.id.widgetBatteryNumber, if (isActive) context.getString(R.string.widget_active_battery_number, number) else number)
+            setTextColor(R.id.widgetBatteryNumber, context.getColor(if (isActive) R.color.lime else android.R.color.white))
+            setContentDescription(
+                R.id.widgetBatteryIcon,
+                if (isActive) context.getString(R.string.widget_battery_in_drone, battery.label) else battery.label,
+            )
+            setOnClickFillInIntent(R.id.widgetBatteryItem, Intent())
         }
     }
 
@@ -51,4 +58,9 @@ private class BatteryWidgetFactory(context: Context) : RemoteViewsService.Remote
         dischargedThreshold = repository.dischargedThresholdPercent()
         criticalThreshold = repository.criticalChargePercent()
     }
+}
+
+internal fun batteryNumber(label: String, position: Int): String {
+    val digits = Regex("\\d+").find(label)?.value ?: return (position + 1).toString()
+    return digits.toIntOrNull()?.toString() ?: digits
 }

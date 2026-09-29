@@ -12,6 +12,7 @@ Sarmat Monitor is a local-first operational web application for monitoring UAV s
 - Username/password authentication with database-backed HTTP-only sessions
 - Server-enforced `SUPER_ADMIN`, group-isolated `GROUP_ADMIN`, and crew-isolated `CREW` roles
 - Responsive admin dashboard for crews, credentials, batteries, corrections, archives, and global settings
+- UAV and motor registry with `CV`/`CCV` motor types, installation history, and accumulated flight time
 - Live MissionPlanner telemetry for group-scoped administrators over an authenticated WebSocket endpoint
 - Reusable battery-type catalog for capacity, voltage range, cell count, and chemistry
 - Automatic English/Ukrainian client localization based on the browser locale, with English fallback

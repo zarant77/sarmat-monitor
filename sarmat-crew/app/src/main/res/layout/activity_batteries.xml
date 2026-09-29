@@ -63,9 +63,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingStart="20dp"
-        android:paddingTop="18dp"
+        android:paddingTop="14dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="12dp"
+        android:paddingBottom="8dp"
         android:text="@string/loading"
         android:textColor="@color/text_muted"
         android:textSize="13sp" />

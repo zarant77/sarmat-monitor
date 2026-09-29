@@ -23,6 +23,8 @@ import com.sarmat.crew.api.ApiException
 import com.sarmat.crew.api.BatteryHistoryItem
 import com.sarmat.crew.api.BatterySummary
 import com.sarmat.crew.offline.CrewRepository
+import com.sarmat.crew.widget.BatteryWidgetProvider
+import com.sarmat.crew.widget.WidgetPreferences
 import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.app.AlertDialog
 import java.util.Locale
@@ -34,7 +36,7 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
-    private enum class Screen { LOGIN, BATTERIES, DETAIL, MEASUREMENT, HISTORY }
+    private enum class Screen { LOGIN, BATTERIES, DETAIL, MEASUREMENT, HISTORY, WIDGET_SETTINGS }
 
     private lateinit var api: CrewRepository
     private val networkExecutor = Executors.newSingleThreadExecutor()
@@ -79,6 +81,7 @@ class MainActivity : AppCompatActivity() {
                     Screen.HISTORY -> showBatteryDetail()
                     Screen.MEASUREMENT -> { keepDraft(); showBatteryDetail() }
                     Screen.DETAIL -> showBatteries()
+                    Screen.WIDGET_SETTINGS -> showBatteries()
                     Screen.LOGIN -> if (api.hasSession()) showBatteries() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                 }
@@ -128,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.menuButton).setOnClickListener { anchor ->
             PopupMenu(this, anchor).apply {
                 if (api.needsLogin) menu.add("Увійти для синхронізації").setOnMenuItemClickListener { showLogin(); true }
+                menu.add(getString(R.string.widget_settings_title)).setOnMenuItemClickListener { showWidgetSettings(); true }
                 menu.add("Вийти").setOnMenuItemClickListener {
                     val logout = { networkExecutor.execute { api.logout(); runOnUiThread { showLogin() } } }
                     if (api.pendingCount() > 0) AlertDialog.Builder(this@MainActivity)
@@ -158,6 +162,36 @@ class MainActivity : AppCompatActivity() {
         }
         loadBatteries()
         api.requestSync()
+    }
+
+    private fun showWidgetSettings() {
+        screen = Screen.WIDGET_SETTINGS
+        setScreenContent(R.layout.activity_widget_settings)
+        findViewById<View>(R.id.widgetSettingsBack).setOnClickListener { showBatteries() }
+
+        val value = findViewById<TextView>(R.id.widgetTransparencyValue)
+        val preview = findViewById<View>(R.id.widgetSettingsPreview)
+        val slider = findViewById<SeekBar>(R.id.widgetTransparencySlider)
+
+        fun render(transparency: Int) {
+            value.text = getString(R.string.widget_transparency_value, transparency)
+            preview.background.mutate().alpha = ((100 - transparency) * 255 / 100).coerceIn(0, 255)
+        }
+
+        slider.progress = WidgetPreferences.backgroundTransparency(this)
+        render(slider.progress)
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                render(progress)
+                if (fromUser) WidgetPreferences.setBackgroundTransparency(this@MainActivity, progress)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                BatteryWidgetProvider.updateAll(this@MainActivity)
+            }
+        })
     }
 
     private fun updateSyncHeader() {
@@ -290,19 +324,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun batteryCard(item: BatterySummary, dischargedThreshold: Int): View {
         val discharged = isBatteryDischarged(item.state, item.latestChargePercent, dischargedThreshold)
-        val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(108)).apply { setMargins(0, 0, 0, dp(8)) }; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.action_background) }
+        val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(94)).apply { setMargins(0, 0, 0, dp(5)) }; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.action_background) }
         val actionLabel = if (item.activeSince == null) "У ДРОН" else "ЗНЯТИ"
         frame.addView(swipeActionLabel(actionLabel, Gravity.CENTER_VERTICAL or Gravity.START).apply { setPadding(dp(24), 0, 0, 0) }, FrameLayout.LayoutParams(-1, -1))
         frame.addView(swipeActionLabel(actionLabel, Gravity.CENTER_VERTICAL or Gravity.END).apply { setPadding(0, 0, dp(24), 0) }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(11), dp(16), dp(10))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(7))
             background = ContextCompat.getDrawable(this@MainActivity, if (item.activeSince != null) R.drawable.card_active else R.drawable.cell_background)
             val titleRow = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             titleRow.addView(TextView(this@MainActivity).apply {
-                text = if (item.activeSince != null) "⚡ ${item.label}" else item.label; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                text = if (item.activeSince != null) "⚡ ${item.label}" else item.label; textSize = 18f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             }, LinearLayout.LayoutParams(0, -2, 1f))
             titleRow.addView(TextView(this@MainActivity).apply {
-                text = item.latestChargePercent?.let { "$it%" } ?: "—"; textSize = 20f; setTypeface(typeface, Typeface.BOLD)
+                text = item.latestChargePercent?.let { "$it%" } ?: "—"; textSize = 19f; setTypeface(typeface, Typeface.BOLD)
                 setTextColor(ContextCompat.getColor(this@MainActivity, if (discharged) R.color.status_warning else R.color.lime))
             })
             addView(titleRow)
@@ -315,7 +349,7 @@ class MainActivity : AppCompatActivity() {
                     if (item.activeSince == null) append(item.latestDelta?.let { String.format(Locale.US, "Δ %.2f V", it) } ?: if (discharged) "" else "Немає вимірювань")
                 }
                 setTextColor(ContextCompat.getColor(this@MainActivity, when { item.latestHealth == "danger" -> R.color.status_danger; item.latestHealth == "warning" || discharged -> R.color.status_warning; else -> R.color.text_primary }))
-                textSize = 15f; setPadding(0, dp(5), 0, 0)
+                textSize = 14f; setPadding(0, dp(3), 0, 0)
             })
             addView(TextView(this@MainActivity).apply {
                 text = buildString {
@@ -323,7 +357,7 @@ class MainActivity : AppCompatActivity() {
                     if (api.pendingCount(item.id) > 0) append("Очікує синхронізації · ")
                     append(item.latestMeasuredAt?.let { "Перевірена ${age(it)} тому" } ?: "Ще не перевірялась")
                 }
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)); textSize = 13f
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted)); textSize = 12f
             })
         }
         frame.addView(content, FrameLayout.LayoutParams(-1, -1))
@@ -380,7 +414,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleActive(item: BatterySummary) {
         findViewById<TextView>(R.id.listStatusText).text = if (item.activeSince == null) "Встановлюю ${item.label}…" else "Знімаю ${item.label}…"
-        networkExecutor.execute { runCatching { api.toggleActive(item.id) }.onSuccess { runOnUiThread { if (screen == Screen.BATTERIES) loadBatteries() } }.onFailure { error -> runOnUiThread { if (screen == Screen.BATTERIES) findViewById<TextView>(R.id.listStatusText).text = error.message ?: "Не вдалося змінити активну батарею" } } }
+        networkExecutor.execute { runCatching { api.toggleActive(item.id) }.onFailure { error -> runOnUiThread { if (screen == Screen.BATTERIES) findViewById<TextView>(R.id.listStatusText).text = error.message ?: "Не вдалося змінити активну батарею" } } }
     }
 
     private fun showBatteryDetail() {
