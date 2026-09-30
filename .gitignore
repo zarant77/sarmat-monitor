@@ -53,6 +53,11 @@ coverage.*
 local.properties
 captures/
 **/build/
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
 
 # OS and temporary files
 .DS_Store

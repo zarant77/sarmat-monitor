@@ -3,6 +3,24 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val releaseSigningEnvironment = listOf(
+    "ANDROID_KEYSTORE_PATH", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD"
+).associateWith { providers.environmentVariable(it).orNull }
+
+val validateReleaseSigning by tasks.registering {
+    doLast {
+        val missing = releaseSigningEnvironment.filterValues { it.isNullOrBlank() }.keys
+        check(missing.isEmpty()) { "Missing Android release signing environment variables: ${missing.joinToString()}" }
+        check(file(releaseSigningEnvironment.getValue("ANDROID_KEYSTORE_PATH")!!).isFile) {
+            "Android release keystore file does not exist."
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" || it.name == "validateSigningRelease" }.configureEach {
+    dependsOn(validateReleaseSigning)
+}
+
 android {
     namespace = "com.sarmat.crew"
     compileSdk = 36
@@ -17,8 +35,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseSigningEnvironment["ANDROID_KEYSTORE_PATH"]?.takeIf { it.isNotBlank() }?.let { file(it) }
+            storePassword = releaseSigningEnvironment["ANDROID_KEYSTORE_PASSWORD"]
+            keyAlias = releaseSigningEnvironment["ANDROID_KEY_ALIAS"]
+            keyPassword = releaseSigningEnvironment["ANDROID_KEY_PASSWORD"]
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
