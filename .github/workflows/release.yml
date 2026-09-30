@@ -175,7 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-part-android
-          path: sarmat-crew/artifacts/*
+          path: artifacts/*
           if-no-files-found: error
 
   publish:
