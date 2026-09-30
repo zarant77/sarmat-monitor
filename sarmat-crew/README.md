@@ -55,14 +55,15 @@
 Workflow **Android APK** (`.github/workflows/android.yml`) збирає debug APK:
 
 - після push або pull request зі змінами в `sarmat-crew` чи самому workflow;
-- після push тегів `v*`;
 - вручну через **Actions → Android APK → Run workflow**.
 
 Використовуються Java 17, Android SDK 36 і Gradle Wrapper проєкту. Workflow виконує лише `:app:assembleDebug`, без запуску тестів.
 
-Після успішного запуску відкрийте **Artifacts → SarmatCrew-debug-…**, завантажте ZIP і дістаньте `app-debug.apk`. Артефакт зберігається 30 днів. Публікація в Google Play або GitHub Releases не виконується.
+Після успішного запуску відкрийте **Artifacts → SarmatCrew-debug-…**, завантажте ZIP і дістаньте `app-debug.apk`. Артефакт зберігається 30 днів.
 
-Це debug-збірка з автоматично створеним ключем підпису runner-а. Ключ може відрізнятися між запусками та від локальної збірки, тому оновлення поверх установленого APK не гарантується. Для регулярних оновлень зі збереженням даних потрібен постійний ключ підпису, налаштований через GitHub Secrets; ключі не слід додавати до репозиторію.
+Окремо workflow **Release build** (`.github/workflows/release.yml`) після push тега `vMAJOR.MINOR.PATCH` або ручного запуску збирає release APK та AAB. Після ручного запуску вони доступні у спільному workflow artifact. Для тега вони також додаються до GitHub Release як `SarmatCrew-<version>-unsigned.apk` і `SarmatCrew-<version>-unsigned.aab`. Публікація в Google Play не виконується.
+
+Debug-збірка підписується автоматично створеним ключем runner-а. Ключ може відрізнятися між запусками та від локальної збірки, тому оновлення поверх установленого APK не гарантується. Release APK та AAB наразі не підписані. Для встановлюваних release-збірок і регулярних оновлень зі збереженням даних потрібен постійний ключ підпису, налаштований через GitHub Secrets; ключі не слід додавати до репозиторію.
 
 ## Збірка та встановлення на телефон
 

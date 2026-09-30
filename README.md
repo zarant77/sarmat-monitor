@@ -74,9 +74,11 @@ Railway виконає міграції перед запуском backend. П�
 
 ## Релізи
 
-Тег у форматі `vMAJOR.MINOR.PATCH` створює два окремі пакети:
+Тег у форматі `vMAJOR.MINOR.PATCH` автоматично створює та додає до GitHub Release чотири окремі пакети:
 
 - `SarmatPlugins-<version>.msi`;
-- `SarmatMonitor-<version>.zip`.
+- `SarmatMonitor-<version>.zip`;
+- `SarmatCrew-<version>-unsigned.apk`;
+- `SarmatCrew-<version>-unsigned.aab`.
 
-До пакетів додаються лише приклади конфігурації без робочих секретів.
+Android APK та AAB не підписуються, доки для проєкту не налаштовано постійний release-ключ. Debug APK для push, pull request і ручних запусків збирається окремим workflow **Android APK** та доступний у його **Artifacts** протягом 30 днів. До пакетів додаються лише приклади конфігурації без робочих секретів.

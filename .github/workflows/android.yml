@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - "**"
-    tags:
-      - "v*"
     paths:
       - "sarmat-crew/**"
       - ".github/workflows/android.yml"
