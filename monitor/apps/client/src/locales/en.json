@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "SARMAT",
-    "subtitle": "Crew monitoring",
+    "subtitle": "Cat tracking system",
     "loading": "Establishing secure session…"
   },
   "nav": {
