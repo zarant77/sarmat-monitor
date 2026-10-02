@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
+import { DEFAULT_PACK_MIN_VOLTAGE, DEFAULT_PACK_MAX_VOLTAGE } from "@sbm/shared";
 import { db, connection } from "./index.js";
 import { batteries, batteryTypes, crews, groups, transfers, users } from "./schema.js";
 
@@ -30,8 +31,8 @@ if (!defaultType) {
   [defaultType] = await db.insert(batteryTypes).values({
     name: "LiPo 12S 54Ah",
     capacityAh: "54",
-    minVoltage: "36",
-    maxVoltage: "50.4",
+    minVoltage: String(DEFAULT_PACK_MIN_VOLTAGE),
+    maxVoltage: String(DEFAULT_PACK_MAX_VOLTAGE),
     cellCount: 12,
     chemistry: "LiPo"
   }).returning();

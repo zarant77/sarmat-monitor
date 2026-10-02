@@ -1,4 +1,4 @@
-import { calculateChargePercent } from "./charge-percent.js";
+import { voltageToPercent } from "@sbm/shared";
 
 type Reading = { totalVoltage: string | number; measuredAt: Date };
 
@@ -9,6 +9,6 @@ export function currentBatteryCharge(measurement: Reading | undefined, automatic
   const reading = useAutomatic ? automatic : measurement;
   if (!reading) return null;
   const totalVoltage = Number(reading.totalVoltage);
-  return { totalVoltage, chargePercent: calculateChargePercent(totalVoltage, limits.minVoltage, limits.maxVoltage),
+  return { totalVoltage, chargePercent: voltageToPercent(totalVoltage, limits.minVoltage, limits.maxVoltage),
     measuredAt: reading.measuredAt.toISOString(), source: useAutomatic ? "mission_planner" as const : "measurement" as const };
 }

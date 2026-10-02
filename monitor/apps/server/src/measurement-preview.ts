@@ -1,5 +1,5 @@
 import type { MeasurementPreview } from "@sbm/shared";
-import { calculateChargePercent } from "./charge-percent.js";
+import { voltageToPercent } from "@sbm/shared";
 import { calculateCellHealth } from "./health.js";
 import { cellVoltageBounds } from "./voltage-limits.js";
 
@@ -24,6 +24,6 @@ export function calculateMeasurementPreview(
   const moduleATotalVoltage = Math.round(cellsA.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000;
   const moduleBTotalVoltage = Math.round(cellsB.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000;
   const combinedTotalVoltage = Math.round((moduleATotalVoltage + moduleBTotalVoltage) * 1000) / 1000;
-  const chargePercent = calculateChargePercent(combinedTotalVoltage, packMinVoltage, packMaxVoltage);
+  const chargePercent = voltageToPercent(combinedTotalVoltage, packMinVoltage, packMaxVoltage);
   return { cells, moduleATotalVoltage, moduleBTotalVoltage, combinedTotalVoltage, chargePercent, ...health, warningThresholdV: warning, dangerThresholdV: danger };
 }

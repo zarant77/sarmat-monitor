@@ -15,7 +15,7 @@ import { registerStationBatteries } from "./station-batteries.js";
 import { db } from "./db/index.js";
 import { batteries, batteryTypes, batteryVoltageEvents, crews, cycleEvents, drones, groups, measurements, motors, sessions, settings, syncOperations, transfers, users } from "./db/schema.js";
 import { syncOperationSchema, syncPayloadHash } from "./offline-sync.js";
-import { calculateChargePercent } from "./charge-percent.js";
+import { voltageToPercent } from "@sbm/shared";
 import { calculateCellHealth } from "./health.js";
 import { calculateMeasurementPreview } from "./measurement-preview.js";
 import { assertActiveActor, assertCrewAccess, assertGroupAccess, assertGroupAdministrator, assertSuperAdmin, assertTransferAccess, createSession, effectiveCrewId, isAccountEnabled, loadActor, publicActor, revokeSession, type Actor } from "./auth.js";
@@ -48,7 +48,7 @@ function mapMeasurement(row: typeof measurements.$inferSelect, limits: { minVolt
     id: row.id, batteryId: row.batteryId, totalVoltage: Number(row.totalVoltage),
     cellVoltages: row.cellVoltages, minCellVoltage: Number(row.minCellVoltage),
     maxCellVoltage: Number(row.maxCellVoltage), cellDelta: Number(row.cellDelta),
-    chargePercent: calculateChargePercent(Number(row.totalVoltage), limits.minVoltage, limits.maxVoltage), temperatureC: number(row.temperatureC), health: row.health,
+    chargePercent: voltageToPercent(Number(row.totalVoltage), limits.minVoltage, limits.maxVoltage), temperatureC: number(row.temperatureC), health: row.health,
     warningThresholdV: Number(row.warningThresholdV), dangerThresholdV: Number(row.dangerThresholdV),
     notes: row.notes, correctedAt: row.correctedAt ? iso(row.correctedAt) : null,
     correctedByUserId: row.correctedByUserId, measuredAt: iso(row.measuredAt)
@@ -445,7 +445,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       id: row.id, kind: row.kind,
       occurredAt: row.occurredAt instanceof Date ? iso(row.occurredAt) : new Date(row.occurredAt).toISOString(),
       ...row.data,
-      ...(row.kind === "measurement" ? { chargePercent: calculateChargePercent(Number(row.data.totalVoltage), battery.minVoltage, battery.maxVoltage) } : {})
+      ...(row.kind === "measurement" ? { chargePercent: voltageToPercent(Number(row.data.totalVoltage), battery.minVoltage, battery.maxVoltage) } : {})
     }));
     return { items, nextOffset: hasMore ? offset + limit : null };
   });

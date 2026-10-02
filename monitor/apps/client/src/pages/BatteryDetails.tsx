@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "re
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BatteryMedium, Gauge, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { Measurement, MeasurementPreview } from "@sbm/shared";
+import { voltageToPercent, type Measurement, type MeasurementPreview } from "@sbm/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { BatteryForm } from "../components/Forms";
@@ -28,7 +28,7 @@ function EventForm({ id, batteryLabel, cellCount, minVoltage, maxVoltage, crewId
   const minCellVoltage = minVoltage / cellCount; const maxCellVoltage = maxVoltage / cellCount + 0.04;
   const cellsComplete = cells.every(value => isCompleteCell(value, minCellVoltage, maxCellVoltage));
   const localTotalVoltage = cellsComplete ? Math.round(numericCells.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000 : null;
-  const localChargePercent = localTotalVoltage == null ? null : Math.round(Math.max(0, Math.min(100, (localTotalVoltage - minVoltage) / (maxVoltage - minVoltage) * 100)));
+  const localChargePercent = localTotalVoltage == null ? null : voltageToPercent(localTotalVoltage, minVoltage, maxVoltage);
   useEffect(() => {
     if (type !== "check" || !cellsComplete || cellCount !== 12) { setCombinedPreview(null); return; }
     let cancelled = false;
@@ -73,10 +73,10 @@ function CorrectionForm({ measurement, minVoltage, maxVoltage, onClose }: { meas
   const mutation = useMutation({ mutationFn: (data: any) => api.correctMeasurement(measurement.id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["battery", measurement.batteryId] }); qc.invalidateQueries({ queryKey: ["batteries"] }); onClose(); } });
   const cellsComplete = cells.every(value => isCompleteCell(value, minVoltage / cells.length, maxVoltage / cells.length + 0.04));
   const totalVoltage = cells.reduce((sum, value) => sum + Number(value), 0);
-  const chargePercent = Math.round(Math.max(0, Math.min(100, (totalVoltage - minVoltage) / (maxVoltage - minVoltage) * 100)));
+  const chargePercent = cellsComplete ? voltageToPercent(totalVoltage, minVoltage, maxVoltage) : null;
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!cellsComplete || mutation.isPending) return; const data = new FormData(event.currentTarget); mutation.mutate({ cellVoltages: cells.map(Number), notes: String(data.get("notes")) }); };
   return <Modal title={t("events.correctMeasurement")} eyebrow={t("events.adminAction")} onClose={onClose}><form className="form-grid" onSubmit={submit}>
-    <div className="checker-calculated full"><span><small>{t("events.totalVoltage")}</small><strong>{totalVoltage.toFixed(2)} <em>{t("common.volts")}</em></strong></span><span><small>{t("events.chargePercent")}</small><strong>{chargePercent}<em>%</em></strong></span></div>
+    <div className="checker-calculated full"><span><small>{t("events.totalVoltage")}</small><strong>{totalVoltage.toFixed(2)} <em>{t("common.volts")}</em></strong></span><span><small>{t("events.chargePercent")}</small><strong>{chargePercent ?? "—"}{chargePercent != null && <em>%</em>}</strong></span></div>
     <div className="full"><CellVoltageInputs cells={cells} min={minVoltage / cells.length} max={maxVoltage / cells.length + 0.04} disabled={mutation.isPending} onChange={setCells}/></div>
     <label className="full">{t("events.correctionNote")}<textarea name="notes" defaultValue={measurement.notes}/></label>{mutation.error && <p className="form-error">{t("errors.generic")}</p>}<div className="form-actions full"><button type="button" className="button secondary" onClick={onClose}>{t("common.cancel")}</button><button className="button primary" disabled={!cellsComplete || mutation.isPending}>{t("events.saveCorrection")}</button></div>
   </form></Modal>;

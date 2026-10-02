@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "./db/index.js";
-import { calculateChargePercent } from "./charge-percent.js";
+import { voltageToPercent } from "@sbm/shared";
 import { batteries, batteryTypes, cycleEvents, measurements } from "./db/schema.js";
 
 export interface ChargeStateThresholds {
@@ -65,7 +65,7 @@ export async function rebuildInferredCycleEvents(batteryId: string, thresholds: 
       .from(measurements).where(eq(measurements.batteryId, batteryId)).orderBy(asc(measurements.measuredAt), asc(measurements.id));
     const inferred = inferCycleEvents(history.map(row => ({
       id: row.id, measuredAt: row.measuredAt,
-      chargePercent: calculateChargePercent(Number(row.totalVoltage), Number(type.minVoltage), Number(type.maxVoltage))
+      chargePercent: voltageToPercent(Number(row.totalVoltage), Number(type.minVoltage), Number(type.maxVoltage))
     })), thresholds);
     await tx.delete(cycleEvents).where(and(eq(cycleEvents.batteryId, batteryId), eq(cycleEvents.inferred, true)));
     if (inferred.length) await tx.insert(cycleEvents).values(inferred.map(event => ({ batteryId, ...event, inferred: true, notes: "" })));
