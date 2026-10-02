@@ -58,6 +58,7 @@ export const sessions = pgTable("sessions", {
 }, table => [uniqueIndex("sessions_token_hash_idx").on(table.tokenHash), index("sessions_user_idx").on(table.userId)]);
 
 export const batteryTypes = pgTable("battery_types", {
+  internalResistanceMilliOhms: numeric("internal_resistance_milliohms", { precision: 10, scale: 3 }),
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 100 }).notNull().unique(),
   capacityAh: numeric("capacity_ah", { precision: 8, scale: 2 }).notNull(),
@@ -69,6 +70,8 @@ export const batteryTypes = pgTable("battery_types", {
 });
 
 export const batteries = pgTable("batteries", {
+  actualCapacityAh: numeric("actual_capacity_ah", { precision: 8, scale: 2 }),
+  internalResistanceMilliOhmsOverride: numeric("internal_resistance_milliohms_override", { precision: 10, scale: 3 }),
   id: uuid("id").defaultRandom().primaryKey(),
   crewId: uuid("crew_id").references(() => crews.id).notNull(),
   typeId: uuid("type_id").references(() => batteryTypes.id, { onDelete: "restrict" }).notNull(),
@@ -138,6 +141,7 @@ export const measurements = pgTable("measurements", {
   id: uuid("id").defaultRandom().primaryKey(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
   totalVoltage: numeric("total_voltage", { precision: 8, scale: 3 }).notNull(),
+  currentAmps: numeric("current_amps", { precision: 10, scale: 3 }).default("0").notNull(),
   cellVoltages: jsonb("cell_voltages").$type<number[]>().notNull(),
   minCellVoltage: numeric("min_cell_voltage", { precision: 6, scale: 3 }).notNull(),
   maxCellVoltage: numeric("max_cell_voltage", { precision: 6, scale: 3 }).notNull(),
@@ -165,8 +169,11 @@ export const batteryVoltageEvents = pgTable("battery_voltage_events", {
   id: uuid("id").primaryKey(),
   sessionId: uuid("session_id").references(() => batteryTelemetrySessions.id, { onDelete: "cascade" }).notNull(),
   batteryId: uuid("battery_id").references(() => batteries.id, { onDelete: "cascade" }).notNull(),
-  type: varchar("type", { length: 32 }).$type<"vehicle_connected" | "vehicle_disarmed">().notNull(),
+  type: varchar("type", { length: 32 }).$type<"vehicle_connected" | "vehicle_disarmed" | "consumption_sample">().notNull(),
   totalVoltage: numeric("total_voltage", { precision: 8, scale: 3 }).notNull(),
+  currentAmps: numeric("current_amps", { precision: 10, scale: 3 }),
+  consumedMah: numeric("consumed_mah", { precision: 14, scale: 3 }),
+  consumptionComplete: boolean("consumption_complete").default(false).notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()

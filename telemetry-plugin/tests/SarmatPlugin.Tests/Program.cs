@@ -20,6 +20,7 @@ namespace SarmatPlugin.Tests
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery dialog waits for stable connection and tolerates brief gaps", BatteryDialogTiming);
             Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
+            Run("Battery consumption integrates fresh current and checkpoints cumulative mAh", BatteryConsumption);
             Run("Flight tracker emits durable armed and disarmed pairs", FlightEvents);
             Run("Flight outbox survives reload and isolates API identities", FlightOutbox);
             Run("Battery outbox survives reload and isolates API identities", BatteryOutbox);
@@ -101,17 +102,19 @@ namespace SarmatPlugin.Tests
             tracker.Heartbeat(false, now.AddSeconds(1));
             tracker.Voltage(0, now.AddSeconds(2));
             tracker.Voltage(double.NaN, now.AddSeconds(2));
-            tracker.Voltage(50.123, now.AddSeconds(2));
+            tracker.Voltage(50.123, now.AddSeconds(2), 2.3456);
             Equal(0, tracker.Ready().Length);
             tracker.Confirm(Guid.NewGuid().ToString()); Equal(0, tracker.Ready().Length);
             tracker.Confirm(session);
             var connected = tracker.Ready().Single();
             Equal("vehicle_connected", (string)connected["type"]); Equal(50.123, (double)connected["totalVoltage"]);
+            Equal(2.346, (double)connected["currentAmps"]);
             tracker.Stored(connected); tracker.Voltage(49, now.AddSeconds(3)); Equal(0, tracker.Ready().Length);
             tracker.Heartbeat(true, now.AddSeconds(3)); tracker.Heartbeat(false, now.AddSeconds(4));
             Equal(0, tracker.Ready().Length); // A new sample must arrive after disarm.
             tracker.Voltage(43, now.AddSeconds(5));
             var disarm = tracker.Ready().Single(); Equal("vehicle_disarmed", (string)disarm["type"]);
+            Equal(null, disarm["currentAmps"]);
             Equal(session, (string)disarm["sessionId"]); tracker.Stored(disarm);
             tracker.Heartbeat(false, now.AddSeconds(6)); tracker.Voltage(44, now.AddSeconds(7)); Equal(0, tracker.Ready().Length);
             tracker.Heartbeat(true, now.AddSeconds(8)); tracker.Heartbeat(false, now.AddSeconds(20));
@@ -119,6 +122,32 @@ namespace SarmatPlugin.Tests
             tracker.Reset(); tracker.Heartbeat(false, now.AddSeconds(22)); tracker.Voltage(44, now.AddSeconds(23)); Equal(0, tracker.Ready().Length);
             tracker.Connect(now); tracker.Confirm(tracker.SessionId);
             tracker.Heartbeat(false, now.AddSeconds(31)); tracker.Voltage(44, now.AddSeconds(32)); Equal(0, tracker.Ready().Length);
+        }
+
+        private static void BatteryConsumption()
+        {
+            var tracker = new BatteryVoltageTracker(); var now = DateTime.UtcNow;
+            tracker.Connect(now); tracker.Confirm(tracker.SessionId);
+            for (var seconds = 0; seconds <= 30; seconds++)
+            {
+                tracker.Heartbeat(true, now.AddSeconds(seconds));
+                tracker.Voltage(48, now.AddSeconds(seconds), 36);
+            }
+            var items = tracker.Ready(); Equal(3, items.Length);
+            Equal(0.0, (double)items[0]["consumedMah"]);
+            Equal(150.0, (double)items[1]["consumedMah"]);
+            Equal(300.0, (double)items[2]["consumedMah"]);
+            Equal(true, (bool)items[2]["consumptionComplete"]);
+            tracker.Voltage(48, now.AddSeconds(30), 36); Equal(3, tracker.Ready().Length);
+            tracker.Heartbeat(false, now.AddSeconds(31)); tracker.Voltage(49, now.AddSeconds(31), 0);
+            var landing = tracker.Ready().Last(); Equal("vehicle_disarmed", (string)landing["type"]);
+            Equal(305.0, (double)landing["consumedMah"]);
+            tracker.Connect(now.AddSeconds(40)); tracker.Confirm(tracker.SessionId);
+            tracker.Heartbeat(true, now.AddSeconds(40)); tracker.Voltage(50, now.AddSeconds(40), 36);
+            Equal(0.0, (double)tracker.Ready().Single()["consumedMah"]);
+            tracker.Heartbeat(true, now.AddSeconds(55)); tracker.Voltage(50, now.AddSeconds(55), 36);
+            var afterGap = tracker.Ready().Last(); Equal(0.0, (double)afterGap["consumedMah"]);
+            Equal(false, (bool)afterGap["consumptionComplete"]);
         }
 
         private static void FlightEvents()
@@ -203,7 +232,8 @@ namespace SarmatPlugin.Tests
             var tracker = new BatteryVoltageTracker(); tracker.Connect(now); var old = tracker.SessionId;
             tracker.Confirm(old); True(tracker.IsConfirmed); tracker.Connect(now, false);
             True(old != tracker.SessionId); True(!tracker.IsConfirmed); tracker.Confirm(tracker.SessionId);
-            tracker.Heartbeat(false, now); tracker.Voltage(48, now.AddSeconds(1)); Equal(0, tracker.Ready().Length);
+            tracker.Heartbeat(false, now); tracker.Voltage(48, now.AddSeconds(1));
+            Equal("consumption_sample", (string)tracker.Ready().Single()["type"]); // New binding establishes a zero counter, not a connection event.
         }
 
         private static void BatteryApiSettings()

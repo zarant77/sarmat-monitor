@@ -37,11 +37,10 @@ beforeAll(async () => {
   const [group] = await db.insert(groups).values({ name: "Test group" }).returning();
   const [crew, other] = await db.insert(crews).values([{ groupId: group.id, number: 1, name: "First" }, { groupId: group.id, number: 2, name: "Second" }]).returning();
   secondCrewId = other.id;
-  const [type] = await db.insert(batteryTypes).values({ name: "12S", capacityAh: "20", minVoltage: "36", maxVoltage: "50.4", cellCount: 12, chemistry: "Li-ion" }).returning();
-  const [battery, archived] = await db.insert(batteries).values([
-    { crewId: crew.id, typeId: type.id, serialNumber: "live", label: "Live" },
-    { crewId: crew.id, typeId: type.id, serialNumber: "archived", label: "Archived", state: "retired", archivedAt: new Date() }
-  ]).returning();
+  // Seed the pre-migration schema without referencing columns introduced later.
+  const { rows: [type] } = await pg.query<{ id: string }>(`INSERT INTO battery_types (name, capacity_ah, min_voltage, max_voltage, cell_count, chemistry) VALUES ('12S', 20, 36, 50.4, 12, 'Li-ion') RETURNING id`);
+  const { rows: [battery] } = await pg.query<{ id: string }>(`INSERT INTO batteries (crew_id, type_id, serial_number, label) VALUES ($1, $2, 'live', 'Live') RETURNING id`, [crew.id, type.id]);
+  const { rows: [archived] } = await pg.query<{ id: string }>(`INSERT INTO batteries (crew_id, type_id, serial_number, label, state, archived_at) VALUES ($1, $2, 'archived', 'Archived', 'retired', now()) RETURNING id`, [crew.id, type.id]);
   batteryId = battery.id; legacyArchiveId = archived.id;
   const [transfer] = await db.insert(transfers).values({ batteryId, toCrewId: crew.id }).returning();
   initialTransferId = transfer.id;
@@ -53,6 +52,8 @@ beforeAll(async () => {
   await pg.transaction(async tx => { await tx.exec(migration("0006_dynamic_charge_percent")); });
   await pg.exec(migration("0008_battery_voltage_events"));
   await pg.exec(migration("0013_freezing_quasimodo"));
+  await pg.exec(migration("0015_amazing_rumiko_fujikawa"));
+  await pg.exec(migration("0016_flawless_the_initiative"));
   app = await buildApp();
 }, 30000);
 

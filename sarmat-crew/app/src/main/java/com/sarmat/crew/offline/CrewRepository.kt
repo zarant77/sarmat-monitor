@@ -58,6 +58,8 @@ class CrewRepository(
                             latestTotalVoltage = if (updatesCharge) result.totalVoltage else item.latestTotalVoltage,
                             latestChargePercent = if (updatesCharge) result.chargePercent else item.latestChargePercent,
                             chargeMeasuredAt = if (updatesCharge) body.getString("occurredAt") else item.chargeMeasuredAt,
+                            chargeMethod = if (updatesCharge) "voltage" else item.chargeMethod,
+                            chargeIncomplete = if (updatesCharge) false else item.chargeIncomplete,
                             latestDelta = result.cellDelta, latestHealth = result.health)
                     }
                 }
@@ -107,7 +109,7 @@ class CrewRepository(
                 preview?.chargePercent, preview?.minCellVoltage, preview?.maxCellVoltage, preview?.cellDelta, preview?.health,
                 thresholds.optDouble("warningCellDeltaV", .1), thresholds.optDouble("dangerCellDeltaV", .2),
                 null, null, null, null, null,
-                "${if (it.state == "blocked") "Не надіслано: ${it.error}" else "Очікує синхронізації"}\n${it.body.optString("notes")}"))
+                "${if (it.state == "blocked") "Не надіслано: ${it.error}" else "Очікує синхронізації"}\n${it.body.optString("notes")}", currentAmps = 0.0))
         }
         val sorted = items.distinctBy { it.id }.sortedByDescending { Instant.parse(it.occurredAt) }
         return BatteryHistoryPage(sorted.drop(offset).take(limit), if (offset + limit < sorted.size) offset + limit else null)

@@ -14,10 +14,13 @@ const flightEventSchema = z.object({
   occurredAt: z.iso.datetime({ offset: true })
 });
 const voltageSchema = z.object({
-  id: z.uuid(), sessionId: z.uuid(), type: z.enum(["vehicle_connected", "vehicle_disarmed"]),
+  id: z.uuid(), sessionId: z.uuid(), type: z.enum(["vehicle_connected", "vehicle_disarmed", "consumption_sample"]),
   totalVoltage: z.number().finite().positive().max(1000).transform(value => Math.round(value * 1000) / 1000).pipe(z.number().positive()),
+  currentAmps: z.number().finite().min(0).max(10000).transform(value => Math.round(value * 1000) / 1000).nullable().optional(),
+  consumedMah: z.number().finite().min(0).max(10_000_000_000).transform(value => Math.round(value * 1000) / 1000).nullable().optional(),
+  consumptionComplete: z.boolean().default(false),
   occurredAt: z.iso.datetime({ offset: true }), measuredAt: z.iso.datetime({ offset: true })
-});
+}).refine(value => value.type !== "consumption_sample" || value.consumedMah != null, "Consumption samples require cumulative mAh");
 
 export async function registerStationBatteries(app: FastifyInstance) {
   // Separate from user-session routes: the station secret only grants crew-local access.
@@ -92,11 +95,16 @@ export async function registerStationBatteries(app: FastifyInstance) {
           .where(and(eq(batteryTelemetrySessions.id, data.sessionId), eq(batteryTelemetrySessions.crewId, request.telemetryCrew!.id)));
         if (!session) throw Object.assign(new Error("Battery session not found"), { statusCode: 404 });
         // Resolve the immutable selection, never the active battery at delivery time.
-        const values = { ...data, batteryId: session.batteryId, totalVoltage: data.totalVoltage.toFixed(3), occurredAt, measuredAt };
+        const currentAmps = data.currentAmps ?? null;
+        const consumedMah = data.consumedMah ?? null;
+        const values = { ...data, batteryId: session.batteryId, totalVoltage: data.totalVoltage.toFixed(3), currentAmps: currentAmps?.toFixed(3) ?? null,
+          consumedMah: consumedMah?.toFixed(3) ?? null, occurredAt, measuredAt };
         const [inserted] = await tx.insert(batteryVoltageEvents).values(values).onConflictDoNothing().returning();
         if (inserted) return { id: inserted.id, duplicate: false };
         const [existing] = await tx.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.id, data.id));
         if (!existing || existing.sessionId !== data.sessionId || existing.type !== data.type || Number(existing.totalVoltage) !== data.totalVoltage ||
+            (existing.currentAmps === null ? null : Number(existing.currentAmps)) !== currentAmps ||
+            (existing.consumedMah === null ? null : Number(existing.consumedMah)) !== consumedMah || existing.consumptionComplete !== data.consumptionComplete ||
             existing.occurredAt.getTime() !== occurredAt.getTime() || existing.measuredAt.getTime() !== measuredAt.getTime())
           throw Object.assign(new Error("Event ID already used with different data"), { statusCode: 409 });
         return { id: existing.id, duplicate: true };

@@ -15,11 +15,10 @@ namespace SarmatPlugin.UI
         private readonly PluginSettings settings;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly FlowLayoutPanel batteryChoices = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        private readonly FlowLayoutPanel droneChoices = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        private readonly Label status = new Label { Dock = DockStyle.Top, Height = 55, Text = "Loading equipment…" };
+        private readonly Label status = new Label { Dock = DockStyle.Top, Height = 55, Text = "Loading batteries…" };
         private readonly Button save = new Button { Text = "Confirm", AutoSize = true, Enabled = false };
         private readonly Button retry = new Button { Text = "Reload", AutoSize = true };
-        private string activeId, activeSince;
+        private string activeId, activeSince, droneId;
         private bool busy;
         private readonly string sessionId;
         private readonly Func<bool> canConfirm;
@@ -30,19 +29,15 @@ namespace SarmatPlugin.UI
             this.settings = settings;
             this.sessionId = sessionId;
             this.canConfirm = canConfirm;
-            Text = "Select drone and battery"; Width = 620; Height = 500;
+            Text = "Select battery"; Width = 420; Height = 500;
             MinimumSize = new System.Drawing.Size(420, 300);
             StartPosition = FormStartPosition.CenterParent; MinimizeBox = false; MaximizeBox = false;
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42 };
             var cancel = new Button { Text = "Cancel", AutoSize = true };
             cancel.Click += (s, e) => Close();
             buttons.Controls.AddRange(new Control[] { save, retry, cancel });
-            var selections = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-            selections.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); selections.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            var dronesBox = new GroupBox { Text = "Drone", Dock = DockStyle.Fill }; dronesBox.Controls.Add(droneChoices);
             var batteriesBox = new GroupBox { Text = "Battery", Dock = DockStyle.Fill }; batteriesBox.Controls.Add(batteryChoices);
-            selections.Controls.Add(dronesBox, 0, 0); selections.Controls.Add(batteriesBox, 1, 0);
-            Controls.Add(selections); Controls.Add(status); Controls.Add(buttons);
+            Controls.Add(batteriesBox); Controls.Add(status); Controls.Add(buttons);
             Padding = new Padding(12);
             Shown += async (s, e) => await LoadBatteries();
             retry.Click += async (s, e) => await LoadBatteries();
@@ -51,13 +46,13 @@ namespace SarmatPlugin.UI
         }
         private void Busy(bool value)
         {
-            busy = value; retry.Enabled = !value; batteryChoices.Enabled = droneChoices.Enabled = !value;
-            save.Enabled = !value && batteryChoices.Controls.OfType<RadioButton>().Any(r => r.Checked) && droneChoices.Controls.OfType<RadioButton>().Any(r => r.Checked);
+            busy = value; retry.Enabled = !value; batteryChoices.Enabled = !value;
+            save.Enabled = !value && batteryChoices.Controls.OfType<RadioButton>().Any(r => r.Checked) && !string.IsNullOrEmpty(droneId);
         }
         private async Task LoadBatteries(string notice = null)
         {
             if (busy || cancellation.IsCancellationRequested) return;
-            Busy(true); status.Text = "Loading equipment…";
+            Busy(true); droneId = null; status.Text = "Loading batteries…";
             try
             {
                 using (var api = new BatteryApiClient(settings))
@@ -68,7 +63,6 @@ namespace SarmatPlugin.UI
                     if (!data.TryGetValue("batteries", out var items) || !(items is IList rows))
                         throw new InvalidOperationException("Invalid battery list");
                     foreach (Control control in batteryChoices.Controls.Cast<Control>().ToArray()) control.Dispose();
-                    foreach (Control control in droneChoices.Controls.Cast<Control>().ToArray()) control.Dispose();
                     foreach (var item in rows)
                     {
                         var row = MiniJson.Object(item); var id = MiniJson.String(row, "id");
@@ -78,26 +72,21 @@ namespace SarmatPlugin.UI
                         batteryChoices.Controls.Add(radio);
                     }
                     if (!data.TryGetValue("drones", out var droneItems) || !(droneItems is IList droneRows))
-                        throw new InvalidOperationException("Server must be updated to support drone selection");
-                    foreach (var item in droneRows)
-                    {
-                        var row = MiniJson.Object(item); var id = MiniJson.String(row, "id");
-                        var radio = new RadioButton { AutoSize = true, Tag = id,
-                            Text = MiniJson.String(row, "name") + " · " + MiniJson.String(row, "model") };
-                        radio.CheckedChanged += (s, e) => { if (!busy) Busy(false); };
-                        droneChoices.Controls.Add(radio);
-                    }
-                    status.Text = notice ?? (rows.Count == 0 || droneRows.Count == 0 ? "No available drone or battery for this crew. Add equipment in the app, then reload." : "Select the connected drone and its battery before arming.");
+                        throw new InvalidOperationException("Server must be updated to support drone flight recording");
+                    if (droneRows.Count == 1) droneId = MiniJson.String(MiniJson.Object(droneRows[0]), "id");
+                    status.Text = droneRows.Count == 0 ? "No active drone for this crew. Assign a drone in the app, then reload."
+                        : droneRows.Count > 1 ? "This crew has more than one active drone. Keep one active drone in the app, then reload."
+                        : rows.Count == 0 ? "No available batteries for this crew. Add batteries in the app, then reload."
+                        : notice ?? "Confirm the active battery or select another battery before arming.";
                 }
             }
-            catch (Exception ex) { if (!cancellation.IsCancellationRequested) { batteryChoices.Controls.Clear(); droneChoices.Controls.Clear(); status.Text = "Could not load equipment. " + ex.Message; } }
+            catch (Exception ex) { if (!cancellation.IsCancellationRequested) { batteryChoices.Controls.Clear(); droneId = null; status.Text = "Could not load batteries. " + ex.Message; } }
             finally { if (!cancellation.IsCancellationRequested) Busy(false); }
         }
         private async Task SaveSelection()
         {
             var selected = batteryChoices.Controls.OfType<RadioButton>().FirstOrDefault(r => r.Checked);
-            var selectedDrone = droneChoices.Controls.OfType<RadioButton>().FirstOrDefault(r => r.Checked);
-            if (busy || selected == null || selectedDrone == null) return;
+            if (busy || selected == null || string.IsNullOrEmpty(droneId)) return;
             if (!canConfirm()) { status.Text = "Drone must be connected and disarmed before confirming."; return; }
             Busy(true); status.Text = "Saving selection…";
             bool conflict = false;
@@ -105,7 +94,7 @@ namespace SarmatPlugin.UI
             {
                 using (var api = new BatteryApiClient(settings))
                 {
-                    if (await api.SelectAsync((string)selected.Tag, (string)selectedDrone.Tag, activeId, activeSince, sessionId, cancellation.Token))
+                    if (await api.SelectAsync((string)selected.Tag, droneId, activeId, activeSince, sessionId, cancellation.Token))
                     { if (!cancellation.IsCancellationRequested && canConfirm()) { BatteryConfirmed?.Invoke(sessionId); Close(); }
                       else if (!cancellation.IsCancellationRequested) status.Text = "Connection changed. Reload before confirming again."; }
                     else conflict = true;
@@ -113,7 +102,7 @@ namespace SarmatPlugin.UI
             }
             catch (Exception ex) { if (!cancellation.IsCancellationRequested) status.Text = "Could not save selection. Reload before retrying. " + ex.Message; }
             finally { if (!cancellation.IsCancellationRequested) Busy(false); }
-            if (conflict) await LoadBatteries("The active battery changed or is unavailable. Review the updated list and confirm again.");
+            if (conflict) await LoadBatteries("The active drone or battery changed or is unavailable. Review the updated list and confirm again.");
         }
     }
 }

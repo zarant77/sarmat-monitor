@@ -369,10 +369,10 @@ namespace SarmatPlugin
             if (task.IsFaulted && task.Exception != null && !disposed) log.Error(worker + " stopped", task.Exception.Flatten());
         }
 
-        public void ObserveBatteryVoltage(double voltage)
+        public void ObserveBatteryVoltage(double voltage, double? currentAmps = null)
         {
             lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
-                batteryTracker.Voltage(voltage, DateTime.UtcNow);
+                batteryTracker.Voltage(voltage, DateTime.UtcNow, currentAmps);
         }
         public void ObserveBatteryHeartbeat(bool armed)
         {

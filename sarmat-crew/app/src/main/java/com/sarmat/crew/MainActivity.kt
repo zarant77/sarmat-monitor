@@ -454,6 +454,14 @@ class MainActivity : AppCompatActivity() {
                 item.droneVoltageAt?.let { append(" · ${formatHistoryTime(it)}") }
                 append("\nMission Planner · Без даних комірок")
             }
+            item.chargeMethod?.let { method ->
+                append("\nSOC: " + when (method) {
+                    "consumption" -> "за витраченою ємністю"
+                    "voltage_compensated" -> "за компенсованою напругою"
+                    else -> "оцінка за напругою"
+                })
+                if (item.chargeIncomplete) append(" · неповні дані про витрату")
+            }
         }
         findViewById<TextView>(R.id.detailBatteryCharge).apply {
             text = item.latestChargePercent?.let { "$it%" } ?: "—"
@@ -883,6 +891,7 @@ class MainActivity : AppCompatActivity() {
     private fun historyMeasurementStats(item: BatteryHistoryItem): String = buildString {
         append(listOfNotNull(
             item.totalVoltage?.let { String.format(Locale.US, "Загальна: %.2f V", it) },
+            item.currentAmps?.let { String.format(Locale.US, "Струм: %.2f A", it) },
             item.chargePercent?.let { "Заряд: $it%" },
             item.health?.let { "Стан: ${healthLabel(it)}" }
         ).joinToString(" · "))
@@ -927,10 +936,12 @@ class MainActivity : AppCompatActivity() {
         when (item.kind) {
             "vehicle_connected", "vehicle_disarmed" -> {
                 item.totalVoltage?.let { append(String.format(Locale.US, "%.2f V · Mission Planner · Без даних комірок", it)) }
+                item.currentAmps?.let { append(String.format(Locale.US, " · %.2f A", it)) }
             }
             "measurement" -> append(listOfNotNull(
                 item.chargePercent?.let { "$it%" },
                 item.totalVoltage?.let { String.format(Locale.US, "%.2f V", it) },
+                item.currentAmps?.let { String.format(Locale.US, "%.2f A", it) },
                 item.cellDelta?.let { String.format(Locale.US, "Δ %.2f V", it) },
                 item.health?.let(::healthLabel)
             ).joinToString(" · "))

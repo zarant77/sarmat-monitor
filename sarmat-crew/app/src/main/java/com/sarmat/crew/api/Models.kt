@@ -29,6 +29,8 @@ data class BatterySummary(
     val droneVoltage: Double? = null,
     val droneVoltageAt: String? = null,
     val chargeMeasuredAt: String? = latestMeasuredAt,
+    val chargeMethod: String? = null,
+    val chargeIncomplete: Boolean = false,
 )
 
 data class MeasurementPreview(
@@ -59,6 +61,7 @@ data class BatteryHistoryItem(
     val fromCrewName: String?,
     val toCrewName: String?,
     val notes: String?,
+    val currentAmps: Double? = null,
 )
 
 data class BatteryHistoryPage(val items: List<BatteryHistoryItem>, val nextOffset: Int?)

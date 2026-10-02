@@ -31,6 +31,16 @@ declare module "fastify" { interface FastifyRequest { telemetryCrew: TelemetryCr
 
 const number = (value: string | number | null) => value === null ? null : Number(value);
 const iso = (value: Date) => value.toISOString();
+const numericInput = (value: number | null | undefined) => value == null ? value : String(value);
+function batteryCalibration(battery: typeof batteries.$inferSelect, type: typeof batteryTypes.$inferSelect) {
+  return { actualCapacityAh: number(battery.actualCapacityAh),
+    internalResistanceMilliOhmsOverride: number(battery.internalResistanceMilliOhmsOverride),
+    internalResistanceMilliOhms: number(battery.internalResistanceMilliOhmsOverride ?? type.internalResistanceMilliOhms) };
+}
+function socLimits(battery: { minVoltage: number; maxVoltage: number; capacityAh: number; actualCapacityAh?: number | null; internalResistanceMilliOhms?: number | null }) {
+  return { minVoltage: battery.minVoltage, maxVoltage: battery.maxVoltage,
+    capacityAh: battery.actualCapacityAh ?? battery.capacityAh, internalResistanceMilliOhms: battery.internalResistanceMilliOhms };
+}
 const sumCellVoltages = (cells: number[]) => Math.round(cells.reduce((sum, voltage) => sum + voltage, 0) * 1000) / 1000;
 const validateCellVoltageRange = (cells: number[], packMinVoltage: number, packMaxVoltage: number, cellCount: number) => {
   const bounds = cellVoltageBounds(packMinVoltage, packMaxVoltage, cellCount);
@@ -39,13 +49,13 @@ const validateCellVoltageRange = (cells: number[], packMinVoltage: number, packM
   }
 };
 function mapVoltageEvent(row: typeof batteryVoltageEvents.$inferSelect) {
-  return { ...row, totalVoltage: Number(row.totalVoltage), source: "mission_planner" as const,
+  return { ...row, totalVoltage: Number(row.totalVoltage), currentAmps: number(row.currentAmps), source: "mission_planner" as const,
     occurredAt: iso(row.occurredAt), measuredAt: iso(row.measuredAt), receivedAt: iso(row.receivedAt) };
 }
 
 function mapMeasurement(row: typeof measurements.$inferSelect, limits: { minVoltage: number; maxVoltage: number }) {
   return {
-    id: row.id, batteryId: row.batteryId, totalVoltage: Number(row.totalVoltage),
+    id: row.id, batteryId: row.batteryId, totalVoltage: Number(row.totalVoltage), currentAmps: Number(row.currentAmps),
     cellVoltages: row.cellVoltages, minCellVoltage: Number(row.minCellVoltage),
     maxCellVoltage: Number(row.maxCellVoltage), cellDelta: Number(row.cellDelta),
     chargePercent: voltageToPercent(Number(row.totalVoltage), limits.minVoltage, limits.maxVoltage), temperatureC: number(row.temperatureC), health: row.health,
@@ -61,7 +71,7 @@ async function requireBattery(id: string, actor: Actor) {
     .where(eq(batteries.id, id));
   if (!row) throw Object.assign(new Error("Battery not found"), { statusCode: 404 });
   assertCrewAccess(actor, row.battery.crewId, row.crew.groupId);
-  return { ...row.battery, groupId: row.crew.groupId, groupName: row.group.name, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry };
+  return { ...row.battery, ...batteryCalibration(row.battery, row.type), groupId: row.crew.groupId, groupName: row.group.name, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry };
 }
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -300,14 +310,14 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     assertGroupAdministrator(request.actor);
     const rows = await db.select({ type: batteryTypes, batteryCount: sql<number>`count(${batteries.id})::int` })
       .from(batteryTypes).leftJoin(batteries, eq(batteries.typeId, batteryTypes.id)).groupBy(batteryTypes.id).orderBy(asc(batteryTypes.name));
-    return rows.map(({ type, batteryCount }) => ({ ...type, capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), batteryCount, createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) }));
+    return rows.map(({ type, batteryCount }) => ({ ...type, internalResistanceMilliOhms: number(type.internalResistanceMilliOhms), capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), batteryCount, createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) }));
   });
 
   app.post("/api/battery-types", async (request, reply) => {
     assertSuperAdmin(request.actor);
     const data = batteryTypeInputSchema.parse(request.body);
-    const [type] = await db.insert(batteryTypes).values({ ...data, capacityAh: data.capacityAh.toString(), minVoltage: data.minVoltage.toString(), maxVoltage: data.maxVoltage.toString() }).returning();
-    return reply.status(201).send({ ...type, capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), batteryCount: 0, createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) });
+    const [type] = await db.insert(batteryTypes).values({ ...data, internalResistanceMilliOhms: numericInput(data.internalResistanceMilliOhms), capacityAh: data.capacityAh.toString(), minVoltage: data.minVoltage.toString(), maxVoltage: data.maxVoltage.toString() }).returning();
+    return reply.status(201).send({ ...type, internalResistanceMilliOhms: number(type.internalResistanceMilliOhms), capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), batteryCount: 0, createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) });
   });
 
   app.patch<{ Params: { id: string } }>("/api/battery-types/:id", async request => {
@@ -319,14 +329,14 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       if (!current) throw Object.assign(new Error("Battery type not found"), { statusCode: 404 });
       const minVoltage = data.minVoltage ?? Number(current.minVoltage), maxVoltage = data.maxVoltage ?? Number(current.maxVoltage);
       if (maxVoltage <= minVoltage) throw Object.assign(new Error("Maximum voltage must be greater than minimum voltage"), { statusCode: 400 });
-      const [updated] = await tx.update(batteryTypes).set({ ...data, capacityAh: data.capacityAh?.toString(), minVoltage: data.minVoltage?.toString(), maxVoltage: data.maxVoltage?.toString(), updatedAt: new Date() }).where(eq(batteryTypes.id, current.id)).returning();
+      const [updated] = await tx.update(batteryTypes).set({ ...data, internalResistanceMilliOhms: numericInput(data.internalResistanceMilliOhms), capacityAh: data.capacityAh?.toString(), minVoltage: data.minVoltage?.toString(), maxVoltage: data.maxVoltage?.toString(), updatedAt: new Date() }).where(eq(batteryTypes.id, current.id)).returning();
       if (minVoltage !== Number(current.minVoltage) || maxVoltage !== Number(current.maxVoltage)) {
         const affected = await tx.select({ id: batteries.id }).from(batteries).where(eq(batteries.typeId, current.id)).orderBy(asc(batteries.id));
         for (const battery of affected) await rebuildCycleHistory(battery.id, configuration, tx);
       }
       return updated;
     });
-    return { ...type, capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) };
+    return { ...type, internalResistanceMilliOhms: number(type.internalResistanceMilliOhms), capacityAh: Number(type.capacityAh), minVoltage: Number(type.minVoltage), maxVoltage: Number(type.maxVoltage), createdAt: iso(type.createdAt), updatedAt: iso(type.updatedAt) };
   });
 
   app.delete<{ Params: { id: string } }>("/api/battery-types/:id", async (request, reply) => {
@@ -351,10 +361,13 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       cycleCount: sql<number>`coalesce((select sum(${cycleEvents.cycleDelta}) from ${cycleEvents} where ${cycleEvents.batteryId} = ${batteries.id}), 0)::int`
     }).from(batteries).innerJoin(crews, eq(batteries.crewId, crews.id)).innerJoin(groups, eq(crews.groupId, groups.id)).innerJoin(batteryTypes, eq(batteries.typeId, batteryTypes.id)).where(filters).orderBy(asc(batteries.label));
     return Promise.all(rows.map(async row => {
-      const [latest] = await db.select().from(measurements).where(eq(measurements.batteryId, row.battery.id)).orderBy(desc(measurements.measuredAt)).limit(1);
-      const [latestVoltage] = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, row.battery.id))
-        .orderBy(desc(batteryVoltageEvents.measuredAt), desc(batteryVoltageEvents.id)).limit(1);
-      return { currentCharge: currentBatteryCharge(latest, latestVoltage, { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage) }), latestVoltageEvent: latestVoltage ? mapVoltageEvent(latestVoltage) : null, ...row.battery, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
+      const measurementRows = await db.select().from(measurements).where(eq(measurements.batteryId, row.battery.id)).orderBy(desc(measurements.measuredAt));
+      const voltageRows = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, row.battery.id))
+        .orderBy(desc(batteryVoltageEvents.measuredAt), desc(batteryVoltageEvents.id));
+      const latest = measurementRows[0], latestVoltage = voltageRows.find(item => item.type !== "consumption_sample");
+      const calibration = batteryCalibration(row.battery, row.type);
+      const limits = { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), capacityAh: calibration.actualCapacityAh ?? Number(row.type.capacityAh), internalResistanceMilliOhms: calibration.internalResistanceMilliOhms };
+      return { currentCharge: currentBatteryCharge(measurementRows, voltageRows, limits), latestVoltageEvent: latestVoltage ? mapVoltageEvent(latestVoltage) : null, ...row.battery, ...calibration, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
         cycleCount: row.cycleCount, latestMeasurement: latest ? mapMeasurement(latest, { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage) }) : null,
         createdAt: iso(row.battery.createdAt), updatedAt: iso(row.battery.updatedAt) };
     }));
@@ -372,11 +385,11 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     if (!batteryType) throw Object.assign(new Error("Battery type not found"), { statusCode: 400 });
     const { crewId: _ignoredCrewId, ...rest } = data;
     const [battery] = await db.transaction(async tx => {
-      const inserted = await tx.insert(batteries).values({ ...rest, crewId }).returning();
+      const inserted = await tx.insert(batteries).values({ ...rest, actualCapacityAh: numericInput(rest.actualCapacityAh), internalResistanceMilliOhmsOverride: numericInput(rest.internalResistanceMilliOhmsOverride), crewId }).returning();
       await tx.insert(transfers).values({ batteryId: inserted[0].id, toCrewId: crewId, notes: "Battery registered" });
       return inserted;
     });
-    return reply.status(201).send({ ...battery, typeName: batteryType.name, capacityAh: Number(batteryType.capacityAh), minVoltage: Number(batteryType.minVoltage), maxVoltage: Number(batteryType.maxVoltage), cellCount: batteryType.cellCount, chemistry: batteryType.chemistry, createdAt: iso(battery.createdAt), updatedAt: iso(battery.updatedAt) });
+    return reply.status(201).send({ ...battery, ...batteryCalibration(battery, batteryType), typeName: batteryType.name, capacityAh: Number(batteryType.capacityAh), minVoltage: Number(batteryType.minVoltage), maxVoltage: Number(batteryType.maxVoltage), cellCount: batteryType.cellCount, chemistry: batteryType.chemistry, createdAt: iso(battery.createdAt), updatedAt: iso(battery.updatedAt) });
   });
 
   app.get<{ Params: { id: string } }>("/api/batteries/:id", async request => {
@@ -393,9 +406,10 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     return {
       ...battery, crewNumber: crew.number, crewName: crew.name, crewColor: crew.color,
       cycleCount, latestMeasurement: measurementRows[0] ? mapMeasurement(measurementRows[0], battery) : null,
-      currentCharge: currentBatteryCharge(measurementRows[0], voltageRows[0], battery),
+      currentCharge: currentBatteryCharge(measurementRows, voltageRows, socLimits(battery)),
       measurements: measurementRows.map(row => mapMeasurement(row, battery)),
-      voltageEvents: voltageRows.map(mapVoltageEvent), latestVoltageEvent: voltageRows[0] ? mapVoltageEvent(voltageRows[0]) : null,
+      voltageEvents: voltageRows.filter(row => row.type !== "consumption_sample").map(mapVoltageEvent),
+      latestVoltageEvent: voltageRows.find(row => row.type !== "consumption_sample") ? mapVoltageEvent(voltageRows.find(row => row.type !== "consumption_sample")!) : null,
       cycleEvents: eventRows.map(e => ({ ...e, occurredAt: iso(e.occurredAt) })),
       transfers: transferRows.map(transfer => ({ ...transfer, fromCrewName: transfer.fromCrewId ? crewNames.get(transfer.fromCrewId) ?? null : null, toCrewName: crewNames.get(transfer.toCrewId) ?? "Unknown crew", transferredAt: iso(transfer.transferredAt) })),
       createdAt: iso(battery.createdAt), updatedAt: iso(battery.updatedAt)
@@ -410,7 +424,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       select "id", "kind", "occurredAt", "data" from (
         select ${measurements.id}::text as "id", ${measurements.batteryId} as "batteryId", 'measurement'::text as "kind",
           ${measurements.measuredAt} as "occurredAt",
-          jsonb_build_object('totalVoltage', ${measurements.totalVoltage},
+          jsonb_build_object('totalVoltage', ${measurements.totalVoltage}, 'currentAmps', ${measurements.currentAmps},
             'cellVoltages', ${measurements.cellVoltages}, 'minCellVoltage', ${measurements.minCellVoltage},
             'maxCellVoltage', ${measurements.maxCellVoltage}, 'cellDelta', ${measurements.cellDelta},
             'health', ${measurements.health}, 'warningThresholdV', ${measurements.warningThresholdV},
@@ -418,9 +432,9 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
         from ${measurements}
         union all
         select ${batteryVoltageEvents.id}::text, ${batteryVoltageEvents.batteryId}, ${batteryVoltageEvents.type}::text, ${batteryVoltageEvents.occurredAt},
-          jsonb_build_object('totalVoltage', ${batteryVoltageEvents.totalVoltage}, 'source', 'mission_planner',
+          jsonb_build_object('totalVoltage', ${batteryVoltageEvents.totalVoltage}, 'currentAmps', ${batteryVoltageEvents.currentAmps}, 'source', 'mission_planner',
             'measuredAt', ${batteryVoltageEvents.measuredAt}, 'receivedAt', ${batteryVoltageEvents.receivedAt})
-        from ${batteryVoltageEvents}
+        from ${batteryVoltageEvents} where ${batteryVoltageEvents.type} <> 'consumption_sample'
         union all
         select ${cycleEvents.id}::text, ${cycleEvents.batteryId}, ${cycleEvents.type}::text, ${cycleEvents.occurredAt},
           jsonb_build_object('cycleDelta', ${cycleEvents.cycleDelta}, 'flightMinutes', ${cycleEvents.flightMinutes},
@@ -490,7 +504,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       }
       const locked = await lockBattery(tx, request.params.id, request.actor!);
       if (data.state !== undefined) assertBatteryOperational(locked);
-      const [updated] = await tx.update(batteries).set({ ...data, updatedAt: new Date() }).where(eq(batteries.id, locked.id)).returning();
+      const [updated] = await tx.update(batteries).set({ ...data, actualCapacityAh: numericInput(data.actualCapacityAh), internalResistanceMilliOhmsOverride: numericInput(data.internalResistanceMilliOhmsOverride), updatedAt: new Date() }).where(eq(batteries.id, locked.id)).returning();
       if (updated.typeId !== locked.typeId) {
         await rebuildCycleHistory(updated.id, configuration, tx);
       }

@@ -51,8 +51,9 @@ current, satellite count, HDOP, heading, relative altitude, Ruijie RSSI, OBS rec
 and armed state. Network failures do not block Mission Planner, OBS, Ruijie polling, or the plugin
 UI.
 
-Changes apply on Save. The equipment dialog loads the crew's available drones and batteries and preselects
-the active battery chosen in Sarmat Crew. Confirm binds both selections to the connection session; confirming
+Changes apply on Save. The battery dialog automatically uses the crew's sole active drone and preselects
+the active battery chosen in Sarmat Crew. Only the battery needs confirmation or selection. If the crew has no
+active drone or more than one, fix its drone assignments in the app and reload. Confirm binds the drone and battery to the connection session; confirming
 the existing active battery preserves its installation time. Concurrent changes in the app
 require reloading and confirming again. Cancel leaves the server selection unchanged.
 The dialog does not block Mission Planner. It opens after two seconds of stable connection;

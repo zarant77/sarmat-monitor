@@ -1,5 +1,6 @@
 import { z } from "zod";
 export { voltageToPercent, DEFAULT_PACK_MIN_VOLTAGE, DEFAULT_PACK_MAX_VOLTAGE } from "./charge-percent.js";
+export { calculateBatterySoc, type SocMethod, type SocSample, type SocLimits } from "./battery-soc.js";
 
 export const batteryStates = ["ready", "charging", "in_use", "storage", "service", "retired"] as const;
 export const healthStates = ["good", "warning", "danger"] as const;
@@ -43,6 +44,8 @@ export const crewUpdateSchema = z.object({
 }).refine(value => Object.keys(value).length > 0, "At least one change is required");
 
 export const batteryInputSchema = z.object({
+  actualCapacityAh: z.coerce.number().positive().max(10000).nullable().optional(),
+  internalResistanceMilliOhmsOverride: z.coerce.number().min(0).max(10000).nullable().optional(),
   crewId: z.uuid().optional(),
   typeId: z.uuid(),
   serialNumber: z.string().trim().min(1).max(100),
@@ -110,6 +113,7 @@ export const flightCorrectionSchema = z.object({
 }).refine(value => value.armedAt !== undefined || value.disarmedAt !== undefined || value.excluded !== undefined, "At least one flight change is required");
 
 const batteryTypeFields = {
+  internalResistanceMilliOhms: z.coerce.number().min(0).max(10000).nullable().optional(),
   name: z.string().trim().min(2).max(100),
   capacityAh: z.coerce.number().positive().max(10000),
   minVoltage: z.coerce.number().positive().max(1000),
@@ -124,6 +128,7 @@ export const batteryTypeInputSchema = z.object(batteryTypeFields).refine(value =
 });
 
 export const batteryTypeUpdateSchema = z.object({
+  internalResistanceMilliOhms: batteryTypeFields.internalResistanceMilliOhms,
   name: batteryTypeFields.name.optional(), capacityAh: batteryTypeFields.capacityAh.optional(),
   minVoltage: batteryTypeFields.minVoltage.optional(), maxVoltage: batteryTypeFields.maxVoltage.optional(),
   cellCount: batteryTypeFields.cellCount.optional(), chemistry: batteryTypeFields.chemistry.optional()
@@ -265,6 +270,7 @@ export interface BatteryType extends BatteryTypeInput {
   id: string; batteryCount?: number; createdAt: string; updatedAt: string;
 }
 export interface Measurement {
+  currentAmps?: number;
   id: string; batteryId: string; totalVoltage: number; cellVoltages: number[];
   minCellVoltage: number; maxCellVoltage: number; cellDelta: number;
   chargePercent: number | null; temperatureC: number | null; health: HealthState;
@@ -280,6 +286,7 @@ export interface TransferEvent {
   toCrewId: string; toCrewName: string; notes: string; transferredAt: string;
 }
 export interface BatteryVoltageEvent {
+  currentAmps?: number | null;
   id: string; batteryId: string; sessionId: string; type: "vehicle_connected" | "vehicle_disarmed";
   totalVoltage: number; source: "mission_planner"; occurredAt: string; measuredAt: string; receivedAt: string;
 }
@@ -287,7 +294,10 @@ export interface Battery {
   id: string; crewId: string; groupId: string; groupName: string; crewNumber: number; crewName: string; crewColor: string; typeId: string; typeName: string; serialNumber: string;
   label: string; capacityAh: number; minVoltage: number; maxVoltage: number; cellCount: number; chemistry: string; state: BatteryState;
   notes: string; cycleCount: number; latestMeasurement: Measurement | null;
-  currentCharge?: { totalVoltage: number; chargePercent: number; measuredAt: string; source: "measurement" | "mission_planner" } | null;
+  currentCharge?: { totalVoltage: number; currentAmps?: number | null; chargePercent: number; measuredAt: string; source: "measurement" | "mission_planner"; method?: import("./battery-soc.js").SocMethod; incomplete?: boolean; consumedMahSinceCheck?: number } | null;
+  actualCapacityAh?: number | null;
+  internalResistanceMilliOhmsOverride?: number | null;
+  internalResistanceMilliOhms?: number | null;
   latestVoltageEvent?: BatteryVoltageEvent | null;
   activeSince: string | null;
   archivedAt?: string | null; createdAt: string; updatedAt: string;

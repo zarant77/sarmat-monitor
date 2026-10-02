@@ -312,8 +312,10 @@ namespace SarmatPlugin
                     runtime?.ObserveBatteryHeartbeat((((MAVLink.mavlink_heartbeat_t)packet.data).base_mode & 128) != 0);
                 else if (packet.msgid == (uint)MAVLink.MAVLINK_MSG_ID.SYS_STATUS)
                 {
-                    var millivolts = ((MAVLink.mavlink_sys_status_t)packet.data).voltage_battery;
-                    if (millivolts != ushort.MaxValue && millivolts > 0) runtime?.ObserveBatteryVoltage(millivolts / 1000.0);
+                    var status = (MAVLink.mavlink_sys_status_t)packet.data;
+                    var millivolts = status.voltage_battery;
+                    double? currentAmps = status.current_battery < 0 ? (double?)null : status.current_battery / 100.0;
+                    if (millivolts != ushort.MaxValue && millivolts > 0) runtime?.ObserveBatteryVoltage(millivolts / 1000.0, currentAmps);
                 }
             }
             catch (Exception ex) { TryLog("Battery packet processing failed", ex); }

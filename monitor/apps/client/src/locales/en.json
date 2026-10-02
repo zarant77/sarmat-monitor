@@ -1,4 +1,15 @@
 {
+  "soc": {
+    "resistance": "Pack internal resistance (mΩ)",
+    "actualCapacity": "Measured capacity (Ah)",
+    "typeDefault": "Use battery type setting",
+    "resistanceHelp": "Optional resistance of the whole pack, used to compensate voltage under load.",
+    "capacityHelp": "Optional measured capacity; leave empty to use nominal capacity.",
+    "voltage": "Estimate from voltage",
+    "voltage_compensated": "Estimate from compensated voltage",
+    "consumption": "Calculated from consumed capacity",
+    "incomplete": "Incomplete consumption data"
+  },
   "app": {
     "name": "SARMAT",
     "subtitle": "Cat tracking system",

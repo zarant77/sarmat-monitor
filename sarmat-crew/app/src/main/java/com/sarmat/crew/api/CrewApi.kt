@@ -117,6 +117,8 @@ class CrewApi(private val preferences: SharedPreferences) {
                 latestDelta = latest?.optDoubleOrNull("cellDelta"),
                 latestHealth = latest?.optString("health"),
                 chargeMeasuredAt = charge?.optStringOrNull("measuredAt"),
+                chargeMethod = charge?.optStringOrNull("method"),
+                chargeIncomplete = charge?.optBoolean("incomplete", false) ?: false,
                 droneVoltage = item.optJSONObject("latestVoltageEvent")?.optDoubleOrNull("totalVoltage"),
                 droneVoltageAt = item.optJSONObject("latestVoltageEvent")?.optStringOrNull("measuredAt"),
             )
@@ -163,6 +165,7 @@ class CrewApi(private val preferences: SharedPreferences) {
                 kind = item.getString("kind"),
                 occurredAt = item.getString("occurredAt"),
                 totalVoltage = item.optDoubleOrNull("totalVoltage"),
+                currentAmps = item.optDoubleOrNull("currentAmps"),
                 cellVoltages = item.optJSONArray("cellVoltages")?.let { cells -> (0 until cells.length()).map(cells::getDouble) },
                 chargePercent = item.optIntOrNull("chargePercent"),
                 minCellVoltage = item.optDoubleOrNull("minCellVoltage"),

@@ -34,7 +34,7 @@ let groupA: string; let groupB: string; let crewA: string; let crewB: string;
 const groupHeaders = (groupId: string) => ({ "x-test-role": "GROUP_ADMIN", "x-test-group-id": groupId });
 
 beforeAll(async () => {
-  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene"]) {
+  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene", "0015_amazing_rumiko_fujikawa", "0016_flawless_the_initiative"]) {
     await pg.exec(migration(name));
   }
   const [a, b] = await db.insert(groups).values([{ name: "Alpha" }, { name: "Bravo" }]).returning();
