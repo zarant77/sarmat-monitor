@@ -18,6 +18,7 @@ namespace SarmatPlugin.Tests
         {
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
+            Run("Battery widget accepts only a valid server charge percentage", BatteryWidgetCharge);
             Run("Battery dialog waits for stable connection and tolerates brief gaps", BatteryDialogTiming);
             Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
             Run("Battery consumption integrates fresh current and checkpoints cumulative mAh", BatteryConsumption);
@@ -234,6 +235,16 @@ namespace SarmatPlugin.Tests
             True(old != tracker.SessionId); True(!tracker.IsConfirmed); tracker.Confirm(tracker.SessionId);
             tracker.Heartbeat(false, now); tracker.Voltage(48, now.AddSeconds(1));
             Equal("consumption_sample", (string)tracker.Ready().Single()["type"]); // New binding establishes a zero counter, not a connection event.
+        }
+
+        private static void BatteryWidgetCharge()
+        {
+            Equal(40, BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":40}}"))).Value);
+            Equal(0, BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":0}}"))).Value);
+            Equal(100, BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":100}}"))).Value);
+            True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":null}"))).HasValue);
+            True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":101}}"))).HasValue);
+            True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":\"40\"}}"))).HasValue);
         }
 
         private static void BatteryApiSettings()

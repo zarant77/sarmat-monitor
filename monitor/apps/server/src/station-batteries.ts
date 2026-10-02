@@ -2,8 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { and, asc, eq, gt, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db/index.js";
-import { batteries, batteryTelemetrySessions, batteryVoltageEvents, crews, droneFlightEvents, droneFlights, drones, flightMotors, groups, motorInstallations } from "./db/schema.js";
+import { batteries, batteryTypes, measurements, batteryTelemetrySessions, batteryVoltageEvents, crews, droneFlightEvents, droneFlights, drones, flightMotors, groups, motorInstallations } from "./db/schema.js";
 import { assertBatteryOperational } from "./battery-lifecycle.js";
+import { currentBatteryCharge } from "./current-charge.js";
 
 const selectionSchema = z.object({
   batteryId: z.uuid(), droneId: z.uuid().optional(), sessionId: z.uuid().optional(), expectedActiveId: z.uuid().nullable(),
@@ -43,6 +44,23 @@ export async function registerStationBatteries(app: FastifyInstance) {
       const availableDrones = await db.select({ id: drones.id, name: drones.name, model: drones.model, motorCount: drones.motorCount })
         .from(drones).where(and(eq(drones.crewId, request.telemetryCrew!.id), isNull(drones.retiredAt))).orderBy(asc(drones.name));
       return { batteries: rows, drones: availableDrones, activeBatteryId: active?.id ?? null, activeSince: active?.activeSince ?? null };
+    });
+    station.get<{ Params: { id: string } }>("/station/batteries/sessions/:id/charge", async (request, reply) => {
+      const sessionId = z.uuid().parse(request.params.id);
+      reply.header("Cache-Control", "no-store");
+      const [row] = await db.select({ battery: batteries, type: batteryTypes }).from(batteryTelemetrySessions)
+        .innerJoin(batteries, eq(batteryTelemetrySessions.batteryId, batteries.id))
+        .innerJoin(batteryTypes, eq(batteries.typeId, batteryTypes.id))
+        .where(and(eq(batteryTelemetrySessions.id, sessionId), eq(batteryTelemetrySessions.crewId, request.telemetryCrew!.id), eq(batteries.crewId, request.telemetryCrew!.id)));
+      if (!row) throw Object.assign(new Error("Battery session not found"), { statusCode: 404 });
+      const measurementRows = await db.select().from(measurements).where(eq(measurements.batteryId, row.battery.id));
+      const voltageRows = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, row.battery.id));
+      const resistance = row.battery.internalResistanceMilliOhmsOverride ?? row.type.internalResistanceMilliOhms;
+      return { sessionId, currentCharge: currentBatteryCharge(measurementRows, voltageRows, {
+        minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage),
+        capacityAh: Number(row.battery.actualCapacityAh ?? row.type.capacityAh),
+        internalResistanceMilliOhms: resistance == null ? null : Number(resistance)
+      }) };
     });
     station.put("/station/batteries/active", async request => {
       const data = selectionSchema.parse(request.body);

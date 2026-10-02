@@ -173,6 +173,13 @@ it("keeps SOC across reconnects and late/duplicate checkpoints, with calibration
   expect((await post(checkpoint(secondSession, 40, 1000))).statusCode).toBe(201);
   const detail = (await app.inject({ url: `/api/batteries/${id}` })).json();
   expect(detail.currentCharge).toMatchObject({ chargePercent: 40, consumedMahSinceCheck: 6000, method: "consumption", incomplete: false });
+  const widgetCharge = await app.inject({ url: `/station/batteries/sessions/${secondSession}/charge`, headers });
+  expect(widgetCharge.statusCode).toBe(200);
+  expect(widgetCharge.json()).toEqual({ sessionId: secondSession, currentCharge: detail.currentCharge });
+  expect(widgetCharge.headers["cache-control"]).toBe("no-store");
+  expect((await app.inject({ url: `/station/batteries/sessions/${secondSession}/charge` })).statusCode).toBe(401);
+  expect((await app.inject({ url: `/station/batteries/sessions/${randomUUID()}/charge`, headers })).statusCode).toBe(404);
+  expect((await app.inject({ url: "/station/batteries/sessions/invalid/charge", headers })).statusCode).toBe(400);
   expect(detail.voltageEvents).toHaveLength(3);
   expect(detail.measurements[0].cellVoltages).toEqual(Array(12).fill(4.2));
   expect((await app.inject({ url: "/api/batteries" })).json().find((battery: { id: string }) => battery.id === id).currentCharge).toEqual(detail.currentCharge);

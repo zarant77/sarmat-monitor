@@ -26,6 +26,9 @@ namespace SarmatPlugin
         private SettingsForm settingsForm;
         private BatterySelectionForm batterySelectionForm;
         private readonly BatteryVoltageTracker batteryTracker = new BatteryVoltageTracker();
+        private string batteryChargeSessionId;
+        private int? batteryChargePercent;
+        private DateTime batteryChargeUpdatedAt;
         private readonly FlightTracker flightTracker = new FlightTracker();
         private readonly BatteryDialogConnection batteryConnection = new BatteryDialogConnection();
         private ObsStatus obs = new ObsStatus();
@@ -133,7 +136,11 @@ namespace SarmatPlugin
             }
             var snapshot = alerts.Update(telemetry, currentObs, currentRuijie, settings, DateTime.UtcNow);
             audio.Update(snapshot, telemetry.Armed);
-            panel.Render(telemetry, currentObs, currentRuijie, snapshot, settings);
+            int? chargePercent;
+            lock (sync) chargePercent = telemetry.Connected && batteryTracker.IsConfirmed &&
+                batteryTracker.SessionId == batteryChargeSessionId && (DateTime.UtcNow - batteryChargeUpdatedAt).TotalSeconds <= 20
+                ? batteryChargePercent : null;
+            panel.Render(telemetry, currentObs, currentRuijie, snapshot, settings, chargePercent);
         }
 
         private void UpdateVehicleReconnect(TelemetrySnapshot telemetry)
@@ -435,6 +442,20 @@ namespace SarmatPlugin
                         token.ThrowIfCancellationRequested();
                         if (await api.SendFlightAsync(flightOutbox.Read(path), token).ConfigureAwait(false)) flightOutbox.Acknowledge(path);
                         else { flightOutbox.Reject(path); log.Warn("Flight event rejected; retained in " + path + ".rejected"); }
+                    }
+                    string chargeSessionId;
+                    lock (sync) chargeSessionId = batteryTracker.IsConfirmed ? batteryTracker.SessionId : null;
+                    if (chargeSessionId != null)
+                    {
+                        using (var api = new BatteryApiClient(apiSettings))
+                        {
+                            var percent = await api.LoadChargeAsync(chargeSessionId, token).ConfigureAwait(false);
+                            lock (sync) if (!token.IsCancellationRequested && batteryTracker.SessionId == chargeSessionId && batteryTracker.IsConfirmed)
+                            {
+                                batteryChargeSessionId = chargeSessionId; batteryChargePercent = percent;
+                                batteryChargeUpdatedAt = DateTime.UtcNow;
+                            }
+                        }
                     }
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }

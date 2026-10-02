@@ -63,11 +63,11 @@ namespace SarmatPlugin.UI
         }
 
         public void Render(TelemetrySnapshot telemetry, ObsStatus obsStatus, RuijieStatus ruijieStatus,
-            SafetySnapshot snapshot, PluginSettings settings)
+            SafetySnapshot snapshot, PluginSettings settings, int? batteryChargePercent = null)
         {
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => Render(telemetry, obsStatus, ruijieStatus, snapshot, settings)));
+                BeginInvoke(new Action(() => Render(telemetry, obsStatus, ruijieStatus, snapshot, settings, batteryChargePercent)));
                 return;
             }
 
@@ -98,8 +98,8 @@ namespace SarmatPlugin.UI
             SetWidget("vertical_speed", "Vertical Speed", telemetry.VerticalSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
             SetWidget("air_speed", "Air Speed", telemetry.AirSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
             SetWidget("altitude", "Altitude", telemetry.Altitude.ToString("0.0") + " m", WidgetStatus.Normal);
-            SetWidget("battery_voltage", "Battery",
-                telemetry.BatteryVoltage.ToString("0.0") + "V " + telemetry.CurrentAmps.ToString("0") + "A",
+            widgets["battery_voltage"].SetBatteryContent(batteryChargePercent,
+                telemetry.BatteryVoltage.ToString("0.0") + " V  " + telemetry.CurrentAmps.ToString("0.0") + " A",
                 TelemetryStatusPolicy.Voltage(telemetry.BatteryVoltage));
             SetWidget("current", "Current", telemetry.CurrentAmps.ToString("0.0") + " A",
                 TelemetryStatusPolicy.Current(telemetry.CurrentAmps));
@@ -240,6 +240,15 @@ namespace SarmatPlugin.UI
                     var measured = TextRenderer.MeasureText(text ?? "", font, Size.Empty,
                         TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
                     if (measured.Width > width || measured.Height > height) return false;
+                    if (!title && widget.IsBatteryLayout)
+                    {
+                        using (var compactFont = new Font(SystemFonts.MessageBoxFont.FontFamily, Math.Max(4f, fontSize * 0.68f * 0.65f), FontStyle.Regular))
+                        {
+                            var details = TextRenderer.MeasureText(widget.DetailText ?? "", compactFont, Size.Empty,
+                                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                            if (details.Width > width || details.Height > height * 30 / 62) return false;
+                        }
+                    }
                 }
             }
             return true;

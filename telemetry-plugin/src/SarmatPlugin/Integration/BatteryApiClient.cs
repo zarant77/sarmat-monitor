@@ -46,6 +46,28 @@ namespace SarmatPlugin.Integration
                     ?? throw new InvalidOperationException("Invalid battery API response");
             }
         }
+        public async Task<int?> LoadChargeAsync(string sessionId, CancellationToken token)
+        {
+            var id = Guid.Parse(sessionId).ToString();
+            using (var response = await client.GetAsync(new Uri(client.BaseAddress.AbsoluteUri + "/sessions/" + id + "/charge"), token))
+            {
+                response.EnsureSuccessStatusCode();
+                var result = MiniJson.Object(MiniJson.Parse(await response.Content.ReadAsStringAsync()));
+                if (MiniJson.String(result, "sessionId") != sessionId) throw new InvalidOperationException("Battery charge session mismatch");
+                return ParseChargePercent(result);
+            }
+        }
+        internal static int? ParseChargePercent(IDictionary<string, object> result)
+        {
+            object raw;
+            if (result == null || !result.TryGetValue("currentCharge", out raw)) return null;
+            var charge = MiniJson.Object(raw);
+            if (charge == null || !charge.TryGetValue("chargePercent", out raw) || raw == null) return null;
+            if (!(raw is double) && !(raw is int) && !(raw is long) && !(raw is decimal)) return null;
+            var value = Convert.ToDouble(raw);
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value > 100) return null;
+            return (int)Math.Round(value);
+        }
         public async Task<bool> SelectAsync(string id, string droneId, string expectedId, string expectedSince, string sessionId, CancellationToken token)
         {
             var json = MiniJson.Serialize(new Dictionary<string, object> { ["batteryId"] = id,
