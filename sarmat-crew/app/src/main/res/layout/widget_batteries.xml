@@ -18,7 +18,28 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="4dp">
+
+        <LinearLayout
+            android:id="@+id/widgetHeader"
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:background="@drawable/widget_header_background"
+            android:paddingLeft="12dp"
+            android:paddingRight="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center_vertical" android:text="Sarmat Crew" android:textColor="@android:color/white" android:textSize="12sp" android:includeFontPadding="false" android:letterSpacing="0.03" android:textStyle="bold" />
+            <ImageView android:id="@+id/widgetRefresh"
+                android:layout_width="32dp"
+                android:layout_height="24dp"
+                android:background="@drawable/widget_refresh_background"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/widget_refresh"
+                android:src="@drawable/ic_widget_refresh" />
+        </LinearLayout>
 
         <GridView
             android:id="@+id/widgetBatteryGrid"

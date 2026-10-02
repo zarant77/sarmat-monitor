@@ -1,6 +1,7 @@
 package com.sarmat.crew
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.icu.text.Collator
 import android.icu.text.RuleBasedCollator
@@ -88,6 +89,26 @@ class MainActivity : AppCompatActivity() {
             }
         })
         if (api.hasSession()) showBatteries() else showLogin()
+        openWidgetIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (api.hasSession()) showBatteries() else showLogin()
+        openWidgetIntent(intent)
+    }
+
+    private fun openWidgetIntent(intent: Intent) {
+        val id = intent.getStringExtra(BatteryWidgetProvider.EXTRA_BATTERY_ID) ?: return
+        intent.removeExtra(BatteryWidgetProvider.EXTRA_BATTERY_ID)
+        if (!api.hasSession()) return
+        networkExecutor.execute {
+            val item = runCatching { api.batteries().firstOrNull { it.id == id } }.getOrNull()
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && item != null && screen == Screen.BATTERIES) openBattery(item)
+            }
+        }
     }
 
     override fun onResume() {

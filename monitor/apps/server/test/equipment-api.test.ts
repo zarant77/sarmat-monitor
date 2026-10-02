@@ -84,9 +84,9 @@ describe.sequential("drone and motor registry API", () => {
   it("enforces unique motor serials and scopes group administrators", async () => {
     const invalidType = await app.inject({ method: "POST", url: "/api/motors", headers: groupHeaders(groupA), payload: { serialNumber: "M-invalid", type: "CW", initialFlightSeconds: 0 } });
     expect(invalidType.statusCode).toBe(400);
-    const created = await app.inject({ method: "POST", url: "/api/motors", headers: groupHeaders(groupA), payload: { serialNumber: "M-001", type: "CV", initialFlightSeconds: 7200 } });
+    const created = await app.inject({ method: "POST", url: "/api/motors", headers: groupHeaders(groupA), payload: { serialNumber: "M-001", type: "CCV", initialFlightSeconds: 7200 } });
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ groupId: groupA, serialNumber: "M-001", type: "CV", status: "stock", totalFlightSeconds: 7200 });
+    expect(created.json()).toMatchObject({ groupId: groupA, serialNumber: "M-001", type: "CCV", status: "stock", totalFlightSeconds: 7200 });
     const duplicate = await app.inject({ method: "POST", url: "/api/motors", headers: groupHeaders(groupB), payload: { serialNumber: "M-001", type: "CCV", initialFlightSeconds: 0 } });
     expect(duplicate.statusCode).toBe(409);
     const foreignList = await app.inject({ method: "GET", url: "/api/motors", headers: groupHeaders(groupB) });
@@ -112,9 +112,9 @@ describe.sequential("drone and motor registry API", () => {
     const installed = await app.inject({ method: "POST", url: `/api/drones/${quad.id}/motor-positions/1`, headers: groupHeaders(groupA), payload: { motorId: first.id, notes: "Initial assembly" } });
     expect(installed.statusCode).toBe(200);
     expect(installed.json().installedMotorCount).toBe(1);
-    expect(installed.json().slots[0]).toMatchObject({ positionNumber: 1, installation: { motorId: first.id, serialNumber: "M-001", type: "CV", active: true } });
+    expect(installed.json().slots[0]).toMatchObject({ positionNumber: 1, installation: { motorId: first.id, serialNumber: "M-001", type: "CCV", active: true } });
 
-    expect((await app.inject({ method: "POST", url: `/api/drones/${quad.id}/motor-positions/2`, headers: groupHeaders(groupA), payload: { motorId: first.id } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: `/api/drones/${quad.id}/motor-positions/3`, headers: groupHeaders(groupA), payload: { motorId: first.id } })).statusCode).toBe(409);
     expect((await app.inject({ method: "POST", url: `/api/drones/${quad.id}/motor-positions/5`, headers: groupHeaders(groupA), payload: { motorId: replacementId } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: `/api/admin/motors/${first.id}/retire`, headers: groupHeaders(groupA), payload: {} })).statusCode).toBe(409);
     expect((await app.inject({ method: "POST", url: `/api/admin/drones/${quad.id}/retire`, headers: groupHeaders(groupA), payload: {} })).statusCode).toBe(409);
@@ -154,4 +154,29 @@ describe.sequential("drone and motor registry API", () => {
     expect((await app.inject({ method: "DELETE", url: `/api/crews/${crewA}`, headers: groupHeaders(groupA) })).statusCode).toBe(409);
     expect((await app.inject({ method: "DELETE", url: `/api/groups/${groupA}` })).statusCode).toBe(409);
   });
+  it("saves slots atomically, validates direction, and transfers motors with location confirmation", async () => {
+    const source = (await app.inject({ method: "POST", url: "/api/drones", headers: groupHeaders(groupA), payload: { crewId: crewA, name: "Source", model: "X", motorCount: 4 } })).json();
+    const target = (await app.inject({ method: "POST", url: "/api/drones", headers: groupHeaders(groupA), payload: { crewId: crewA, name: "Target", model: "X", motorCount: 6 } })).json();
+    const motor = (await app.inject({ method: "POST", url: "/api/motors", headers: groupHeaders(groupA), payload: { serialNumber: "TRANSFER", type: "CCV" } })).json();
+    const slots = (count: number) => Array.from({ length: count }, () => ({ motorId: null as string | null, expectedDroneId: null as string | null }));
+    const initial = slots(4); initial[0].motorId = motor.id;
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${source.id}`, headers: groupHeaders(groupA), payload: { motorSlots: initial } })).statusCode).toBe(200);
+    const transfer = slots(6); transfer[0].motorId = motor.id;
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA), payload: { name: "Should roll back", motorSlots: transfer } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "GET", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA) })).json().name).toBe("Target");
+    transfer[0].expectedDroneId = source.id;
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA), payload: { motorSlots: transfer } })).statusCode).toBe(200);
+    const history = (await app.inject({ method: "GET", url: `/api/motors/${motor.id}`, headers: groupHeaders(groupA) })).json();
+    expect(history.currentDroneId).toBe(target.id);
+    expect(history.installationHistory).toHaveLength(2);
+    expect(history.installationHistory.filter((item: { active: boolean }) => item.active)).toHaveLength(1);
+    expect((await app.inject({ method: "GET", url: `/api/drones/${source.id}`, headers: groupHeaders(groupA) })).json().installedMotorCount).toBe(0);
+    const wrong = slots(6); wrong[1] = { motorId: motor.id, expectedDroneId: target.id };
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA), payload: { motorSlots: wrong } })).statusCode).toBe(400);
+    const duplicate = slots(6); duplicate[0] = duplicate[2] = { motorId: motor.id, expectedDroneId: target.id };
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA), payload: { motorSlots: duplicate } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PATCH", url: `/api/drones/${target.id}`, headers: groupHeaders(groupA), payload: { motorCount: 4, motorSlots: slots(4) } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: `/api/motors/${motor.id}`, headers: groupHeaders(groupA) })).json().status).toBe("stock");
+  });
+
 });

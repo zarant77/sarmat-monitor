@@ -1,5 +1,6 @@
 package com.sarmat.crew.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
@@ -11,11 +12,12 @@ import com.sarmat.crew.batteryWidgetLevel
 import com.sarmat.crew.offline.CrewRepository
 
 class BatteryWidgetService : RemoteViewsService() {
-    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = BatteryWidgetFactory(applicationContext)
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = BatteryWidgetFactory(applicationContext, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID))
 }
 
-private class BatteryWidgetFactory(context: Context) : RemoteViewsService.RemoteViewsFactory {
+private class BatteryWidgetFactory(context: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
     private val context = context.applicationContext
+    private var compact = false
     private var batteries = emptyList<BatterySummary>()
     private var dischargedThreshold = 50
     private var criticalThreshold = 20
@@ -24,7 +26,7 @@ private class BatteryWidgetFactory(context: Context) : RemoteViewsService.Remote
     override fun onDataSetChanged() = refresh()
     override fun onDestroy() { batteries = emptyList() }
     override fun getCount(): Int = batteries.size
-    override fun getViewTypeCount(): Int = 1
+    override fun getViewTypeCount(): Int = 2
     override fun hasStableIds(): Boolean = true
     override fun getLoadingView(): RemoteViews? = null
     override fun getItemId(position: Int): Long = batteries[position].id.hashCode().toLong()
@@ -40,7 +42,7 @@ private class BatteryWidgetFactory(context: Context) : RemoteViewsService.Remote
         }
         val number = batteryNumber(battery.label, position)
         val isActive = battery.activeSince != null
-        return RemoteViews(context.packageName, R.layout.widget_battery_item).apply {
+        return RemoteViews(context.packageName, if (compact) R.layout.widget_battery_item_compact else R.layout.widget_battery_item).apply {
             setImageViewResource(R.id.widgetBatteryIcon, icon)
             setTextViewText(R.id.widgetBatteryNumber, if (isActive) context.getString(R.string.widget_active_battery_number, number) else number)
             setTextColor(R.id.widgetBatteryNumber, context.getColor(if (isActive) R.color.lime else android.R.color.white))
@@ -48,11 +50,13 @@ private class BatteryWidgetFactory(context: Context) : RemoteViewsService.Remote
                 R.id.widgetBatteryIcon,
                 if (isActive) context.getString(R.string.widget_battery_in_drone, battery.label) else battery.label,
             )
-            setOnClickFillInIntent(R.id.widgetBatteryItem, Intent())
+            setOnClickFillInIntent(R.id.widgetBatteryItem, Intent().putExtra(BatteryWidgetProvider.EXTRA_BATTERY_ID, battery.id))
         }
     }
 
     private fun refresh() {
+        compact = AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
+            .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 72) < 72
         val repository = CrewRepository(context)
         batteries = runCatching { repository.batteries().sortedBy { it.label.lowercase() } }.getOrDefault(emptyList())
         dischargedThreshold = repository.dischargedThresholdPercent()

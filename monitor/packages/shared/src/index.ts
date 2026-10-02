@@ -64,7 +64,9 @@ export const droneInputSchema = z.object({
   notes: z.string().trim().max(2000).optional().default("")
 });
 
-export const droneUpdateSchema = droneInputSchema.partial().refine(
+export const droneUpdateSchema = droneInputSchema.partial().extend({
+  motorSlots: z.array(z.object({ motorId: z.uuid().nullable(), expectedDroneId: z.uuid().nullable() })).length(4).or(z.array(z.object({ motorId: z.uuid().nullable(), expectedDroneId: z.uuid().nullable() })).length(6)).optional()
+}).refine(
   value => Object.keys(value).length > 0,
   "At least one change is required"
 );
@@ -86,6 +88,14 @@ export const motorAssignmentSchema = z.object({
   motorId: z.uuid(),
   notes: z.string().trim().max(1000).optional().default("")
 });
+
+// Inventory positions, clockwise from the front left (viewed from above).
+export function droneMotorLayout(count: number) {
+  const names = count === 6
+    ? ["frontLeft", "frontRight", "right", "rearRight", "rearLeft", "left"]
+    : ["frontLeft", "frontRight", "rearRight", "rearLeft"];
+  return names.map((location, index) => ({ positionNumber: index + 1, location, type: (index % 2 === 0 ? "CCV" : "CV") as "CV" | "CCV" }));
+}
 
 export const motorRemovalSchema = z.object({
   notes: z.string().trim().max(1000).optional().default("")

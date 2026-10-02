@@ -3,7 +3,7 @@ import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, lte, or, sql
 import { alias } from "drizzle-orm/pg-core";
 import {
   droneInputSchema, droneUpdateSchema, flightCorrectionSchema, motorAssignmentSchema, motorInputSchema,
-  motorRemovalSchema, motorUpdateSchema
+  motorRemovalSchema, motorUpdateSchema, droneMotorLayout
 } from "@sbm/shared";
 import { assertGroupAccess, assertGroupAdministrator, type Actor } from "./auth.js";
 import { db } from "./db/index.js";
@@ -149,15 +149,44 @@ export async function registerEquipment(app: FastifyInstance): Promise<void> {
 
   app.patch<{ Params: { id: string } }>("/api/drones/:id", async request => {
     assertGroupAdministrator(request.actor); const actor = request.actor!; const current = await requireDrone(request.params.id, actor); const data = droneUpdateSchema.parse(request.body);
-    if (data.motorCount !== undefined && data.motorCount !== current.drone.motorCount && current.installedMotorCount > 0) throw Object.assign(new Error("Remove all motors before changing the motor count"), { statusCode: 409 });
+    if (!data.motorSlots && data.motorCount !== undefined && data.motorCount !== current.drone.motorCount && current.installedMotorCount > 0) throw Object.assign(new Error("Remove all motors before changing the motor count"), { statusCode: 409 });
     if (data.crewId) {
       const target = await requireCrew(data.crewId, actor);
       if (target.group.id !== current.group.id) {
+        if (data.motorSlots?.some(slot => slot.motorId)) throw Object.assign(new Error("A drone with assigned motors cannot be moved to another group"), { statusCode: 409 });
         const [history] = await db.select({ id: motorInstallations.id }).from(motorInstallations).where(eq(motorInstallations.droneId, current.drone.id)).limit(1);
         if (history) throw Object.assign(new Error("A drone with motor history cannot be moved to another group"), { statusCode: 409 });
       }
     }
-    const [drone] = await db.update(drones).set({ ...data, updatedAt: new Date() }).where(eq(drones.id, current.drone.id)).returning();
+    const { motorSlots, ...fields } = data;
+    const drone = await db.transaction(async tx => {
+      await tx.select().from(drones).where(eq(drones.id, current.drone.id)).for("update");
+      if (motorSlots) {
+        const layout = droneMotorLayout(fields.motorCount ?? current.drone.motorCount);
+        if (motorSlots.length !== layout.length) throw Object.assign(new Error("Motor slot count does not match drone configuration"), { statusCode: 400 });
+        const ids = motorSlots.flatMap(slot => slot.motorId ? [slot.motorId] : []);
+        if (new Set(ids).size !== ids.length) throw Object.assign(new Error("A motor cannot occupy multiple slots"), { statusCode: 400 });
+        if (current.drone.retiredAt && ids.length) throw Object.assign(new Error("A retired drone cannot be equipped"), { statusCode: 409 });
+        const selected = ids.length ? await tx.select().from(motors).where(inArray(motors.id, ids)).orderBy(asc(motors.id)).for("update") : [];
+        const active = await tx.select().from(motorInstallations).where(and(isNull(motorInstallations.removedAt), or(eq(motorInstallations.droneId, current.drone.id), ids.length ? inArray(motorInstallations.motorId, ids) : undefined))).for("update");
+        for (const [index, slot] of motorSlots.entries()) {
+          if (!slot.motorId) continue;
+          const motor = selected.find(item => item.id === slot.motorId);
+          if (!motor || motor.groupId !== current.group.id) throw Object.assign(new Error("Motor not found in this group"), { statusCode: 404 });
+          if (motor.retiredAt || motor.type !== layout[index].type) throw Object.assign(new Error("Motor is unavailable or has the wrong rotation direction"), { statusCode: 400 });
+          const installation = active.find(item => item.motorId === slot.motorId);
+          if ((installation?.droneId ?? null) !== slot.expectedDroneId) throw Object.assign(new Error("Motor assignment changed; reload and confirm its current location"), { statusCode: 409 });
+        }
+        const now = new Date();
+        const unchanged = new Set(active.filter(item => item.droneId === current.drone.id && motorSlots[item.positionNumber - 1]?.motorId === item.motorId).map(item => item.motorId));
+        const removed = active.filter(item => !unchanged.has(item.motorId));
+        if (removed.length) await tx.update(motorInstallations).set({ removedAt: now, removedByUserId: actor.userId, removalNotes: "Drone configuration updated" }).where(inArray(motorInstallations.id, removed.map(item => item.id)));
+        const additions = motorSlots.flatMap((slot, index) => slot.motorId && !unchanged.has(slot.motorId) ? [{ motorId: slot.motorId, droneId: current.drone.id, positionNumber: index + 1, installedAt: now, installedByUserId: actor.userId }] : []);
+        if (additions.length) await tx.insert(motorInstallations).values(additions);
+      }
+      const [updated] = await tx.update(drones).set({ ...fields, updatedAt: new Date() }).where(eq(drones.id, current.drone.id)).returning();
+      return updated;
+    });
     return mapDrone(await requireDrone(drone.id, actor));
   });
 
@@ -168,6 +197,7 @@ export async function registerEquipment(app: FastifyInstance): Promise<void> {
     if (drone.drone.retiredAt) throw Object.assign(new Error("A retired drone cannot be equipped"), { statusCode: 409 });
     if (motor.motor.retiredAt) throw Object.assign(new Error("A retired motor cannot be installed"), { statusCode: 409 });
     if (position > drone.drone.motorCount) throw Object.assign(new Error("Motor position is outside the drone configuration"), { statusCode: 400 });
+    if (motor.motor.type !== droneMotorLayout(drone.drone.motorCount)[position - 1].type) throw Object.assign(new Error("Motor rotation does not match this position"), { statusCode: 400 });
     await db.transaction(async tx => {
       const [lockedMotor] = await tx.select().from(motors).where(eq(motors.id, motor.motor.id)).for("update");
       const [alreadyInstalled] = await tx.select().from(motorInstallations).where(and(eq(motorInstallations.motorId, lockedMotor.id), isNull(motorInstallations.removedAt))).limit(1);

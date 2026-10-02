@@ -56,6 +56,7 @@
     "minutesShort": "min"
   },
   "equipment": {
+"slotLayoutHelp": "Top view. Arms are numbered clockwise from the front left. CV — clockwise, CCV — counterclockwise.", "emptySlot": "No motor (stock)", "transferWarning": "These motors will be removed from their current drones and moved here: {{motors}}", "confirmTransfer": "Confirm motor transfer", "arm": {"frontLeft":"Front left", "frontRight":"Front right", "right":"Right", "rearRight":"Rear right", "rearLeft":"Rear left", "left":"Left"},
     "initialHours": "Initial flight time — hours",
     "initialMinutes": "Initial flight time — minutes",
     "hoursShort": "h",

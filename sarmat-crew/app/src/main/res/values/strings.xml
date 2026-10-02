@@ -29,4 +29,6 @@
     <string name="widget_transparency_value">%1$d%%</string>
     <string name="widget_transparency_hint">0% — суцільний темний фон · 100% — фон повністю прозорий. Зміни застосовуються автоматично.</string>
     <string name="back">Назад</string>
+    <string name="widget_refresh">Оновити</string>
+    <string name="widget_syncing">Синхронізація…</string>
 </resources>

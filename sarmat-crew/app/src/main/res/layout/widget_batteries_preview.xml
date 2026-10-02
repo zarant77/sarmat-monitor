@@ -4,66 +4,87 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
     android:gravity="center"
-    android:orientation="horizontal"
-    android:padding="8dp">
+    android:orientation="vertical"
+    android:padding="4dp">
 
     <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:background="@drawable/widget_header_background"
+        android:paddingLeft="12dp"
+            android:paddingRight="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Sarmat Crew" android:textColor="@android:color/white" android:textSize="12sp" android:includeFontPadding="false" android:letterSpacing="0.03" android:textStyle="bold" />
+        <ImageView
+                android:layout_width="32dp"
+                android:layout_height="24dp"
+                android:background="@drawable/widget_refresh_background"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/widget_refresh"
+                android:src="@drawable/ic_widget_refresh" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+    <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="1" android:textColor="@android:color/white" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="1" android:textColor="@android:color/white" android:textSize="13sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="@string/widget_active_battery_preview" android:textColor="@color/lime" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="@string/widget_active_battery_preview" android:textColor="@color/lime" android:textSize="13sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_low" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="3" android:textColor="@android:color/white" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_low" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="3" android:textColor="@android:color/white" android:textSize="13sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="4" android:textColor="@android:color/white" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="4" android:textColor="@android:color/white" android:textSize="13sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_critical" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="5" android:textColor="@android:color/white" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_critical" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="5" android:textColor="@android:color/white" android:textSize="13sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="58dp"
+        android:layout_height="40dp"
         android:layout_weight="1"
         android:gravity="center_horizontal"
         android:orientation="vertical">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="7dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
-        <TextView android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="6" android:textColor="@android:color/white" android:textSize="17sp" android:textStyle="bold" />
+        <ImageView android:layout_width="30dp" android:layout_height="26dp" android:contentDescription="@string/widget_battery" android:paddingHorizontal="5dp" android:paddingTop="2dp" android:src="@drawable/ic_widget_battery_full" />
+        <TextView android:layout_width="match_parent" android:layout_height="14dp" android:gravity="center_horizontal|top" android:includeFontPadding="false" android:text="6" android:textColor="@android:color/white" android:textSize="13sp" android:textStyle="bold" />
+    </LinearLayout>
     </LinearLayout>
 </LinearLayout>
