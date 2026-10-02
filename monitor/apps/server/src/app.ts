@@ -1,3 +1,4 @@
+import { currentBatteryCharge } from "./current-charge.js";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -353,7 +354,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       const [latest] = await db.select().from(measurements).where(eq(measurements.batteryId, row.battery.id)).orderBy(desc(measurements.measuredAt)).limit(1);
       const [latestVoltage] = await db.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.batteryId, row.battery.id))
         .orderBy(desc(batteryVoltageEvents.measuredAt), desc(batteryVoltageEvents.id)).limit(1);
-      return { latestVoltageEvent: latestVoltage ? mapVoltageEvent(latestVoltage) : null, ...row.battery, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
+      return { currentCharge: currentBatteryCharge(latest, latestVoltage, { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage) }), latestVoltageEvent: latestVoltage ? mapVoltageEvent(latestVoltage) : null, ...row.battery, groupId: row.groupId, groupName: row.groupName, typeName: row.type.name, capacityAh: Number(row.type.capacityAh), minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage), cellCount: row.type.cellCount, chemistry: row.type.chemistry, crewNumber: row.crewNumber, crewName: row.crewName, crewColor: row.crewColor,
         cycleCount: row.cycleCount, latestMeasurement: latest ? mapMeasurement(latest, { minVoltage: Number(row.type.minVoltage), maxVoltage: Number(row.type.maxVoltage) }) : null,
         createdAt: iso(row.battery.createdAt), updatedAt: iso(row.battery.updatedAt) };
     }));
@@ -392,6 +393,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
     return {
       ...battery, crewNumber: crew.number, crewName: crew.name, crewColor: crew.color,
       cycleCount, latestMeasurement: measurementRows[0] ? mapMeasurement(measurementRows[0], battery) : null,
+      currentCharge: currentBatteryCharge(measurementRows[0], voltageRows[0], battery),
       measurements: measurementRows.map(row => mapMeasurement(row, battery)),
       voltageEvents: voltageRows.map(mapVoltageEvent), latestVoltageEvent: voltageRows[0] ? mapVoltageEvent(voltageRows[0]) : null,
       cycleEvents: eventRows.map(e => ({ ...e, occurredAt: iso(e.occurredAt) })),

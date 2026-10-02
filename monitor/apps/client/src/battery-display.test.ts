@@ -8,6 +8,11 @@ const battery = (state: string, chargePercent: number | null, archivedAt: string
 }) as Parameters<typeof isBatteryDischarged>[0];
 
 describe("isBatteryDischarged", () => {
+  it("uses current automatic charge while retaining the previous full cell check", () => {
+    const value = { ...battery("ready", 100), currentCharge: { totalVoltage: 40, chargePercent: 28, measuredAt: "2026-10-02T12:00:00Z", source: "mission_planner" as const } };
+    expect(isBatteryDischarged(value, 50)).toBe(true);
+    expect(value.latestMeasurement?.chargePercent).toBe(100);
+  });
   it("uses the configured inclusive discharge threshold", () => {
     expect(isBatteryDischarged(battery("ready", 50), 50)).toBe(true);
     expect(isBatteryDischarged(battery("ready", 51), 50)).toBe(false);

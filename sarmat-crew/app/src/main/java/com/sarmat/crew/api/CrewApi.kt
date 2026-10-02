@@ -96,6 +96,7 @@ class CrewApi(private val preferences: SharedPreferences) {
         return (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             val latest = item.optJSONObject("latestMeasurement")
+            val charge = if (item.has("currentCharge")) item.optJSONObject("currentCharge") else latest
             BatterySummary(
                 id = item.getString("id"),
                 label = item.getString("label"),
@@ -111,10 +112,11 @@ class CrewApi(private val preferences: SharedPreferences) {
                 activeSince = item.optStringOrNull("activeSince"),
                 latestMeasuredAt = latest?.optStringOrNull("measuredAt"),
                 latestCells = latest?.optJSONArray("cellVoltages")?.let { cells -> (0 until cells.length()).map(cells::getDouble) },
-                latestTotalVoltage = latest?.optDoubleOrNull("totalVoltage"),
-                latestChargePercent = latest?.optIntOrNull("chargePercent"),
+                latestTotalVoltage = charge?.optDoubleOrNull("totalVoltage"),
+                latestChargePercent = charge?.optIntOrNull("chargePercent"),
                 latestDelta = latest?.optDoubleOrNull("cellDelta"),
                 latestHealth = latest?.optString("health"),
+                chargeMeasuredAt = charge?.optStringOrNull("measuredAt"),
                 droneVoltage = item.optJSONObject("latestVoltageEvent")?.optDoubleOrNull("totalVoltage"),
                 droneVoltageAt = item.optJSONObject("latestVoltageEvent")?.optStringOrNull("measuredAt"),
             )

@@ -114,6 +114,23 @@ it("stores voltage separately, deduplicates retries and binds delayed events to 
     payload: { batteryId: second, sessionId, expectedActiveId: second, expectedActiveSince: nowActive.activeSince } })).statusCode).toBe(409);
 });
 
+it("exposes the same latest charge in list and detail without overwriting cell health", async () => {
+  await db.insert(measurements).values({ batteryId: first, totalVoltage: "50.4", cellVoltages: Array(12).fill(4.2),
+    minCellVoltage: "4.2", maxCellVoltage: "4.2", cellDelta: "0", health: "good", warningThresholdV: "0.1", dangerThresholdV: "0.2",
+    measuredAt: new Date(Date.now() - 120_000) });
+  const detail = (await app.inject({ url: `/api/batteries/${first}` })).json();
+  const listResponse = await app.inject({ url: "/api/batteries" });
+  expect(listResponse.statusCode).toBe(200);
+  const listed = listResponse.json().find((row: { id: string }) => row.id === first);
+  expect(detail.currentCharge).toMatchObject({ chargePercent: 50, totalVoltage: 43.217, source: "mission_planner" });
+  expect(listed.currentCharge).toEqual(detail.currentCharge);
+  expect(detail.latestMeasurement).toMatchObject({ chargePercent: 100, health: "good", cellDelta: 0 });
+  await db.insert(measurements).values({ batteryId: first, totalVoltage: "50.4", cellVoltages: Array(12).fill(4.2),
+    minCellVoltage: "4.2", maxCellVoltage: "4.2", cellDelta: "0", health: "good", warningThresholdV: "0.1", dangerThresholdV: "0.2",
+    measuredAt: new Date() });
+  expect((await app.inject({ url: `/api/batteries/${first}` })).json().currentCharge).toMatchObject({ chargePercent: 100, source: "measurement" });
+});
+
 it("records armed/disarmed flights and attributes duration to the motor snapshot", async () => {
   const current = (await list()).json(); const sessionId = randomUUID();
   const bind = await app.inject({ method: "PUT", url: "/station/batteries/active", headers,

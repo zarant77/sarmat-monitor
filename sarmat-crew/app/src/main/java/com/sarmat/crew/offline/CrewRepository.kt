@@ -53,8 +53,11 @@ class CrewRepository(
                     else {
                         val cells = body.getJSONArray("cellVoltages").doubles()
                         val result = runCatching { localMeasurement(item, cells, thresholds.optDouble("warningCellDeltaV", .1), thresholds.optDouble("dangerCellDeltaV", .2)) }.getOrNull()
+                        val updatesCharge = item.chargeMeasuredAt == null || Instant.parse(body.getString("occurredAt")) >= Instant.parse(item.chargeMeasuredAt)
                         if (result == null) item else item.copy(latestMeasuredAt = body.getString("occurredAt"), latestCells = cells,
-                            latestTotalVoltage = result.totalVoltage, latestChargePercent = result.chargePercent,
+                            latestTotalVoltage = if (updatesCharge) result.totalVoltage else item.latestTotalVoltage,
+                            latestChargePercent = if (updatesCharge) result.chargePercent else item.latestChargePercent,
+                            chargeMeasuredAt = if (updatesCharge) body.getString("occurredAt") else item.chargeMeasuredAt,
                             latestDelta = result.cellDelta, latestHealth = result.health)
                     }
                 }

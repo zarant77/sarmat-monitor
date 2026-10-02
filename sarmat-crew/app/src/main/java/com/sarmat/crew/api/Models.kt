@@ -28,6 +28,7 @@ data class BatterySummary(
     val latestHealth: String?,
     val droneVoltage: Double? = null,
     val droneVoltageAt: String? = null,
+    val chargeMeasuredAt: String? = latestMeasuredAt,
 )
 
 data class MeasurementPreview(

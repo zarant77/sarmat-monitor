@@ -37,6 +37,8 @@ class OfflineSyncTest {
     private var expired = false
     private var offline = false
     private var activeSince: String? = null
+    private var chargeSnapshot: JSONObject? = null
+    private var cellSnapshot: JSONObject? = null
 
     @Before fun setup() {
         context = RuntimeEnvironment.getApplication()
@@ -86,6 +88,29 @@ class OfflineSyncTest {
         .put("typeName", "12S").put("capacityAh", 20).put("minVoltage", 36).put("maxVoltage", 50.4)
         .put("cellCount", 12).put("state", "ready").put("chemistry", "Li-ion").put("cycleCount", 0)
         .put("activeSince", activeSince ?: JSONObject.NULL)
+        .apply { chargeSnapshot?.let { put("currentCharge", it) }; cellSnapshot?.let { put("latestMeasurement", it) } }
+    @Test fun `automatic charge feeds cards and widgets while offline cell checks respect sample time`() {
+        val now = java.time.Instant.now()
+        cellSnapshot = JSONObject().put("measuredAt", now.minusSeconds(120).toString()).put("chargePercent", 100)
+            .put("totalVoltage", 50.4).put("cellVoltages", JSONArray(List(12) { 4.2 })).put("cellDelta", 0).put("health", "good")
+        chargeSnapshot = JSONObject().put("measuredAt", now.toString()).put("chargePercent", 28).put("totalVoltage", 40).put("source", "mission_planner")
+        assertTrue(repo.sync())
+        offline = true
+        assertEquals(28, repo.batteries().single().latestChargePercent)
+        assertEquals("good", repo.batteries().single().latestHealth)
+        fun enqueue(at: java.time.Instant, voltage: Double) {
+            store.enqueue(scope, JSONObject().put("id", UUID.randomUUID().toString()).put("kind", "measurement")
+                .put("batteryId", battery).put("crewId", crew).put("occurredAt", at.toString())
+                .put("cellVoltages", JSONArray(List(12) { voltage })).put("notes", "test"))
+        }
+        enqueue(now.minusSeconds(60), 4.2)
+        assertEquals(28, repo.batteries().single().latestChargePercent)
+        assertEquals(now.minusSeconds(60).toString(), repo.batteries().single().latestMeasuredAt)
+        enqueue(now.plusSeconds(10), 4.0)
+        assertEquals(83, repo.batteries().single().latestChargePercent)
+        assertEquals(now.plusSeconds(10).toString(), repo.batteries().single().chargeMeasuredAt)
+    }
+
     private fun save() { repo.saveMeasurement(battery, List(12) { 4.24 }, "offline reading") }
 
     @Test fun `offline edits drafts and history survive reopening sqlite`() {

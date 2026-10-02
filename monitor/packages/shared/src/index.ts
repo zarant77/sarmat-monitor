@@ -276,6 +276,7 @@ export interface Battery {
   id: string; crewId: string; groupId: string; groupName: string; crewNumber: number; crewName: string; crewColor: string; typeId: string; typeName: string; serialNumber: string;
   label: string; capacityAh: number; minVoltage: number; maxVoltage: number; cellCount: number; chemistry: string; state: BatteryState;
   notes: string; cycleCount: number; latestMeasurement: Measurement | null;
+  currentCharge?: { totalVoltage: number; chargePercent: number; measuredAt: string; source: "measurement" | "mission_planner" } | null;
   latestVoltageEvent?: BatteryVoltageEvent | null;
   activeSince: string | null;
   archivedAt?: string | null; createdAt: string; updatedAt: string;
