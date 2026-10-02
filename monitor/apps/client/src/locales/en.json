@@ -5,6 +5,8 @@
     "loading": "Establishing secure session…"
   },
   "nav": {
+    "equipment": "Equipment",
+    "administration": "Administration",
     "primary": "Primary navigation",
     "dashboard": "Dashboard",
     "groups": "Groups",
