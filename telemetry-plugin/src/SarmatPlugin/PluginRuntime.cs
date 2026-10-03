@@ -31,6 +31,8 @@ namespace SarmatPlugin
         private DateTime batteryChargeUpdatedAt;
         private readonly FlightTracker flightTracker = new FlightTracker();
         private readonly BatteryDialogConnection batteryConnection = new BatteryDialogConnection();
+        private readonly BatteryReplacementDetector batteryReplacement = new BatteryReplacementDetector();
+        private bool batteryReselectionPending;
         private ObsStatus obs = new ObsStatus();
         private RuijieStatus ruijie = new RuijieStatus();
         private string aggregatorStatus = "Disabled";
@@ -94,9 +96,13 @@ namespace SarmatPlugin
                 }
                 else if (!settings.AggregatorEnabled || !settings.BatteryTrackingEnabled || batteryConnection.Disconnected)
                 { PersistVoltageEvents(); PersistFlightEvents(); batteryTracker.Reset(); flightTracker.Reset(); }
+                if (offerBattery) batteryReselectionPending = true;
+                offerBattery = batteryReselectionPending && telemetry.Connected && !telemetry.Armed &&
+                    settings.AggregatorEnabled && settings.BatteryTrackingEnabled;
+                if (offerBattery) batteryReselectionPending = false;
             }
             if (batteryConnection.Disconnected) CloseBatterySelection();
-            if (offerBattery) ShowBatterySelection();
+            if (offerBattery) { CloseBatterySelection(); ShowBatterySelection(); }
             UpdateVehicleReconnect(telemetry);
             // Mission Planner can restore its own HUD flags after Activate/connect.
             // Reconcile on every tick; the adapter only redraws when a value differs.
@@ -181,7 +187,7 @@ namespace SarmatPlugin
         private void StopWorkers(bool resetBattery = true)
         {
             if (resetBattery) CloseBatterySelection();
-            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); if (resetBattery) { batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); } }
+            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); if (resetBattery) { batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); batteryReplacement.Reset(); batteryReselectionPending = false; } }
             cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null;
             audio.Stop();
         }
@@ -320,7 +326,8 @@ namespace SarmatPlugin
                 panel.BeginInvoke(new Action(ShowBatterySelection));
                 return;
             }
-            if (!new TelemetryReader(currentState).Read().Connected) return;
+            var telemetry = new TelemetryReader(currentState).Read();
+            if (!telemetry.Connected || telemetry.Armed) return;
             if (batterySelectionForm != null && !batterySelectionForm.IsDisposed) { batterySelectionForm.Activate(); return; }
             string sessionId;
             lock (sync) sessionId = batteryTracker.SessionId;
@@ -379,20 +386,42 @@ namespace SarmatPlugin
         public void ObserveBatteryVoltage(double voltage, double? currentAmps = null)
         {
             lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
-                batteryTracker.Voltage(voltage, DateTime.UtcNow, currentAmps);
+            {
+                var now = DateTime.UtcNow;
+                if (batteryReplacement.Voltage(voltage, currentAmps, now) && batteryTracker.IsConfirmed)
+                {
+                    RequireBatteryConfirmation(now, "Idle voltage increased; battery selection required");
+                    // The new tracker needs a fresh heartbeat before it can accept this sample.
+                    batteryTracker.Heartbeat(false, now);
+                }
+                // Do not assign a possible new pack's voltage/consumption to the previous battery.
+                if (batteryReplacement.SuspectedReplacement && batteryTracker.IsConfirmed) return;
+                batteryTracker.Voltage(voltage, now, currentAmps);
+            }
+        }
+        private void RequireBatteryConfirmation(DateTime now, string reason)
+        {
+            // Flush samples to their old immutable binding before starting an unconfirmed session.
+            PersistVoltageEvents(); PersistFlightEvents();
+            batteryTracker.Connect(now); flightTracker.Reset();
+            batteryChargeSessionId = null; batteryChargePercent = null;
+            batteryReselectionPending = true;
+            log.Info(reason);
         }
         public void ObserveBatteryHeartbeat(bool armed)
         {
             lock (sync) if (!disposed && settings.AggregatorEnabled && settings.BatteryTrackingEnabled)
             {
                 var now = DateTime.UtcNow;
+                if (batteryReplacement.Heartbeat(armed, now) && batteryTracker.IsConfirmed)
+                    RequireBatteryConfirmation(now, "Fresh heartbeat after connection gap; battery selection required");
                 batteryTracker.Heartbeat(armed, now); flightTracker.Heartbeat(armed, now);
                 PersistFlightEvents();
             }
         }
         public void ResetBatteryConnection()
         {
-            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); }
+            lock (sync) { PersistVoltageEvents(); PersistFlightEvents(); batteryTracker.Reset(); flightTracker.Reset(); batteryConnection.Reset(); batteryReplacement.Reset(); batteryReselectionPending = false; }
             wasConnected = false; connectionInitialized = false;
             CloseBatterySelection();
         }

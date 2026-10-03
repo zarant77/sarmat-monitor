@@ -434,6 +434,8 @@ namespace SarmatPlugin
                         new[] { comPort.GetType(), typeof(string), typeof(string), typeof(bool), typeof(bool) }, null);
                     if (disconnect == null || connect == null)
                         throw new MissingMethodException("Mission Planner reconnect API is unavailable");
+                    // Auto-reconnect may reuse the same port and hide a brief disconnect from Tick.
+                    runtime?.ResetBatteryConnection();
                     disconnect.Invoke(main, new[] { comPort });
                     var baseStream = comPort.GetType().GetProperty("BaseStream",
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);

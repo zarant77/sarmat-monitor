@@ -7,7 +7,10 @@ namespace SarmatPlugin.UI
 {
     internal sealed class TelemetryWidget : TableLayoutPanel
     {
-        internal const float BatteryDetailFontScale = 0.78f;
+        internal const float BatteryDetailFontScale = 0.65f;
+        internal const float BatteryTitleRowPercent = 38f;
+        internal const float BatteryValueRowPercent = 30f;
+        internal const float BatteryDetailRowPercent = 32f;
         private readonly Label titleLabel;
         private readonly Label valueLabel;
         private readonly Label detailLabel;
@@ -29,6 +32,8 @@ namespace SarmatPlugin.UI
             RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
             titleLabel = Label(Color.Silver);
             valueLabel = Label(Color.White);
+            titleLabel.TextAlign = ContentAlignment.BottomCenter;
+            valueLabel.TextAlign = ContentAlignment.TopCenter;
             detailLabel = Label(Color.White);
             detailLabel.Visible = false;
             Controls.Add(titleLabel, 0, 0);
@@ -48,11 +53,10 @@ namespace SarmatPlugin.UI
             if (!batteryLayout)
             {
                 batteryLayout = true;
-                RowStyles[0].Height = 28;
-                RowStyles[1].Height = 32;
+                RowStyles[0].Height = BatteryTitleRowPercent;
+                RowStyles[1].Height = BatteryValueRowPercent;
                 RowStyles[2].SizeType = SizeType.Percent;
-                RowStyles[2].Height = 40;
-                valueLabel.TextAlign = ContentAlignment.BottomCenter;
+                RowStyles[2].Height = BatteryDetailRowPercent;
                 detailLabel.TextAlign = ContentAlignment.TopCenter;
                 detailLabel.Visible = true;
             }
@@ -63,7 +67,6 @@ namespace SarmatPlugin.UI
 
         public void ApplyFontSizes(float headerFontSize, float valueFontSize)
         {
-            if (batteryLayout) { headerFontSize *= 0.74f; valueFontSize *= 0.68f; }
             if (Math.Abs(titleSize - headerFontSize) > 0.01f)
             {
                 titleLabel.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, headerFontSize, FontStyle.Bold);

@@ -159,7 +159,7 @@ export const thresholdInputSchema = z.object({
   warningCellDeltaV: z.coerce.number().positive().max(2),
   dangerCellDeltaV: z.coerce.number().positive().max(3),
   chargedThresholdPercent: z.coerce.number().int().min(51).max(100),
-  dischargedThresholdPercent: z.coerce.number().int().min(0).max(70),
+  dischargedThresholdPercent: z.coerce.number().int().min(0).max(80),
   criticalChargePercent: z.coerce.number().int().min(0).max(69),
   chargeEventDeadbandPercent: z.coerce.number().int().min(1).max(20)
 }).superRefine((value, context) => {

@@ -13,6 +13,8 @@ namespace SarmatPlugin.UI
         private readonly Dictionary<string, TelemetryWidget> widgets;
         private string enabledSignature;
         private bool hasTelemetryContent;
+        private bool layoutScheduled;
+        private string layoutContentSignature;
         private readonly ToolStripItem reconnectCamera;
 
         public event EventHandler SettingsRequested;
@@ -58,6 +60,7 @@ namespace SarmatPlugin.UI
             SizeChanged += (s, e) => ArrangeWidgets();
             grid.SizeChanged += (s, e) => ArrangeWidgets();
             HandleCreated += (s, e) => ScheduleLayout();
+            Load += (s, e) => ScheduleLayout();
             ParentChanged += (s, e) => ScheduleLayout();
             VisibleChanged += (s, e) => { if (Visible) ScheduleLayout(); };
         }
@@ -110,8 +113,15 @@ namespace SarmatPlugin.UI
                 if (definition != null)
                     SetWidget(definition.Id, definition.Title, item.Value, WidgetStatus.Normal);
             }
-            if (!hasTelemetryContent)
+            var contentSignature = string.Join("|", grid.Controls.Cast<TelemetryWidget>().Select(widget =>
+                widget.TitleText + ":" + widget.ValueText.Length + ":" + widget.DetailText.Length));
+            if (!hasTelemetryContent || contentSignature != layoutContentSignature)
+            {
+                layoutContentSignature = contentSignature;
                 hasTelemetryContent = ArrangeWidgets();
+                // Repeat after the host has completed docking/layout, just as a manual resize does.
+                ScheduleLayout();
+            }
 
         }
 
@@ -134,6 +144,7 @@ namespace SarmatPlugin.UI
             if (signature == enabledSignature) return;
 
             enabledSignature = signature;
+            hasTelemetryContent = false;
             grid.SuspendLayout();
             grid.Controls.Clear();
             foreach (var definition in ordered)
@@ -203,9 +214,11 @@ namespace SarmatPlugin.UI
 
         private void ScheduleLayout()
         {
-            if (!IsHandleCreated || IsDisposed || Disposing) return;
+            if (!IsHandleCreated || IsDisposed || Disposing || layoutScheduled) return;
+            layoutScheduled = true;
             BeginInvoke(new Action(() =>
             {
+                layoutScheduled = false;
                 if (IsDisposed || Disposing) return;
                 PerformLayout();
                 grid.PerformLayout();
@@ -239,14 +252,17 @@ namespace SarmatPlugin.UI
                     var text = title ? widget.TitleText : widget.ValueText;
                     var measured = TextRenderer.MeasureText(text ?? "", font, Size.Empty,
                         TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
-                    if (measured.Width > width || measured.Height > height) return false;
+                    var textHeight = widget.IsBatteryLayout
+                        ? height * (title ? TelemetryWidget.BatteryTitleRowPercent / 38f : TelemetryWidget.BatteryValueRowPercent / 62f)
+                        : height;
+                    if (measured.Width > width || measured.Height > textHeight) return false;
                     if (!title && widget.IsBatteryLayout)
                     {
-                        using (var compactFont = new Font(SystemFonts.MessageBoxFont.FontFamily, Math.Max(4f, fontSize * 0.68f * TelemetryWidget.BatteryDetailFontScale), FontStyle.Regular))
+                        using (var compactFont = new Font(SystemFonts.MessageBoxFont.FontFamily, Math.Max(4f, fontSize * TelemetryWidget.BatteryDetailFontScale), FontStyle.Regular))
                         {
                             var details = TextRenderer.MeasureText(widget.DetailText ?? "", compactFont, Size.Empty,
                                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
-                            if (details.Width > width || details.Height > height * 40 / 62) return false;
+                            if (details.Width > width || details.Height > height * TelemetryWidget.BatteryDetailRowPercent / 62f) return false;
                         }
                     }
                 }

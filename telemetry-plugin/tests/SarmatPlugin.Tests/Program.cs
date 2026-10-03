@@ -20,6 +20,7 @@ namespace SarmatPlugin.Tests
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery widget accepts only a valid server charge percentage", BatteryWidgetCharge);
             Run("Battery dialog waits for stable connection and tolerates brief gaps", BatteryDialogTiming);
+            Run("Battery replacement uses fresh reconnects and sustained idle voltage rises", BatteryReplacement);
             Run("Battery voltage uses fresh samples and observed disarm edges", BatteryVoltageEvents);
             Run("Battery consumption integrates fresh current and checkpoints cumulative mAh", BatteryConsumption);
             Run("Flight tracker emits durable armed and disarmed pairs", FlightEvents);
@@ -247,6 +248,37 @@ namespace SarmatPlugin.Tests
             True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":null}"))).HasValue);
             True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":101}}"))).HasValue);
             True(!BatteryApiClient.ParseChargePercent(MiniJson.Object(MiniJson.Parse("{\"currentCharge\":{\"chargePercent\":\"40\"}}"))).HasValue);
+        }
+
+        private static void BatteryReplacement()
+        {
+            var detector = new BatteryReplacementDetector(); var now = DateTime.UtcNow;
+            True(!detector.Heartbeat(false, now));
+            True(!detector.Voltage(45, 1.3, now));
+            True(!detector.Voltage(50, 1.3, now.AddSeconds(1))); True(detector.SuspectedReplacement);
+            True(!detector.Voltage(50.1, 1.3, now.AddSeconds(2)));
+            detector.Heartbeat(false, now.AddSeconds(3));
+            True(detector.Voltage(50, 1.3, now.AddSeconds(3))); True(!detector.SuspectedReplacement);
+            True(!detector.Voltage(50.1, 1.3, now.AddSeconds(4))); // Offer only once for the same rise.
+            True(!detector.Heartbeat(false, now.AddSeconds(5))); // Brief gaps do not create a new session.
+            True(detector.Heartbeat(false, now.AddSeconds(11))); // MP may still report Connected throughout this gap.
+            detector.Reset(); detector.Heartbeat(true, now);
+            True(!detector.Voltage(45, 65, now));
+            detector.Heartbeat(false, now.AddSeconds(1));
+            True(!detector.Voltage(50, 1.3, now.AddSeconds(1))); // Loaded voltage is never the idle baseline.
+            True(!detector.Voltage(50, 1.3, now.AddSeconds(3)));
+            detector.Reset(); detector.Heartbeat(false, now);
+            True(!detector.Voltage(45, 1, now));
+            True(!detector.Voltage(50, 1, now.AddSeconds(1)));
+            True(!detector.Voltage(45, 1, now.AddSeconds(2))); True(!detector.SuspectedReplacement); // Single spike.
+            True(!detector.Voltage(50, 1, now.AddSeconds(8))); // Stale heartbeat cannot identify a replacement.
+            detector.Heartbeat(true, now.AddSeconds(9));
+            True(!detector.Voltage(50, 1, now.AddSeconds(9))); // Never interrupt an armed vehicle.
+            True(!detector.Heartbeat(true, now.AddSeconds(20)));
+            detector.Reset(); detector.Heartbeat(false, now);
+            True(!detector.Voltage(double.NaN, 1, now));
+            True(!detector.Voltage(45, null, now));
+            True(!detector.Voltage(50, 20, now.AddSeconds(1)));
         }
 
         private static void BatteryApiSettings()
