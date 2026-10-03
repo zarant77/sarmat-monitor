@@ -139,9 +139,11 @@ namespace SarmatPlugin.Tests
             Equal(150.0, (double)items[1]["consumedMah"]);
             Equal(300.0, (double)items[2]["consumedMah"]);
             Equal(true, (bool)items[2]["consumptionComplete"]);
+            Equal(true, (bool)items[2]["armed"]);
             tracker.Voltage(48, now.AddSeconds(30), 36); Equal(3, tracker.Ready().Length);
             tracker.Heartbeat(false, now.AddSeconds(31)); tracker.Voltage(49, now.AddSeconds(31), 0);
             var landing = tracker.Ready().Last(); Equal("vehicle_disarmed", (string)landing["type"]);
+            Equal(false, (bool)landing["armed"]);
             Equal(305.0, (double)landing["consumedMah"]);
             tracker.Connect(now.AddSeconds(40)); tracker.Confirm(tracker.SessionId);
             tracker.Heartbeat(true, now.AddSeconds(40)); tracker.Voltage(50, now.AddSeconds(40), 36);

@@ -70,6 +70,7 @@ namespace SarmatPlugin.Core
                     ["totalVoltage"] = Math.Round(voltage, 3),
                     ["consumedMah"] = Math.Round(consumedMah, 3),
                     ["consumptionComplete"] = consumptionComplete,
+                    ["armed"] = armed.Value,
                     ["currentAmps"] = currentAmps.HasValue && !double.IsNaN(currentAmps.Value) &&
                         !double.IsInfinity(currentAmps.Value) && currentAmps.Value >= 0 && currentAmps.Value <= 10000
                         ? (object)Math.Round(currentAmps.Value, 3) : null,

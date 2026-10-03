@@ -242,11 +242,11 @@ namespace SarmatPlugin.UI
                     if (measured.Width > width || measured.Height > height) return false;
                     if (!title && widget.IsBatteryLayout)
                     {
-                        using (var compactFont = new Font(SystemFonts.MessageBoxFont.FontFamily, Math.Max(4f, fontSize * 0.68f * 0.65f), FontStyle.Regular))
+                        using (var compactFont = new Font(SystemFonts.MessageBoxFont.FontFamily, Math.Max(4f, fontSize * 0.68f * TelemetryWidget.BatteryDetailFontScale), FontStyle.Regular))
                         {
                             var details = TextRenderer.MeasureText(widget.DetailText ?? "", compactFont, Size.Empty,
                                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
-                            if (details.Width > width || details.Height > height * 30 / 62) return false;
+                            if (details.Width > width || details.Height > height * 40 / 62) return false;
                         }
                     }
                 }

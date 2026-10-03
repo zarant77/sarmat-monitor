@@ -20,6 +20,7 @@ const voltageSchema = z.object({
   currentAmps: z.number().finite().min(0).max(10000).transform(value => Math.round(value * 1000) / 1000).nullable().optional(),
   consumedMah: z.number().finite().min(0).max(10_000_000_000).transform(value => Math.round(value * 1000) / 1000).nullable().optional(),
   consumptionComplete: z.boolean().default(false),
+  armed: z.boolean().nullable().optional(),
   occurredAt: z.iso.datetime({ offset: true }), measuredAt: z.iso.datetime({ offset: true })
 }).refine(value => value.type !== "consumption_sample" || value.consumedMah != null, "Consumption samples require cumulative mAh");
 
@@ -116,13 +117,14 @@ export async function registerStationBatteries(app: FastifyInstance) {
         const currentAmps = data.currentAmps ?? null;
         const consumedMah = data.consumedMah ?? null;
         const values = { ...data, batteryId: session.batteryId, totalVoltage: data.totalVoltage.toFixed(3), currentAmps: currentAmps?.toFixed(3) ?? null,
-          consumedMah: consumedMah?.toFixed(3) ?? null, occurredAt, measuredAt };
+          consumedMah: consumedMah?.toFixed(3) ?? null, armed: data.armed ?? null, occurredAt, measuredAt };
         const [inserted] = await tx.insert(batteryVoltageEvents).values(values).onConflictDoNothing().returning();
         if (inserted) return { id: inserted.id, duplicate: false };
         const [existing] = await tx.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.id, data.id));
         if (!existing || existing.sessionId !== data.sessionId || existing.type !== data.type || Number(existing.totalVoltage) !== data.totalVoltage ||
             (existing.currentAmps === null ? null : Number(existing.currentAmps)) !== currentAmps ||
             (existing.consumedMah === null ? null : Number(existing.consumedMah)) !== consumedMah || existing.consumptionComplete !== data.consumptionComplete ||
+            existing.armed !== (data.armed ?? null) ||
             existing.occurredAt.getTime() !== occurredAt.getTime() || existing.measuredAt.getTime() !== measuredAt.getTime())
           throw Object.assign(new Error("Event ID already used with different data"), { statusCode: 409 });
         return { id: existing.id, duplicate: true };

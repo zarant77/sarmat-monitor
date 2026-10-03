@@ -28,7 +28,7 @@ const select = (batteryId: string, expectedActiveId: string | null = null, expec
   app.inject({ method: "PUT", url: "/station/batteries/active", headers, payload: { batteryId, expectedActiveId, expectedActiveSince } });
 
 beforeAll(async () => {
-  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene", "0015_amazing_rumiko_fujikawa", "0016_flawless_the_initiative"])
+  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene", "0015_amazing_rumiko_fujikawa", "0016_flawless_the_initiative", "0017_keen_nomad"])
     await pg.exec(readFileSync(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8"));
   const [group] = await db.insert(groups).values({ name: "Station test" }).returning(); groupId = group.id;
   await db.insert(users).values({ id: "00000000-0000-4000-8000-000000000002", username: "test-flight-admin", passwordHash: "test", role: "SUPER_ADMIN" });
@@ -92,6 +92,7 @@ it("stores voltage separately, deduplicates retries and binds delayed events to 
   expect((await post(event)).json()).toEqual({ id: event.id, duplicate: true });
   expect((await post({ ...event, totalVoltage: 44 })).statusCode).toBe(409);
   expect((await post({ ...event, currentAmps: 1 })).statusCode).toBe(409);
+  expect((await post({ ...event, armed: true })).statusCode).toBe(409);
   for (const currentAmps of [-1, 10001]) expect((await post({ ...event, id: randomUUID(), currentAmps })).statusCode).toBe(400);
   const older = new Date(Date.now() - 60_000).toISOString();
   expect((await post({ ...event, id: randomUUID(), type: "vehicle_connected", totalVoltage: 50.1, currentAmps: undefined, occurredAt: older, measuredAt: older })).statusCode).toBe(201);
@@ -126,7 +127,8 @@ it("exposes the same latest charge in list and detail without overwriting cell h
   const listResponse = await app.inject({ url: "/api/batteries" });
   expect(listResponse.statusCode).toBe(200);
   const listed = listResponse.json().find((row: { id: string }) => row.id === first);
-  expect(detail.currentCharge).toMatchObject({ chargePercent: 50, totalVoltage: 43.217, source: "mission_planner" });
+  // The last idle reading was 50.1 V (98%); a loaded sample without mAh cannot lower that anchor.
+  expect(detail.currentCharge).toMatchObject({ chargePercent: 98, totalVoltage: 43.217, source: "mission_planner", incomplete: true });
   expect(listed.currentCharge).toEqual(detail.currentCharge);
   expect(detail.latestMeasurement).toMatchObject({ chargePercent: 100, currentAmps: 0, health: "good", cellDelta: 0 });
   await db.insert(measurements).values({ batteryId: first, totalVoltage: "50.4", cellVoltages: Array(12).fill(4.2),

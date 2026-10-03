@@ -11,6 +11,7 @@ export interface SocSample {
   /** Cumulative mAh since this session began, never a per-request delta. */
   consumedMah?: number | null;
   consumptionComplete?: boolean;
+  armed?: boolean | null;
 }
 export interface SocLimits {
   minVoltage: number;
@@ -39,6 +40,9 @@ export function calculateBatterySoc(samples: SocSample[], limits: SocLimits) {
     const compensated = sample.source === "mission_planner" && sample.currentAmps != null && resistance > 0;
     const voltage = sample.totalVoltage + (compensated ? sample.currentAmps! * resistance / 1000 : 0);
     const voltagePercent = voltageToPercent(voltage, limits.minVoltage, limits.maxVoltage);
+    // Older plugins have no ARMED flag; a substantial current still identifies load.
+    const underLoad = sample.armed === true || (sample.currentAmps != null &&
+      sample.currentAmps > Math.max(2, (limits.capacityAh ?? 20) * 0.05));
     if (sample.source === "measurement") {
       percent = voltagePercent;
       consumedMahSinceCheck = 0;
@@ -56,6 +60,7 @@ export function calculateBatterySoc(samples: SocSample[], limits: SocLimits) {
       counters.set(sample.sessionId!, Math.max(previous, counter!));
     }
     if (percent == null) {
+      if (underLoad && !compensated) { incomplete = true; continue; }
       // With no earlier anchor, this voltage already reflects consumption before this sample.
       percent = voltagePercent;
       method = compensated ? "voltage_compensated" : "voltage";
@@ -65,11 +70,12 @@ export function calculateBatterySoc(samples: SocSample[], limits: SocLimits) {
     if (metered && capacityMah != null) {
       consumedMahSinceCheck += delta;
       percent = Math.max(0, percent - delta / capacityMah * 100);
-    }
-    if (metered && capacityMah != null && sample.consumptionComplete === true && !incomplete) {
       method = "consumption";
+      incomplete = incomplete || sample.consumptionComplete !== true;
     } else {
       incomplete = true;
+      // A high-load voltage is sag, not evidence of a matching loss of capacity.
+      if (underLoad) continue;
       // A resting/reconnect voltage may lower an uncertain estimate, but cannot recharge it.
       percent = Math.min(percent, voltagePercent);
       method = compensated ? "voltage_compensated" : "voltage";

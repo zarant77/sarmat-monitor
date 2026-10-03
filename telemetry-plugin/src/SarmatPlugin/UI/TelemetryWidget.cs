@@ -7,6 +7,7 @@ namespace SarmatPlugin.UI
 {
     internal sealed class TelemetryWidget : TableLayoutPanel
     {
+        internal const float BatteryDetailFontScale = 0.78f;
         private readonly Label titleLabel;
         private readonly Label valueLabel;
         private readonly Label detailLabel;
@@ -48,9 +49,11 @@ namespace SarmatPlugin.UI
             {
                 batteryLayout = true;
                 RowStyles[0].Height = 28;
-                RowStyles[1].Height = 42;
+                RowStyles[1].Height = 32;
                 RowStyles[2].SizeType = SizeType.Percent;
-                RowStyles[2].Height = 30;
+                RowStyles[2].Height = 40;
+                valueLabel.TextAlign = ContentAlignment.BottomCenter;
+                detailLabel.TextAlign = ContentAlignment.TopCenter;
                 detailLabel.Visible = true;
             }
             SetContent("Battery", chargePercent.HasValue ? chargePercent.Value + "%" : "—%", status);
@@ -73,7 +76,7 @@ namespace SarmatPlugin.UI
             }
             if (batteryLayout)
             {
-                var compactSize = Math.Max(4f, valueFontSize * 0.65f);
+                var compactSize = Math.Max(4f, valueFontSize * BatteryDetailFontScale);
                 if (Math.Abs(detailSize - compactSize) > 0.01f)
                 {
                     detailLabel.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, compactSize, FontStyle.Regular);

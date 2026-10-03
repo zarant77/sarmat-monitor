@@ -1,0 +1,1 @@
+ALTER TABLE "battery_voltage_events" ADD COLUMN "armed" boolean;

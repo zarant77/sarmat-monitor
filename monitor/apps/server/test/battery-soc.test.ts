@@ -33,7 +33,7 @@ describe("battery SOC replay", () => {
     expect(calculateBatterySoc([check(0), sample(1, 4000)], { ...limits, capacityAh: 10 })?.chargePercent).toBe(60);
   });
   it("legacy readings without consumption can lower SOC but cannot recharge it", () => {
-    expect(calculateBatterySoc([check(0), sample(1, null, 48.41), sample(2, null, 49.21)], limits))
+    expect(calculateBatterySoc([check(0), { ...sample(1, null, 48.41), currentAmps: 1 }, { ...sample(2, null, 49.21), currentAmps: 1 }], limits))
       .toMatchObject({ chargePercent: 86, method: "voltage", incomplete: true });
   });
   it("compensates fallback voltage using pack mΩ and amperes", () => {
@@ -45,7 +45,25 @@ describe("battery SOC replay", () => {
       .toMatchObject({ chargePercent: 75, incomplete: true, consumedMahSinceCheck: 5000 });
   });
   it("bootstraps telemetry-only batteries without subtracting consumption twice", () => {
-    expect(calculateBatterySoc([sample(0, 4000, 43.2), sample(1, 6000, 49.21)], limits)?.chargePercent).toBe(40);
+    expect(calculateBatterySoc([{ ...sample(0, 4000, 43.2), currentAmps: 1 }, sample(1, 6000, 49.21)], limits)?.chargePercent).toBe(40);
+  });
+  it("does not turn takeoff voltage sag into lost capacity when consumption has gaps", () => {
+    const pack = { minVoltage: 42, maxVoltage: 50.4, capacityAh: 54 };
+    expect(calculateBatterySoc([
+      { ...sample(0, 0, 50.2, "a", false), currentAmps: 1.3, armed: false },
+      { ...sample(15, 250, 45.3, "a", false), currentAmps: 65.7, armed: true },
+      { ...sample(30, 500, 45, "a", false), currentAmps: 70, armed: true },
+      { ...sample(40, 500, 49.2, "a", false), currentAmps: 1.3, armed: false }
+    ], pack)).toMatchObject({ chargePercent: 97, consumedMahSinceCheck: 500, method: "consumption", incomplete: true });
+  });
+  it("holds an existing anchor during load if no consumption counter is available", () => {
+    expect(calculateBatterySoc([check(0), { ...sample(1, null, 42), currentAmps: 65, armed: true }], limits))
+      .toMatchObject({ chargePercent: 100, incomplete: true });
+    expect(calculateBatterySoc([check(0), { ...sample(1, null, 42), currentAmps: 65 }], limits)?.chargePercent).toBe(100);
+  });
+  it("does not bootstrap an uncompensated SOC from a loaded voltage", () => {
+    expect(calculateBatterySoc([{ ...sample(0, 0, 45.3), currentAmps: 65, armed: true }], limits)).toBeNull();
+    expect(calculateBatterySoc([{ ...sample(0, 0, 45.3), currentAmps: 65, armed: true }, check(1)], limits)?.chargePercent).toBe(100);
   });
   it("prefers checker at equal timestamps and clamps an exhausted pack", () => {
     expect(calculateBatterySoc([sample(0, 0, 36), check(0)], limits)?.chargePercent).toBe(100);

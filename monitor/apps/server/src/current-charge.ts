@@ -1,7 +1,7 @@
 import { calculateBatterySoc, type SocLimits, type SocSample } from "@sbm/shared";
 
 type Reading = { id?: string; sessionId?: string; totalVoltage: string | number; currentAmps?: string | number | null;
-  consumedMah?: string | number | null; consumptionComplete?: boolean; measuredAt: Date };
+  consumedMah?: string | number | null; consumptionComplete?: boolean; armed?: boolean | null; measuredAt: Date };
 
 /** Compare sample times, not arrival times: delayed telemetry must not undo a newer check. */
 export function currentBatteryCharge(measurement: Reading | Reading[] | undefined, automatic: Reading | Reading[] | undefined,
@@ -12,7 +12,7 @@ export function currentBatteryCharge(measurement: Reading | Reading[] | undefine
       samples.push({ id: reading.id ?? `${source}-${index}`, source, measuredAt: reading.measuredAt.getTime(),
         totalVoltage: Number(reading.totalVoltage), currentAmps: source === "measurement" ? 0 : reading.currentAmps == null ? null : Number(reading.currentAmps),
         sessionId: reading.sessionId, consumedMah: reading.consumedMah == null ? null : Number(reading.consumedMah),
-        consumptionComplete: reading.consumptionComplete });
+        consumptionComplete: reading.consumptionComplete, armed: reading.armed });
     }
   }
   const result = calculateBatterySoc(samples, limits);

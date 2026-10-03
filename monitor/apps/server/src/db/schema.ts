@@ -174,6 +174,7 @@ export const batteryVoltageEvents = pgTable("battery_voltage_events", {
   currentAmps: numeric("current_amps", { precision: 10, scale: 3 }),
   consumedMah: numeric("consumed_mah", { precision: 14, scale: 3 }),
   consumptionComplete: boolean("consumption_complete").default(false).notNull(),
+  armed: boolean("armed"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull()
