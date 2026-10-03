@@ -8,7 +8,7 @@ describe("current battery charge", () => {
     expect(currentBatteryCharge(reading(40, 1), undefined, limits)?.currentAmps).toBe(0);
     expect(currentBatteryCharge(undefined, reading(40, 1), limits)?.currentAmps).toBeNull();
     expect(currentBatteryCharge(reading(50.4, 0), { ...reading(40, 1), currentAmps: "12.345" }, limits)?.currentAmps).toBe(12.345);
-    expect(currentBatteryCharge(undefined, { ...reading(40, 1), currentAmps: "12.345", armed: true }, limits)).toBeNull();
+    expect(currentBatteryCharge(undefined, { ...reading(40, 1), currentAmps: "12.345", armed: true }, limits)).toMatchObject({ chargePercent: 28, incomplete: true });
   });
   it("uses newer automatic voltage instead of a full cell check", () => {
     expect(currentBatteryCharge(reading(50.4, 1), reading(40, 2), limits)).toMatchObject({ chargePercent: 28, totalVoltage: 40, source: "mission_planner" });

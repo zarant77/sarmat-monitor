@@ -127,8 +127,8 @@ it("exposes the same latest charge in list and detail without overwriting cell h
   const listResponse = await app.inject({ url: "/api/batteries" });
   expect(listResponse.statusCode).toBe(200);
   const listed = listResponse.json().find((row: { id: string }) => row.id === first);
-  // The last idle reading was 50.1 V (98%); a loaded sample without mAh cannot lower that anchor.
-  expect(detail.currentCharge).toMatchObject({ chargePercent: 98, totalVoltage: 43.217, source: "mission_planner", incomplete: true });
+  // SOC reflects the newest voltage; old checks remain separate health records.
+  expect(detail.currentCharge).toMatchObject({ chargePercent: 50, totalVoltage: 43.217, source: "mission_planner", incomplete: true });
   expect(listed.currentCharge).toEqual(detail.currentCharge);
   expect(detail.latestMeasurement).toMatchObject({ chargePercent: 100, currentAmps: 0, health: "good", cellDelta: 0 });
   await db.insert(measurements).values({ batteryId: first, totalVoltage: "50.4", cellVoltages: Array(12).fill(4.2),
@@ -137,7 +137,7 @@ it("exposes the same latest charge in list and detail without overwriting cell h
   expect((await app.inject({ url: `/api/batteries/${first}` })).json().currentCharge).toMatchObject({ chargePercent: 100, source: "measurement" });
 });
 
-it("keeps SOC across reconnects and late/duplicate checkpoints, with calibration inherited or overridden", async () => {
+it("uses newest voltage across reconnects and late/duplicate checkpoints, with resistance inherited or overridden", async () => {
   const typeResponse = await app.inject({ method: "POST", url: "/api/battery-types", payload: {
     name: "SOC calibrated", capacityAh: 20, minVoltage: 36, maxVoltage: 50.4, cellCount: 12, chemistry: "LiPo", internalResistanceMilliOhms: 100
   } });
@@ -174,7 +174,7 @@ it("keeps SOC across reconnects and late/duplicate checkpoints, with calibration
   expect((await post(checkpoint(secondSession, 30, 0, "vehicle_connected", 49.21))).statusCode).toBe(201);
   expect((await post(checkpoint(secondSession, 40, 1000))).statusCode).toBe(201);
   const detail = (await app.inject({ url: `/api/batteries/${id}` })).json();
-  expect(detail.currentCharge).toMatchObject({ chargePercent: 40, consumedMahSinceCheck: 6000, method: "consumption", incomplete: false });
+  expect(detail.currentCharge).toMatchObject({ chargePercent: 92, consumedMahSinceCheck: 0, method: "voltage_compensated", incomplete: false });
   const widgetCharge = await app.inject({ url: `/station/batteries/sessions/${secondSession}/charge`, headers });
   expect(widgetCharge.statusCode).toBe(200);
   expect(widgetCharge.json()).toEqual({ sessionId: secondSession, currentCharge: detail.currentCharge });
@@ -189,7 +189,7 @@ it("keeps SOC across reconnects and late/duplicate checkpoints, with calibration
   expect(history.items.some((item: { kind: string }) => item.kind === "consumption_sample")).toBe(false);
   expect((await app.inject({ method: "PATCH", url: `/api/batteries/${id}`, payload: { actualCapacityAh: null, internalResistanceMilliOhmsOverride: null } })).json())
     .toMatchObject({ actualCapacityAh: null, internalResistanceMilliOhmsOverride: null, internalResistanceMilliOhms: 100 });
-  expect((await app.inject({ url: `/api/batteries/${id}` })).json().currentCharge.chargePercent).toBe(70);
+  expect((await app.inject({ url: `/api/batteries/${id}` })).json().currentCharge.chargePercent).toBe(93);
   expect((await app.inject({ method: "PATCH", url: `/api/battery-types/${typeResponse.json().id}`, payload: { internalResistanceMilliOhms: null } })).json().internalResistanceMilliOhms).toBeNull();
   expect((await post({ ...checkpoint(secondSession, 45, 2000), consumedMah: -1 })).statusCode).toBe(400);
   expect((await post({ ...checkpoint(secondSession, 45, 2000), consumedMah: null })).statusCode).toBe(400);
