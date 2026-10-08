@@ -1,10 +1,14 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatPlugin", "src\SarmatPlugin\SarmatPlugin.csproj", "{0A23C67D-2B28-4C2B-B5A5-905D13CB1111}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatPlugin.Tests", "tests\SarmatPlugin.Tests\SarmatPlugin.Tests.csproj", "{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CA33BC71-F4C7-4BA1-A576-1015CD4EBE92}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SarmatAltitude", "src\SarmatAltitude\SarmatAltitude.csproj", "{C310D88A-CAA2-4027-B2AF-76DACEC3DC82}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -20,5 +24,12 @@ Global
 		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BD2B7A14-80B2-40B9-B041-EB97BC9A2222}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C310D88A-CAA2-4027-B2AF-76DACEC3DC82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C310D88A-CAA2-4027-B2AF-76DACEC3DC82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C310D88A-CAA2-4027-B2AF-76DACEC3DC82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C310D88A-CAA2-4027-B2AF-76DACEC3DC82}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C310D88A-CAA2-4027-B2AF-76DACEC3DC82} = {CA33BC71-F4C7-4BA1-A576-1015CD4EBE92}
 	EndGlobalSection
 EndGlobal

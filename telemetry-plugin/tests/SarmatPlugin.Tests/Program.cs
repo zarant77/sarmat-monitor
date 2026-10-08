@@ -6,6 +6,7 @@ using System.Linq;
 using System.IO;
 using System.Runtime.Serialization.Json;
 using SarmatPlugin.Core;
+using SarmatAltitude.Core;
 using SarmatPlugin.Infrastructure;
 using SarmatPlugin.Integration;
 
@@ -16,6 +17,8 @@ namespace SarmatPlugin.Tests
         private static int failures;
         private static void Main()
         {
+            Run("Altitude target accumulates metres and stick override respects deadzone", AltitudeTargets);
+            Run("Guided altitude command sets full position above Home in metres", GuidedAltitudePacket);
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery widget accepts only a valid server charge percentage", BatteryWidgetCharge);
@@ -59,6 +62,43 @@ namespace SarmatPlugin.Tests
         {
             try { test(); Console.WriteLine("PASS " + name); }
             catch (Exception ex) { failures++; Console.Error.WriteLine("FAIL " + name + ": " + ex.Message); }
+        }
+        private static void GuidedAltitudePacket()
+        {
+            var packet = GuidedAltitudeCommand.Create(7, 1, 47.7326044, 34.8190092, 50);
+            if (packet.target_system != 7 || packet.target_component != 1 || packet.coordinate_frame != 3 ||
+                packet.type_mask != 3576 || packet.alt != 50 || packet.lat_int != 477326044 || packet.lon_int != 348190092)
+                throw new Exception("Guided packet must hold horizontal position and use exactly 50 metres above Home");
+            if (GuidedAltitudeCommand.Create(7, 1, 47, 34, 0).alt != 0)
+                throw new Exception("Zero altitude must not be silently discarded");
+        }
+        private static void AltitudeTargets()
+        {
+            var target = new AltitudeTarget();
+            target.Adjust(50, 1);
+            if (target.TargetMeters != 50 || !target.Pending) throw new Exception("First increment must start from zero");
+            target.Adjust(50, 1);
+            if (target.TargetMeters != 100) throw new Exception("Accumulation must preserve prepared target");
+            target.Submitted();
+            if (target.Pending) throw new Exception("Enter must not resubmit an unchanged target");
+            target.Interrupted();
+            if (target.TargetMeters != 100 || !target.Pending) throw new Exception("Throttle interruption must preserve target and allow Enter to resume");
+            target.Submitted();
+            if (target.TargetMeters != 100 || target.Pending) throw new Exception("Resuming must submit the same target once");
+            target.Adjust(50, -1);
+            if (target.TargetMeters != 50 || !target.Pending) throw new Exception("In-flight edit must remain pending until Enter");
+            target.Reset(); target.Adjust(50, -1);
+            if (target.TargetMeters != 0) throw new Exception("Target must not go below Home");
+            target.Reset(); target.Adjust(50, 1);
+            if (target.TargetMeters != 50) throw new Exception("New session must start from zero");
+            if (AltitudeTarget.StickMoved(1500, 1510, 30) || AltitudeTarget.StickMoved(1500, 65535, 30))
+                throw new Exception("Noise / ignored RC values must not cancel");
+            if (!AltitudeTarget.StickMoved(1500, 1469, 30) || !AltitudeTarget.StickMoved(1500, 1531, 30))
+                throw new Exception("Either throttle direction must cancel");
+            try { target.Adjust(double.NaN, 1); throw new Exception("Invalid step accepted"); }
+            catch (ArgumentOutOfRangeException) { }
+            target.Reset(); target.Interrupted();
+            if (target.TargetMeters.HasValue || target.Pending) throw new Exception("Disconnect reset must prevent resuming an old target");
         }
         private static PluginSettings Fast() => new PluginSettings();
         private static TelemetrySnapshot T(bool armed=true, double battery=48, int sats=30, double hdop=.5,

@@ -48,7 +48,7 @@ namespace SarmatPlugin.UI
             valueLabel.ForeColor = StatusColor(status);
         }
 
-        public void SetBatteryContent(int? chargePercent, string voltageAndCurrent, WidgetStatus status)
+        public void SetBatteryContent(int? chargePercent, string voltage, string current, WidgetStatus status)
         {
             if (!batteryLayout)
             {
@@ -60,8 +60,8 @@ namespace SarmatPlugin.UI
                 detailLabel.TextAlign = ContentAlignment.TopCenter;
                 detailLabel.Visible = true;
             }
-            SetContent("Battery", chargePercent.HasValue ? chargePercent.Value + "%" : "—%", status);
-            detailLabel.Text = voltageAndCurrent;
+            SetContent("Battery", voltage, status);
+            detailLabel.Text = (chargePercent.HasValue ? chargePercent.Value + "%" : "—%") + "  " + current;
             detailLabel.ForeColor = StatusColor(status);
         }
 

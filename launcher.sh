@@ -111,6 +111,11 @@ command_plugin() {
     printf 'On Windows, run launcher.bat and select option 11, or run launcher.bat plugin.\n'
 }
 
+command_altitude_plugin() {
+    info "Building the Sarmat Altitude plugin requires Windows."
+    printf 'On Windows, run launcher.bat and select option 12, or run launcher.bat altitude-plugin.\n'
+}
+
 show_help() {
     cat <<'EOF'
 Sarmat launcher
@@ -128,6 +133,7 @@ Usage:
   ./launcher.sh db-seed                 seed the database
   ./launcher.sh install                 npm ci
   ./launcher.sh plugin                  explain Windows requirement for plugin build
+  ./launcher.sh altitude-plugin         explain Windows requirement for altitude plugin build
   ./launcher.sh help                    show this help
 EOF
 }
@@ -147,6 +153,7 @@ run_command() {
         db-seed|seed) command_db_seed ;;
         install) command_install_dependencies ;;
         plugin) command_plugin ;;
+        altitude-plugin) command_altitude_plugin ;;
         help|-h|--help) show_help ;;
         *) fail "unknown command '$command'. Run ./launcher.sh help." ;;
     esac
@@ -167,6 +174,7 @@ show_menu() {
   9. Seed the database
  10. Install Node.js dependencies
  11. Build Mission Planner plugin (Windows)
+ 12. Build Sarmat Altitude plugin (Windows)
   0. Exit
 EOF
         printf '\nSelect an action: '
@@ -183,6 +191,7 @@ EOF
             9) command_db_seed ;;
             10) command_install_dependencies ;;
             11) command_plugin ;;
+            12) command_altitude_plugin ;;
             0) exit 0 ;;
             *) printf 'Unknown option: %s\n' "$choice" >&2 ;;
         esac

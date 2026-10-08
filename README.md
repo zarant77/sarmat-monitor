@@ -28,10 +28,13 @@ Telemetry plugin і Monitor використовують компактний Me
 9. Початкові дані БД.
 10. Встановлення Node.js-залежностей (`npm ci`).
 11. Збірка плагіна Mission Planner (Windows).
+12. Збірка плагіна автонабору висоти Sarmat Altitude (Windows).
 
 Команди без меню: `launcher.bat dev`, `build`, `android-release`, `android-debug`, `android-install DEVICE_SERIAL`, `test`, `typecheck`, `db-migrate`, `db-seed`, `install`, `help`. Підтримуються ті самі короткі назви, що в `launcher.sh`.
 
 Windows-лаунчер автоматично знаходить JDK 17/21 та Android SDK 36. Збірка APK не потребує телефона; встановлення потребує USB debugging. Перша збірка може завантажувати залежності. Готові Android-файли містяться в `sarmat-crew/app/build/outputs/`.
+
+Пункт **12**, або `launcher.bat altitude-plugin [MissionPlannerDir]`, готує `telemetry-plugin/dist/plugins/SarmatAltitude.dll`. Обидва пункти збірки плагінів використовують спільну збірку та тести всього комплекту й створюють дві незалежні DLL. У `launcher.sh` пункт 12 пояснює вимогу Windows. MSI має окремі компоненти **SarmatTelemetry** та **SarmatAltitude**: їх можна встановлювати й видаляти незалежно; **SarmatTheme** залишається необов’язковим.
 
 Пункт **11** у Windows збирає Release DLL, запускає тести й готує `telemetry-plugin/dist`. Команда без меню: `launcher.bat plugin`, або `launcher.bat plugin "D:\Mission Planner"` для іншої інсталяції. У `launcher.sh` цей пункт лише повідомляє, що потрібна Windows, і повертає до меню. Нижчорівневий скрипт також доступний: `telemetry-plugin\scripts\build.bat "C:\Program Files (x86)\Mission Planner"`. Кореневий `build.bat` видалено.
 

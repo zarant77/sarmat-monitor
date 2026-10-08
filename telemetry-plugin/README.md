@@ -127,6 +127,10 @@ Windows Mark-of-the-Web from all downloaded and installed files.
 The root `launcher.bat` includes option **11** to build the plugin, also available as
 `launcher.bat plugin [MissionPlannerDir]`. It detects a standard Mission Planner installation
 or asks for its directory. The matching `launcher.sh` option explains that Windows is required.
+Option **12**, or `launcher.bat altitude-plugin [MissionPlannerDir]`, builds **Sarmat Altitude**.
+Both options run the shared solution build and tests and prepare separate `SarmatTelemetry.dll`
+and `SarmatAltitude.dll` files in `dist/plugins`. The matching `launcher.sh` option 12 explains
+the Windows requirement.
 Build the Mission Planner plugin with the scripts below. They build Release, run tests,
 and prepare `telemetry-plugin/dist`.
 
@@ -173,8 +177,7 @@ setup always shows the Mission Planner directory screen, initially set to
 `C:\Program Files (x86)\Mission Planner`; select the exact Mission Planner copy you want to modify.
 Use **Browse** from any selected Sarmat feature to choose the shared Mission Planner root folder
 that already contains `MissionPlanner.exe`.
-The **Sarmat Telemetry** feature can be installed or removed through Windows Apps в†’ Sarmat Plugins
-в†’ Modify. Uninstalling the complete product removes the telemetry plugin DLL.
+The **SarmatTelemetry** and **SarmatAltitude** features can be selected independently during installation or added/removed through Windows Apps > Sarmat Plugins > Modify. Both are selected by default. Uninstalling removes both plugin DLLs and preserves user settings.
 
 The optional **SarmatTheme** feature is disabled by default. When selected, it installs every
 branding asset from the repository-level `theme` directory (`icon.png`, `logo.txt`, `logo2.png`,
@@ -208,6 +211,37 @@ The installer creates the `plugins` folder if needed, makes a timestamped backup
 Restart Mission Planner and open **Flight Data**. The **Sarmat** tab is placed first in the native
 lower tab list. All standard Mission Planner tabs remain available. Right-click anywhere inside the
 Sarmat tab and select **Settings** to open `Sarmat Plugin Settings`.
+
+## Automatic altitude plugin (ArduCopter)
+
+The separate **Sarmat Altitude** plugin is shipped as `plugins/SarmatAltitude.dll`. Its **Altitude** settings tab
+appears immediately beside **Sarmat**. Capture the increase/decrease key combinations in the two
+fields, set the step in metres, and press **Save**. Defaults are Shift+Up, Shift+Down and 50 m.
+The previous Ctrl+Up/Ctrl+Down default pair is migrated to Shift on loading old settings;
+custom combinations are preserved. All plugin UI text is English.
+Settings are stored separately in `%APPDATA%/SarmatPlugin/altitude-settings.json`.
+
+The first shortcut prepares a target starting from 0 m above Home; subsequent presses
+accumulate changes to that target. The target and state appear at the bottom left of the Flight Data
+HUD, over the artificial horizon/camera view, and follow HUD resizing and pop-out windows.
+Each physical key press changes it once. Enter submits a pending target using a Guided
+waypoint at the current GPS position with GLOBAL_RELATIVE_ALT. Editing a running target requires
+Enter again. Armed ArduCopter, a GPS fix and fresh heartbeat/position/stick data are required.
+Altitude comes directly from MAVLink in metres regardless of Mission Planner display units.
+
+Throttle movement cancels the operation. The plugin observes the RCMAP_THROTTLE channel from
+RC packets and outgoing overrides, and polls Mission Planner's enabled joystick every 50 ms.
+Movement is measured from the stick value at activation, outside RCn_DZ (minimum 10 PWM units,
+default 30). Ignored/released RC values are excluded. Cancellation restores the preceding
+manual mode (Stabilize, AltHold, Loiter, PosHold, Sport or Drift); other preceding modes use
+AltHold. A pilot mode change ends monitoring without overwriting the selected mode. Targets
+are cleared on disconnect or selected-vehicle changes and are never resumed automatically.
+Once the target is reached, Guided continues holding position/altitude until stick cancellation
+or another mode is selected. Disabling the plugin also requests return to manual control.
+
+Validate with ArduCopter SITL before live use: increase/decrease, Enter, both throttle directions,
+remapped throttle channel, joystick and radio control, mode rejection, disconnect and vehicle
+switch. Compilation and unit tests do not establish live autopilot behavior.
 
 ## Uninstall
 

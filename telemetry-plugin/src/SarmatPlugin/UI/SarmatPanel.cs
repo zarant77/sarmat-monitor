@@ -102,7 +102,7 @@ namespace SarmatPlugin.UI
             SetWidget("air_speed", "Air Speed", telemetry.AirSpeed.ToString("0.0") + " m/s", WidgetStatus.Normal);
             SetWidget("altitude", "Altitude", telemetry.Altitude.ToString("0.0") + " m", WidgetStatus.Normal);
             widgets["battery_voltage"].SetBatteryContent(batteryChargePercent,
-                telemetry.BatteryVoltage.ToString("0.0") + " V  " + telemetry.CurrentAmps.ToString("0.0") + " A",
+                telemetry.BatteryVoltage.ToString("0.0") + " V", telemetry.CurrentAmps.ToString("0.0") + " A",
                 TelemetryStatusPolicy.Voltage(telemetry.BatteryVoltage));
             SetWidget("current", "Current", telemetry.CurrentAmps.ToString("0.0") + " A",
                 TelemetryStatusPolicy.Current(telemetry.CurrentAmps));

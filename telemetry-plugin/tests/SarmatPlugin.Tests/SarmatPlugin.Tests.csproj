@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SarmatPlugin\SarmatPlugin.csproj" />
+    <ProjectReference Include="..\..\src\SarmatAltitude\SarmatAltitude.csproj" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="MAVLink"><HintPath>$(MissionPlannerPath)\MAVLink.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

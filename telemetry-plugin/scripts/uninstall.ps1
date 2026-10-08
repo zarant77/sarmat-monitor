@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $missionPlanner = (Resolve-Path -LiteralPath $MissionPlannerPath).Path
 $destinations = @(
     (Join-Path $missionPlanner 'plugins\SarmatTelemetry.dll'),
+    (Join-Path $missionPlanner 'plugins\SarmatAltitude.dll'),
     (Join-Path $missionPlanner 'plugins\SarmatPlugin.dll')
 )
 $installed = @($destinations | Where-Object { Test-Path -LiteralPath $_ })

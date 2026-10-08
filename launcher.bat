@@ -129,7 +129,7 @@ function Install-Android {
 }
 
 function Build-Plugin {
-    param([string]$Requested)
+    param([string]$Requested, [switch]$Altitude)
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
         throw 'Install .NET SDK (8 or newer) and the .NET Framework 4.7.2 targeting pack.'
     }
@@ -145,7 +145,8 @@ function Build-Plugin {
     $mp = (Resolve-Path -LiteralPath $mp).Path
     Write-Host "Building plugin for Mission Planner: $mp"
     & (Join-Path $projectRoot 'telemetry-plugin\scripts\build.ps1') -MissionPlannerPath $mp -Configuration Release
-    Write-Host "Plugin ready: $(Join-Path $projectRoot 'telemetry-plugin\dist\plugins\SarmatTelemetry.dll')" -ForegroundColor Green
+    $pluginName = if ($Altitude) { 'SarmatAltitude.dll' } else { 'SarmatTelemetry.dll' }
+    Write-Host "Plugin ready: $(Join-Path $projectRoot "telemetry-plugin\dist\plugins\$pluginName")" -ForegroundColor Green
 }
 
 function Invoke-Action {
@@ -172,6 +173,7 @@ function Invoke-Action {
         '^(db-migrate|migrate)$' { Run-Web -Arguments @('run', 'db:migrate'); break }
         '^(db-seed|seed)$' { Run-Web -Arguments @('run', 'db:seed'); break }
         '^plugin$' { Build-Plugin $Argument; break }
+        '^altitude-plugin$' { Build-Plugin -Requested $Argument -Altitude; break }
         '^install$' { Run-Web -Arguments @('ci'); break }
         '^(help|-h|--help)$' {
             Write-Host 'Sarmat launcher'
@@ -187,6 +189,7 @@ function Invoke-Action {
             Write-Host 'launcher.bat db-seed                 seed the database'
             Write-Host 'launcher.bat install                 npm ci'
             Write-Host 'launcher.bat plugin [MissionPlannerDir] build Mission Planner plugin (Windows)'
+            Write-Host 'launcher.bat altitude-plugin [MissionPlannerDir] build Sarmat Altitude plugin (Windows)'
             Write-Host 'launcher.bat help                    show this help'
             break
         }
@@ -212,13 +215,14 @@ while ($true) {
     Write-Host '  9. Seed the database'
     Write-Host ' 10. Install Node.js dependencies'
     Write-Host ' 11. Build Mission Planner plugin (Windows)'
+    Write-Host ' 12. Build Sarmat Altitude plugin (Windows)'
     Write-Host '  0. Exit'
     $choice = Read-Host 'Select an action'
     if ($choice -eq '0' -or $null -eq $choice) { exit 0 }
     $action = switch ($choice) {
         '1' { 'dev' }; '2' { 'build' }; '3' { 'android-release' }; '4' { 'android-install' }
         '5' { 'android-debug' }; '6' { 'test' }; '7' { 'typecheck' }; '8' { 'db-migrate' }
-        '9' { 'db-seed' }; '10' { 'install' }; '11' { 'plugin' }; default { $null }
+        '9' { 'db-seed' }; '10' { 'install' }; '11' { 'plugin' }; '12' { 'altitude-plugin' }; default { $null }
     }
     if (-not $action) { Write-Host "Unknown option: $choice"; continue }
     try { Invoke-Action $action '' }

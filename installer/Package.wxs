@@ -26,6 +26,15 @@
       <ComponentGroupRef Id="PluginComponents" />
     </Feature>
 
+    <Feature Id="SarmatAltitudeFeature"
+             Title="SarmatAltitude"
+             Description="Automatic Copter altitude control with configurable hotkeys and throttle-stick cancellation."
+             Level="1"
+             ConfigurableDirectory="MISSIONPLANNERDIR"
+             AllowAbsent="yes">
+      <ComponentGroupRef Id="AltitudeComponents" />
+    </Feature>
+
     <Feature Id="SarmatThemeFeature"
              Title="SarmatTheme"
              Description="Install the Sarmat icons and cat splash screen for Mission Planner."
@@ -46,6 +55,12 @@
         <File Id="SarmatPluginFile"
               Source="$(var.PluginDist)\plugins\SarmatTelemetry.dll"
               KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AltitudeComponents" Directory="MISSIONPLANNERPLUGINSDIR">
+      <Component Id="SarmatAltitudeDll" Guid="BDF70F93-EB23-4A1A-80F0-8B717431F8B7">
+        <File Id="SarmatAltitudeFile" Source="$(var.PluginDist)\plugins\SarmatAltitude.dll" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

@@ -105,7 +105,8 @@ if (-not $isAdministrator -and -not $WhatIfPreference) {
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($SourcePath)) {
     $packagedDll = Join-Path $PSScriptRoot 'plugins\SarmatTelemetry.dll'
-    if (Test-Path -LiteralPath $packagedDll) {
+    $packagedAltitude = Join-Path $PSScriptRoot 'plugins\SarmatAltitude.dll'
+    if ((Test-Path -LiteralPath $packagedDll) -or (Test-Path -LiteralPath $packagedAltitude)) {
         # GitHub Release layout: the extracted folder mirrors the Mission Planner root.
         $SourcePath = $PSScriptRoot
     } else {
@@ -114,15 +115,18 @@ if ([string]::IsNullOrWhiteSpace($SourcePath)) {
     }
 }
 $missionPlanner = $MissionPlannerPath
-$sourceDll = Join-Path $SourcePath 'plugins\SarmatTelemetry.dll'
-if (-not (Test-Path -LiteralPath $sourceDll)) { throw "Build artifact not found: $sourceDll" }
-$sourceDll = (Resolve-Path -LiteralPath $sourceDll).Path
+$pluginNames = @('SarmatTelemetry.dll', 'SarmatAltitude.dll') | Where-Object {
+    Test-Path -LiteralPath (Join-Path $SourcePath "plugins\$_")
+}
+if (-not $pluginNames) { throw "Plugin build artifacts not found in $SourcePath\plugins" }
 $plugins = Join-Path $missionPlanner 'plugins'
-$destination = Join-Path $plugins 'SarmatTelemetry.dll'
 $legacyDestination = Join-Path $plugins 'SarmatPlugin.dll'
-if ($PSCmdlet.ShouldProcess($destination, 'Install Sarmat Plugin')) {
+foreach ($pluginName in $pluginNames) {
+  $sourceDll = (Resolve-Path -LiteralPath (Join-Path $SourcePath "plugins\$pluginName")).Path
+  $destination = Join-Path $plugins $pluginName
+  if ($PSCmdlet.ShouldProcess($destination, "Install $pluginName")) {
     New-Item -ItemType Directory -Force -Path $plugins | Out-Null
-    if (Test-Path -LiteralPath $legacyDestination) {
+    if ($pluginName -eq 'SarmatTelemetry.dll' -and (Test-Path -LiteralPath $legacyDestination)) {
         Remove-Item -LiteralPath $legacyDestination -Force
         Write-Host "Removed legacy $legacyDestination"
     }
@@ -132,7 +136,9 @@ if ($PSCmdlet.ShouldProcess($destination, 'Install Sarmat Plugin')) {
     Copy-Item -LiteralPath $sourceDll -Destination $destination -Force
     Unblock-File -LiteralPath $destination
     Write-Host "Installed $destination"
-
+  }
+}
+if ($PSCmdlet.ShouldProcess($missionPlanner, 'Install Sarmat branding assets')) {
     foreach ($assetName in @('icon.png', 'logo.txt', 'logo2.png', 'splashbg.png')) {
         $sourceAsset = Join-Path $SourcePath $assetName
         if (-not (Test-Path -LiteralPath $sourceAsset)) {
