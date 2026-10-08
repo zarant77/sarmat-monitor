@@ -110,6 +110,7 @@ class CrewApi(private val preferences: SharedPreferences) {
                 chemistry = item.getString("chemistry"),
                 cycleCount = item.getInt("cycleCount"),
                 activeSince = item.optStringOrNull("activeSince"),
+                lastActiveSince = item.optStringOrNull("lastActiveSince"),
                 latestMeasuredAt = latest?.optStringOrNull("measuredAt"),
                 latestCells = latest?.optJSONArray("cellVoltages")?.let { cells -> (0 until cells.length()).map(cells::getDouble) },
                 latestTotalVoltage = charge?.optDoubleOrNull("totalVoltage"),

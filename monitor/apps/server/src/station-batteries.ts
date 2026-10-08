@@ -99,7 +99,7 @@ export async function registerStationBatteries(app: FastifyInstance) {
         if (active?.id === target.id) return { activeBatteryId: active.id, activeSince: active.activeSince, sessionId: data.sessionId, droneId: data.droneId };
         await tx.update(batteries).set({ activeSince: null }).where(eq(batteries.crewId, crewId));
         const activeSince = new Date();
-        await tx.update(batteries).set({ activeSince }).where(eq(batteries.id, target.id));
+        await tx.update(batteries).set({ activeSince, lastActiveSince: activeSince }).where(eq(batteries.id, target.id));
         return { activeBatteryId: target.id, activeSince, sessionId: data.sessionId, droneId: data.droneId };
       });
     });

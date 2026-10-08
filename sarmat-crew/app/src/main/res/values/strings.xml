@@ -21,6 +21,8 @@
     <string name="widget_active_battery_number">⚡ %1$s</string>
     <string name="widget_active_battery_preview">⚡ 2</string>
     <string name="widget_battery_in_drone">%1$s, у дроні</string>
+    <string name="widget_last_battery_number">↶ %1$s</string>
+    <string name="widget_last_battery_in_drone">%1$s, остання батарея в дроні</string>
     <string name="widget_no_batteries">Немає даних</string>
     <string name="widget_settings_title">Налаштування віджету</string>
     <string name="widget_settings_title_uppercase">НАЛАШТУВАННЯ ВІДЖЕТУ</string>

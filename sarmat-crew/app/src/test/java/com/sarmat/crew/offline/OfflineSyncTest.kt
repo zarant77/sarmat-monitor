@@ -84,6 +84,18 @@ class OfflineSyncTest {
     }
     @After fun cleanup() { server.shutdown(); store.close() }
 
+    @Test fun `offline installation and removal retain last drone marker after reopening`() {
+        offline = true
+        repo.toggleActive(battery)
+        val installedAt = repo.batteries().single().activeSince
+        assertNotNull(installedAt)
+        repo.toggleActive(battery)
+        val reopened = CrewRepository(context, remote, store) { }
+        assertNull(reopened.batteries().single().activeSince)
+        assertEquals(installedAt, reopened.batteries().single().lastActiveSince)
+        assertEquals(battery, com.sarmat.crew.lastDroneBatteryId(reopened.batteries()))
+    }
+
     private fun batteryJson() = JSONObject().put("id", battery).put("label", "1").put("serialNumber", "test")
         .put("typeName", "12S").put("capacityAh", 20).put("minVoltage", 36).put("maxVoltage", 50.4)
         .put("cellCount", 12).put("state", "ready").put("chemistry", "Li-ion").put("cycleCount", 0)

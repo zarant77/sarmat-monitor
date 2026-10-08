@@ -31,6 +31,7 @@ data class BatterySummary(
     val chargeMeasuredAt: String? = latestMeasuredAt,
     val chargeMethod: String? = null,
     val chargeIncomplete: Boolean = false,
+    val lastActiveSince: String? = null,
 )
 
 data class MeasurementPreview(

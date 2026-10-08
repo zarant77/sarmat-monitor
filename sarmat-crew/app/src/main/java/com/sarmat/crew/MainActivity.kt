@@ -328,8 +328,9 @@ class MainActivity : AppCompatActivity() {
                     val scrollY = scroll.scrollY
                     list.removeAllViews()
                     val dischargedThreshold = api.dischargedThresholdPercent()
+                    val lastDroneId = lastDroneBatteryId(items)
                     items.sortedWith(compareBy<BatterySummary, String>(batteryLabelComparator) { it.label }.thenBy { it.id })
-                        .forEach { list.addView(batteryCard(it, dischargedThreshold)) }
+                        .forEach { list.addView(batteryCard(it, dischargedThreshold, it.id == lastDroneId && it.activeSince == null)) }
                     scroll.post { if (!isFinishing && !isDestroyed && scroll.isAttachedToWindow) scroll.scrollTo(0, scrollY) }
                     updateSyncHeader()
                 } }.onFailure { failure -> runOnUiThread {
@@ -343,7 +344,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun batteryCard(item: BatterySummary, dischargedThreshold: Int): View {
+    private fun batteryCard(item: BatterySummary, dischargedThreshold: Int, isLastInDrone: Boolean): View {
         val discharged = isBatteryDischarged(item.state, item.latestChargePercent, dischargedThreshold)
         val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(94)).apply { setMargins(0, 0, 0, dp(5)) }; background = ContextCompat.getDrawable(this@MainActivity, R.drawable.action_background) }
         val actionLabel = if (item.activeSince == null) "У ДРОН" else "ЗНЯТИ"
@@ -354,7 +355,7 @@ class MainActivity : AppCompatActivity() {
             background = ContextCompat.getDrawable(this@MainActivity, if (item.activeSince != null) R.drawable.card_active else R.drawable.cell_background)
             val titleRow = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             titleRow.addView(TextView(this@MainActivity).apply {
-                text = if (item.activeSince != null) "⚡ ${item.label}" else item.label; textSize = 18f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                text = if (item.activeSince != null) "⚡ ${item.label}" else if (isLastInDrone) "↶ ${item.label}" else item.label; textSize = 18f; setTypeface(typeface, Typeface.BOLD); setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             }, LinearLayout.LayoutParams(0, -2, 1f))
             titleRow.addView(TextView(this@MainActivity).apply {
                 text = item.latestChargePercent?.let { "$it%" } ?: "—"; textSize = 19f; setTypeface(typeface, Typeface.BOLD)
@@ -363,6 +364,7 @@ class MainActivity : AppCompatActivity() {
             addView(titleRow)
             addView(TextView(this@MainActivity).apply {
                 text = buildString {
+                    if (isLastInDrone) append("ОСТАННЯ В ДРОНІ · ")
                     if (item.activeSince != null) append("У ДРОНІ · ${age(item.activeSince)}")
                     else if (discharged) append("РОЗРЯДЖЕНА")
                     if (item.activeSince != null && discharged) append(" · РОЗРЯДЖЕНА")
@@ -470,6 +472,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.detailBatteryState).apply {
             text = buildString {
                 append(if (item.activeSince != null) "У ДРОНІ" else if (discharged) "РОЗРЯДЖЕНА" else batteryStateLabel(item.state))
+                if (item.activeSince == null && item.id == lastDroneBatteryId(api.batteries())) append(" · ОСТАННЯ В ДРОНІ")
                 item.latestHealth?.let { append(" · ${healthLabel(it)}") }
                 item.latestMeasuredAt?.let { append(" · перевірена ${age(it)} тому") }
             }

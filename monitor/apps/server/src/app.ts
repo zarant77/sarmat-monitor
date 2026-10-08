@@ -480,7 +480,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       let activeSince: Date | null = null;
       if (nextId) {
         activeSince = new Date();
-        await tx.update(batteries).set({ activeSince }).where(eq(batteries.id, nextId));
+        await tx.update(batteries).set({ activeSince, lastActiveSince: activeSince }).where(eq(batteries.id, nextId));
       }
       return { activeBatteryId: nextId, activeSince: activeSince ? iso(activeSince) : null };
     });
@@ -528,7 +528,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
       const locked = await lockBattery(tx, current.id, request.actor!);
       assertBatteryOperational(locked);
       if (locked.crewId !== current.crewId) throw Object.assign(new Error("Battery crew changed; retry the transfer"), { statusCode: 409 });
-      await tx.update(batteries).set({ crewId: data.crewId, activeSince: null, updatedAt: new Date() }).where(eq(batteries.id, current.id));
+      await tx.update(batteries).set({ crewId: data.crewId, activeSince: null, lastActiveSince: null, updatedAt: new Date() }).where(eq(batteries.id, current.id));
       const [event] = await tx.insert(transfers).values({ batteryId: current.id, fromCrewId: current.crewId, toCrewId: data.crewId, notes: data.notes ?? "" }).returning();
       return { ...event, transferredAt: iso(event.transferredAt) };
     });
@@ -587,7 +587,7 @@ export async function buildApp(options: { rebuildCycleHistory?: typeof rebuildIn
           throw Object.assign(new Error("Статус «У дроні» вже змінено на іншому пристрої. Потрібне узгодження"), { statusCode: 409 });
         }
         await tx.update(batteries).set({ activeSince: null }).where(eq(batteries.crewId, data.crewId));
-        if (data.active) await tx.update(batteries).set({ activeSince: occurredAt }).where(eq(batteries.id, battery.id));
+        if (data.active) await tx.update(batteries).set({ activeSince: occurredAt, lastActiveSince: occurredAt }).where(eq(batteries.id, battery.id));
         result = { id: data.id, activeBatteryId: data.active ? battery.id : null };
       }
       await tx.insert(syncOperations).values({ id: data.id, userId: actor.userId, payloadHash, result });

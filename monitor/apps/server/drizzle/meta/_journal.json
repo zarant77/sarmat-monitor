@@ -127,6 +127,13 @@
       "when": 1791005456226,
       "tag": "0017_keen_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791440569233,
+      "tag": "0018_white_texas_twister",
+      "breakpoints": true
     }
   ]
 }

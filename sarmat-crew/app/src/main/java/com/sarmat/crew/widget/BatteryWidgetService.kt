@@ -9,6 +9,7 @@ import com.sarmat.crew.BatteryWidgetLevel
 import com.sarmat.crew.R
 import com.sarmat.crew.api.BatterySummary
 import com.sarmat.crew.batteryWidgetLevel
+import com.sarmat.crew.lastDroneBatteryId
 import com.sarmat.crew.offline.CrewRepository
 
 class BatteryWidgetService : RemoteViewsService() {
@@ -42,13 +43,22 @@ private class BatteryWidgetFactory(context: Context, private val widgetId: Int) 
         }
         val number = batteryNumber(battery.label, position)
         val isActive = battery.activeSince != null
+        val isLast = !isActive && battery.id == lastDroneBatteryId(batteries)
         return RemoteViews(context.packageName, if (compact) R.layout.widget_battery_item_compact else R.layout.widget_battery_item).apply {
             setImageViewResource(R.id.widgetBatteryIcon, icon)
-            setTextViewText(R.id.widgetBatteryNumber, if (isActive) context.getString(R.string.widget_active_battery_number, number) else number)
+            setTextViewText(R.id.widgetBatteryNumber, when {
+                isActive -> context.getString(R.string.widget_active_battery_number, number)
+                isLast -> context.getString(R.string.widget_last_battery_number, number)
+                else -> number
+            })
             setTextColor(R.id.widgetBatteryNumber, context.getColor(if (isActive) R.color.lime else android.R.color.white))
             setContentDescription(
                 R.id.widgetBatteryIcon,
-                if (isActive) context.getString(R.string.widget_battery_in_drone, battery.label) else battery.label,
+                when {
+                    isActive -> context.getString(R.string.widget_battery_in_drone, battery.label)
+                    isLast -> context.getString(R.string.widget_last_battery_in_drone, battery.label)
+                    else -> battery.label
+                },
             )
             setOnClickFillInIntent(R.id.widgetBatteryItem, Intent().putExtra(BatteryWidgetProvider.EXTRA_BATTERY_ID, battery.id))
         }

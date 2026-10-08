@@ -85,6 +85,7 @@ describe.sequential("durable offline synchronization", () => {
     expect((await post(activate)).statusCode).toBe(200);
     let [row] = await db.select().from(batteries).where(eq(batteries.id, batteryId));
     expect(row.activeSince?.toISOString()).toBe(activate.occurredAt);
+    expect(row.lastActiveSince?.toISOString()).toBe(activate.occurredAt);
     const stale = { ...base(), batteryId: secondBatteryId, kind: "active", active: true, expectedActiveId: null, expectedActiveSince: null };
     expect((await post(stale)).statusCode).toBe(409);
     expect(await db.select().from(syncOperations).where(eq(syncOperations.id, stale.id))).toHaveLength(0);
@@ -93,6 +94,7 @@ describe.sequential("durable offline synchronization", () => {
     expect((await post(activate)).statusCode).toBe(200); // Lost ACK must not reactivate it.
     [row] = await db.select().from(batteries).where(eq(batteries.id, batteryId));
     expect(row.activeSince).toBeNull();
+    expect(row.lastActiveSince?.toISOString()).toBe(activate.occurredAt);
   });
   it("rejects stale offline writes after a battery was archived", async () => {
     await db.update(batteries).set({ archivedAt: new Date() }).where(eq(batteries.id, secondBatteryId));

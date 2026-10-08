@@ -46,7 +46,11 @@ class CrewRepository(
         operations.forEach { operation ->
             val body = operation.body
             if (body.getString("kind") == "active") {
-                rows = rows.map { it.copy(activeSince = if (body.getBoolean("active") && it.id == body.getString("batteryId")) body.getString("occurredAt") else null) }
+                rows = rows.map {
+                    val installed = body.getBoolean("active") && it.id == body.getString("batteryId")
+                    it.copy(activeSince = if (installed) body.getString("occurredAt") else null,
+                        lastActiveSince = if (installed) body.getString("occurredAt") else it.lastActiveSince ?: it.activeSince)
+                }
             } else {
                 rows = rows.map { item ->
                     if (item.id != body.getString("batteryId") || (item.latestMeasuredAt != null && Instant.parse(item.latestMeasuredAt) > Instant.parse(body.getString("occurredAt")))) item

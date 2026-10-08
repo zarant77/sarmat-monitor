@@ -79,6 +79,7 @@ export const batteries = pgTable("batteries", {
   label: varchar("label", { length: 100 }).notNull(),
   state: batteryStateEnum("state").default("ready").notNull(),
   activeSince: timestamp("active_since", { withTimezone: true }),
+  lastActiveSince: timestamp("last_active_since", { withTimezone: true }),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   notes: text("notes").default("").notNull(),
   ...timestamps
