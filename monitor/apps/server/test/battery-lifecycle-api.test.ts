@@ -56,6 +56,7 @@ beforeAll(async () => {
   await pg.exec(migration("0016_flawless_the_initiative"));
   await pg.exec(migration("0017_keen_nomad"));
   await pg.exec(migration("0018_white_texas_twister"));
+  await pg.exec(migration("0019_mixed_charge_history"));
   app = await buildApp();
 }, 30000);
 

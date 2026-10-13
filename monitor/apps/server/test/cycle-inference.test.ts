@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferCycleEvents } from "../src/cycle-inference.js";
+import { inferChargeHistoryEvents, inferCycleEvents } from "../src/cycle-inference.js";
 
 const thresholds = { chargedThresholdPercent: 90, dischargedThresholdPercent: 50 };
 const measurement = (id: string, chargePercent: number, minute: number) => ({ id, chargePercent, measuredAt: new Date(`2026-01-01T00:${String(minute).padStart(2, "0")}:00Z`) });
@@ -74,6 +74,26 @@ describe("measurement-derived cycle history", () => {
       expect.objectContaining({ sourceMeasurementId: "discharged-1", type: "discharge", cycleDelta: 0 }),
       expect.objectContaining({ sourceMeasurementId: "charged-3", type: "charge", cycleDelta: 1 }),
       expect.objectContaining({ sourceMeasurementId: "discharged-2", type: "discharge", cycleDelta: 0 })
+    ]);
+  });
+
+  it("counts a cycle across an automatic discharge reading and a manual charge reading", () => {
+    expect(inferChargeHistoryEvents([
+      { ...measurement("auto-disarm", 58, 0), source: "voltage_event" },
+      { ...measurement("manual-charge", 100, 10), source: "measurement" }
+    ], { chargedThresholdPercent: 90, dischargedThresholdPercent: 80 })).toEqual([
+      expect.objectContaining({ sourceMeasurementId: "manual-charge", type: "charge", cycleDelta: 1 })
+    ]);
+  });
+
+  it("records charge changes from either source without counting repeated stable readings", () => {
+    expect(inferChargeHistoryEvents([
+      { ...measurement("auto-low", 58, 0), source: "voltage_event" },
+      { ...measurement("auto-low-again", 55, 5), source: "voltage_event" },
+      { ...measurement("manual-charge", 100, 10), source: "measurement" }
+    ], { chargedThresholdPercent: 90, dischargedThresholdPercent: 80 })).toEqual([
+      expect.objectContaining({ sourceVoltageEventId: "auto-low-again", type: "discharge", cycleDelta: 0 }),
+      expect.objectContaining({ sourceMeasurementId: "manual-charge", type: "charge", cycleDelta: 1 })
     ]);
   });
 });

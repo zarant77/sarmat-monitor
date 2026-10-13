@@ -250,8 +250,10 @@ export const cycleEvents = pgTable("cycle_events", {
   notes: text("notes").default("").notNull(),
   inferred: boolean("inferred").default(false).notNull(),
   sourceMeasurementId: uuid("source_measurement_id").references(() => measurements.id, { onDelete: "cascade" }),
+  sourceVoltageEventId: uuid("source_voltage_event_id").references(() => batteryVoltageEvents.id, { onDelete: "cascade" }),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull()
-}, table => [uniqueIndex("cycle_events_source_measurement_idx").on(table.sourceMeasurementId)]);
+}, table => [uniqueIndex("cycle_events_source_measurement_idx").on(table.sourceMeasurementId),
+  uniqueIndex("cycle_events_source_voltage_event_idx").on(table.sourceVoltageEventId)]);
 
 export const transfers = pgTable("transfers", {
   id: uuid("id").defaultRandom().primaryKey(),

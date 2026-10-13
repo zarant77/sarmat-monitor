@@ -18,7 +18,7 @@ vi.mock("../src/auth.js", async importOriginal => {
 });
 import { buildApp } from "../src/app.js";
 import { db, connection } from "../src/db/index.js";
-import { batteries, batteryTypes, batteryVoltageEvents, crews, groups, measurements, cycleEvents, droneFlights, drones, motorInstallations, motors, users } from "../src/db/schema.js";
+import { batteries, batteryTypes, batteryTelemetrySessions, batteryVoltageEvents, crews, groups, measurements, cycleEvents, droneFlights, drones, motorInstallations, motors, settings, users } from "../src/db/schema.js";
 const pg = connection as unknown as PGlite;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let first: string, second: string, foreign: string, archived: string, crewId: string, groupId: string, droneId: string, firstMotorId: string, secondMotorId: string;
@@ -28,7 +28,7 @@ const select = (batteryId: string, expectedActiveId: string | null = null, expec
   app.inject({ method: "PUT", url: "/station/batteries/active", headers, payload: { batteryId, expectedActiveId, expectedActiveSince } });
 
 beforeAll(async () => {
-  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene", "0015_amazing_rumiko_fujikawa", "0016_flawless_the_initiative", "0017_keen_nomad", "0018_white_texas_twister"])
+  for (const name of ["0000_initial", "0001_slippery_siren", "0002_milky_power_man", "0003_lethal_magneto", "0004_active_battery_and_event_deadband", "0005_battery_lifecycle", "0006_dynamic_charge_percent", "0007_offline_sync", "0008_battery_voltage_events", "0009_faithful_zaladane", "0010_flashy_sentry", "0011_bouncy_gorilla_man", "0012_bizarre_bastion", "0013_freezing_quasimodo", "0014_dizzy_selene", "0015_amazing_rumiko_fujikawa", "0016_flawless_the_initiative", "0017_keen_nomad", "0018_white_texas_twister", "0019_mixed_charge_history"])
     await pg.exec(readFileSync(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8"));
   const [group] = await db.insert(groups).values({ name: "Station test" }).returning(); groupId = group.id;
   await db.insert(users).values({ id: "00000000-0000-4000-8000-000000000002", username: "test-flight-admin", passwordHash: "test", role: "SUPER_ADMIN" });
@@ -100,16 +100,18 @@ it("stores voltage separately, deduplicates retries and binds delayed events to 
   expect(rows).toHaveLength(2);
   expect(rows.every(row => row.batteryId === first)).toBe(true);
   expect(await db.select().from(measurements)).toHaveLength(0);
-  expect(await db.select().from(cycleEvents)).toHaveLength(0);
+  expect((await db.select().from(cycleEvents)).map(event => ({ type: event.type, cycleDelta: event.cycleDelta, inferred: event.inferred })))
+    .toEqual([expect.objectContaining({ type: "discharge", cycleDelta: 0, inferred: true })]);
   const detail = await app.inject({ url: `/api/batteries/${first}` });
   expect(detail.statusCode).toBe(200);
   expect(detail.json().latestVoltageEvent).toMatchObject({ totalVoltage: 43.217, currentAmps: 12.345, type: "vehicle_disarmed", source: "mission_planner" });
   expect(detail.json().latestMeasurement).toBeNull();
   const history = await app.inject({ url: `/api/batteries/${first}/history` });
   expect(history.statusCode).toBe(200);
-  expect(history.json().items.map((row: { kind: string }) => row.kind)).toEqual(["vehicle_disarmed", "vehicle_connected"]);
-  expect(history.json().items[0].currentAmps).toBe(12.345);
-  expect(history.json().items[1].currentAmps).toBeNull();
+  expect(history.json().items.map((row: { kind: string }) => row.kind)).toEqual(expect.arrayContaining(["discharge", "vehicle_disarmed", "vehicle_connected"]));
+  const voltageHistory = history.json().items.filter((row: { kind: string }) => row.kind.startsWith("vehicle_"));
+  expect(voltageHistory[0].currentAmps).toBe(12.345);
+  expect(voltageHistory[1].currentAmps).toBeNull();
   expect((await post({ ...event, id: randomUUID(), sessionId: randomUUID() })).statusCode).toBe(404);
   for (const totalVoltage of [0, -1, 1001]) expect((await post({ ...event, id: randomUUID(), totalVoltage })).statusCode).toBe(400);
   expect((await post({ ...event, id: randomUUID(), measuredAt: new Date(Date.now() + 600_000).toISOString() })).statusCode).toBe(400);
@@ -193,6 +195,33 @@ it("uses newest voltage across reconnects and late/duplicate checkpoints, with r
   expect((await app.inject({ method: "PATCH", url: `/api/battery-types/${typeResponse.json().id}`, payload: { internalResistanceMilliOhms: null } })).json().internalResistanceMilliOhms).toBeNull();
   expect((await post({ ...checkpoint(secondSession, 45, 2000), consumedMah: -1 })).statusCode).toBe(400);
   expect((await post({ ...checkpoint(secondSession, 45, 2000), consumedMah: null })).statusCode).toBe(400);
+});
+
+it("counts a cycle between an automatic discharge below the 80% threshold and a manual charge", async () => {
+  const [configuration] = await db.select().from(settings);
+  await db.update(settings).set({ dischargedThresholdPercent: 80, chargedThresholdPercent: 90 });
+  const [type] = await db.insert(batteryTypes).values({ name: "40V minimum LiPo", capacityAh: "20", minVoltage: "40", maxVoltage: "50.4", cellCount: 12, chemistry: "LiPo" }).returning();
+  const [battery] = await db.insert(batteries).values({ crewId, typeId: type.id, serialNumber: "CYCLE-MIXED", label: "Mixed source cycle" }).returning();
+  const sessionId = randomUUID();
+  await db.insert(batteryTelemetrySessions).values({ id: sessionId, batteryId: battery.id, crewId });
+  const sampledAt = new Date(Date.now() - 60_000).toISOString();
+  await db.insert(measurements).values({ batteryId: battery.id, totalVoltage: "50.4", cellVoltages: Array(12).fill(4.2),
+    minCellVoltage: "4.2", maxCellVoltage: "4.2", cellDelta: "0", health: "good", warningThresholdV: "0.1", dangerThresholdV: "0.2",
+    measuredAt: new Date(Date.now() - 120_000) });
+  const autoReading = { id: randomUUID(), sessionId, type: "vehicle_disarmed", totalVoltage: 45.99, currentAmps: 1.96,
+    occurredAt: sampledAt, measuredAt: sampledAt };
+  const automatic = await app.inject({ method: "POST", url: "/station/batteries/voltage-events", headers, payload: autoReading });
+  expect(automatic.statusCode).toBe(201);
+  const manual = await app.inject({ method: "POST", url: `/api/batteries/${battery.id}/measurements`, payload: { cellVoltages: Array(12).fill(50.4 / 12), notes: "charged" } });
+  expect(manual.statusCode).toBe(201);
+  const inferred = await db.select().from(cycleEvents).where(eq(cycleEvents.batteryId, battery.id));
+  expect(inferred.filter(event => event.inferred).map(event => ({ sourceMeasurementId: event.sourceMeasurementId,
+    sourceVoltageEventId: event.sourceVoltageEventId, cycleDelta: event.cycleDelta }))).toEqual(expect.arrayContaining([
+    expect.objectContaining({ sourceMeasurementId: manual.json().id, cycleDelta: 1 }),
+    expect.objectContaining({ sourceVoltageEventId: autoReading.id, cycleDelta: 0 })
+  ]));
+  await db.update(settings).set({ dischargedThresholdPercent: configuration.dischargedThresholdPercent,
+    chargedThresholdPercent: configuration.chargedThresholdPercent });
 });
 
 it("records armed/disarmed flights and attributes duration to the motor snapshot", async () => {

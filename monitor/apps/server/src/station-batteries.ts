@@ -2,9 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { and, asc, eq, gt, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db/index.js";
-import { batteries, batteryTypes, measurements, batteryTelemetrySessions, batteryVoltageEvents, crews, droneFlightEvents, droneFlights, drones, flightMotors, groups, motorInstallations } from "./db/schema.js";
+import { batteries, batteryTypes, measurements, batteryTelemetrySessions, batteryVoltageEvents, crews, droneFlightEvents, droneFlights, drones, flightMotors, groups, motorInstallations, settings } from "./db/schema.js";
 import { assertBatteryOperational } from "./battery-lifecycle.js";
 import { currentBatteryCharge } from "./current-charge.js";
+import { rebuildInferredCycleEvents } from "./cycle-inference.js";
 
 const selectionSchema = z.object({
   batteryId: z.uuid(), droneId: z.uuid().optional(), sessionId: z.uuid().optional(), expectedActiveId: z.uuid().nullable(),
@@ -119,7 +120,11 @@ export async function registerStationBatteries(app: FastifyInstance) {
         const values = { ...data, batteryId: session.batteryId, totalVoltage: data.totalVoltage.toFixed(3), currentAmps: currentAmps?.toFixed(3) ?? null,
           consumedMah: consumedMah?.toFixed(3) ?? null, armed: data.armed ?? null, occurredAt, measuredAt };
         const [inserted] = await tx.insert(batteryVoltageEvents).values(values).onConflictDoNothing().returning();
-        if (inserted) return { id: inserted.id, duplicate: false };
+        if (inserted) {
+          const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1));
+          await rebuildInferredCycleEvents(session.batteryId, configuration, tx);
+          return { id: inserted.id, duplicate: false };
+        }
         const [existing] = await tx.select().from(batteryVoltageEvents).where(eq(batteryVoltageEvents.id, data.id));
         if (!existing || existing.sessionId !== data.sessionId || existing.type !== data.type || Number(existing.totalVoltage) !== data.totalVoltage ||
             (existing.currentAmps === null ? null : Number(existing.currentAmps)) !== currentAmps ||

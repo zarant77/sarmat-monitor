@@ -157,8 +157,9 @@ export function BatteryDetails() {
         if (entry.kind === "transfer") { const item = entry.item; return <tr key={`transfer-${item.id}`}><td>{formatDate(entry.at)}</td><td>{t("battery.history.transfer")}</td><td>—</td><td>{item.fromCrewName ?? "—"} → {item.toCrewName}{item.notes && <p>{item.notes}</p>}</td></tr>; }
         const item = entry.item;
         const source = item.sourceMeasurementId ? measurementsById.get(item.sourceMeasurementId) : undefined;
+        const voltageSource = item.sourceVoltageEventId ? (battery.voltageEvents ?? []).find(event => event.id === item.sourceVoltageEventId) : undefined;
         return <tr key={`event-${item.id}`}><td>{formatDate(entry.at)}</td><td>{t(`cycleTypes.${item.type}`)}</td>
-          <td>{source ? `${source.totalVoltage.toFixed(2)} ${t("common.volts")}` : "—"}</td><td>
+          <td>{source ? `${source.totalVoltage.toFixed(2)} ${t("common.volts")}` : voltageSource ? `${voltageSource.totalVoltage.toFixed(2)} ${t("common.volts")}` : "—"}</td><td>
           {item.type === "charge" && item.inferred && t("battery.history.cycleCompleted", { count: cycleNumbers.get(item.id) ?? battery.cycleCount })}
           {item.type === "discharge" && item.inferred && t("battery.history.usageRecorded")}
           {item.flightMinutes ? ` · ${item.flightMinutes} ${t("common.minutesShort")}` : ""}{item.notes && <p>{item.notes}</p>}</td></tr>;

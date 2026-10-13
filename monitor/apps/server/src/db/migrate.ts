@@ -7,10 +7,10 @@ import { rebuildInferredCycleEvents } from "../cycle-inference.js";
 
 try {
   await migrate(db, { migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)) });
-  // Rebuild from primary measurements, including databases whose limits were
+  // Rebuild from manual and automatic samples, including databases whose limits were
   // changed before dynamic percentages were introduced. Safe to retry on failure.
   await db.transaction(async tx => {
-    await tx.execute(sql`lock table settings, battery_types, batteries, measurements, cycle_events in share row exclusive mode`);
+    await tx.execute(sql`lock table settings, battery_types, batteries, measurements, battery_voltage_events, cycle_events in share row exclusive mode`);
     const [configuration] = await tx.select().from(settings).where(eq(settings.id, 1));
     if (!configuration) throw new Error("Charge settings are missing; cannot rebuild battery history");
     const rows = await tx.select({ id: batteries.id }).from(batteries).orderBy(asc(batteries.id));

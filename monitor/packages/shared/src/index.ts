@@ -279,7 +279,7 @@ export interface Measurement {
 }
 export interface CycleEvent {
   id: string; batteryId: string; type: typeof cycleEventTypes[number]; cycleDelta: number;
-  flightMinutes: number | null; notes: string; inferred?: boolean; sourceMeasurementId?: string | null; occurredAt: string;
+  flightMinutes: number | null; notes: string; inferred?: boolean; sourceMeasurementId?: string | null; sourceVoltageEventId?: string | null; occurredAt: string;
 }
 export interface TransferEvent {
   id: string; batteryId: string; fromCrewId: string | null; fromCrewName: string | null;

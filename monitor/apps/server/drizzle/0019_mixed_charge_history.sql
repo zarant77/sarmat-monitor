@@ -1,0 +1,3 @@
+ALTER TABLE "cycle_events" ADD COLUMN "source_voltage_event_id" uuid;--> statement-breakpoint
+ALTER TABLE "cycle_events" ADD CONSTRAINT "cycle_events_source_voltage_event_id_battery_voltage_events_id_fk" FOREIGN KEY ("source_voltage_event_id") REFERENCES "public"."battery_voltage_events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "cycle_events_source_voltage_event_idx" ON "cycle_events" USING btree ("source_voltage_event_id");
