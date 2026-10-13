@@ -451,11 +451,6 @@ class MainActivity : AppCompatActivity() {
             append("${item.typeName} · ${item.serialNumber}")
             append("\n${item.cellCount}S ${item.chemistry} · ${formatCapacity(item.capacityAh)} Ah")
             append(" · ${String.format(Locale.US, "%.2f–%.2f V", item.minVoltage, item.maxVoltage)}")
-            item.droneVoltage?.let { voltage ->
-                append("\nНапруга з дрона: ${String.format(Locale.US, "%.2f V", voltage)}")
-                item.droneVoltageAt?.let { append(" · ${formatHistoryTime(it)}") }
-                append("\nMission Planner · Без даних комірок")
-            }
             item.chargeMethod?.let { method ->
                 append("\nSOC: " + when (method) {
                     "consumption" -> "за витраченою ємністю"
@@ -479,6 +474,10 @@ class MainActivity : AppCompatActivity() {
             setTextColor(ContextCompat.getColor(this@MainActivity, when { item.latestHealth == "danger" -> R.color.status_danger; item.latestHealth == "warning" || discharged -> R.color.status_warning; else -> R.color.text_primary }))
         }
         findViewById<TextView>(R.id.detailTotalVoltage).text = "НАПРУГА\n${item.latestTotalVoltage?.let { String.format(Locale.US, "%.2f V", it) } ?: "—"}"
+        findViewById<TextView>(R.id.detailCellMeasurementLabel).text = buildString {
+            append("ОСТАННЄ ВИМІРЮВАННЯ · КОМІРКИ")
+            item.latestMeasuredAt?.let { append("\n${formatHistoryTime(it)}") }
+        }
         findViewById<TextView>(R.id.detailCellRange).text = "MIN / MAX\n${if (minCell != null && maxCell != null) String.format(Locale.US, "%.2f / %.2f", minCell, maxCell) else "—"}"
         findViewById<TextView>(R.id.detailDelta).apply {
             text = "ДЕЛЬТА\n${item.latestDelta?.let { String.format(Locale.US, "%.2f V", it) } ?: "—"}"
