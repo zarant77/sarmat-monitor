@@ -216,31 +216,31 @@ Sarmat tab and select **Settings** to open `Sarmat Plugin Settings`.
 
 The separate **Sarmat Altitude** plugin is shipped as `plugins/SarmatAltitude.dll`. Its **Altitude** settings tab
 appears immediately beside **Sarmat**. Capture the increase/decrease key combinations in the two
-fields, set the step in metres, and press **Save**. Defaults are Shift+Up, Shift+Down and 50 m.
+altitude fields, set the step in metres, and press **Save**. Defaults are Shift+Up, Shift+Down and 50 m. The azimuth fields configure increase/decrease shortcuts (default Shift+Right/Shift+Left) and a whole-degree step from 1° to 180° (default 5°). Both altitude and azimuth steps use whole numbers. Azimuth targets snap to whole multiples of the configured step and wrap across north; the old Right/Left default pair migrates to Shift+Right/Shift+Left. All four shortcuts must be different; existing settings retain their altitude values and receive azimuth defaults.
 The previous Ctrl+Up/Ctrl+Down default pair is migrated to Shift on loading old settings;
 custom combinations are preserved. All plugin UI text is English.
-Settings are stored separately in `%APPDATA%/SarmatPlugin/altitude-settings.json`.
+Settings are stored separately in `%APPDATA%/SarmatPlugin/altitude-settings.json`. Working altitude and azimuth are saved immediately after each change in `%APPDATA%/SarmatPlugin/altitude-targets.json`, using an atomic file replacement. Startup restores both targets for explicit Enter submission without activating automatic control. A save or restore failure is displayed on the HUD.
 
 The first shortcut prepares a target starting from 0 m above Home; subsequent presses
 accumulate changes to that target. The target and state appear at the bottom left of the Flight Data
 HUD, over the artificial horizon/camera view, and follow HUD resizing and pop-out windows.
-Each physical key press changes it once. Enter submits a pending target using a Guided
+The compact row reads `TARGET: alt 400 | az 310`. Each value is green within ±10 m / ±5° of its working target and orange outside that range or without fresh telemetry. The configured azimuth shortcuts adjust the working azimuth by the configured step per press, starting from the current heading and wrapping at 360°. Holding an altitude or azimuth shortcut repeats changes at the Windows keyboard repeat rate; each repeat applies one configured step. Enter does not auto-repeat. Enter submits both pending targets using a Guided
 waypoint at the current GPS position with GLOBAL_RELATIVE_ALT. Editing a running target requires
 Enter again. Armed ArduCopter, a GPS fix and fresh heartbeat/position/stick data are required.
-Altitude comes directly from MAVLink in metres regardless of Mission Planner display units.
+Altitude comes directly from MAVLink in metres regardless of Mission Planner display units. An absolute CONDITION_YAW command turns along the shortest direction at 10°/s while altitude changes.
 
-Throttle movement cancels the operation. The plugin observes the RCMAP_THROTTLE channel from
+Yaw or throttle movement cancels the operation without changing either working target. Enter resumes the saved targets. The plugin observes the RCMAP_THROTTLE and RCMAP_YAW channels from
 RC packets and outgoing overrides, and polls Mission Planner's enabled joystick every 50 ms.
 Movement is measured from the stick value at activation, outside RCn_DZ (minimum 10 PWM units,
 default 30). Ignored/released RC values are excluded. Cancellation restores the preceding
 manual mode (Stabilize, AltHold, Loiter, PosHold, Sport or Drift); other preceding modes use
 AltHold. A pilot mode change ends monitoring without overwriting the selected mode. Targets
-are cleared on disconnect or selected-vehicle changes and are never resumed automatically.
+survive landing, DISARM, cancellation, link loss, selected-vehicle changes and Mission Planner restarts. Targets are never resumed automatically.
 Once the target is reached, Guided continues holding position/altitude until stick cancellation
 or another mode is selected. Disabling the plugin also requests return to manual control.
 
-Validate with ArduCopter SITL before live use: increase/decrease, Enter, both throttle directions,
-remapped throttle channel, joystick and radio control, mode rejection, disconnect and vehicle
+Validate with ArduCopter SITL before live use: increase/decrease, Enter, both yaw/throttle directions,
+remapped yaw/throttle channels, joystick and radio control, mode rejection, disconnect and vehicle
 switch. Compilation and unit tests do not establish live autopilot behavior.
 
 ## Uninstall

@@ -23,32 +23,66 @@ namespace SarmatAltitude
             [DataMember] public int Decrease = (int)(Keys.Shift | Keys.Down);
             [DataMember] public double Step = 50;
             [DataMember] public int ShortcutDefaultsVersion = 1;
+            [DataMember] public int AzimuthIncrease = (int)(Keys.Shift | Keys.Right);
+            [DataMember] public int AzimuthDecrease = (int)(Keys.Shift | Keys.Left);
+            [DataMember] public double AzimuthStep = 5;
+            [OnDeserializing]
+            private void SetAzimuthDefaults(StreamingContext context)
+            {
+                AzimuthIncrease = (int)(Keys.Shift | Keys.Right);
+                AzimuthDecrease = (int)(Keys.Shift | Keys.Left);
+                AzimuthStep = 5;
+            }
+            public void NormalizeAzimuth()
+            {
+                if (double.IsNaN(AzimuthStep) || double.IsInfinity(AzimuthStep) || AzimuthStep < 1 || AzimuthStep > 180)
+                    AzimuthStep = 5;
+                AzimuthStep = Math.Round(AzimuthStep, MidpointRounding.AwayFromZero);
+                if (AzimuthIncrease == (int)Keys.Right && AzimuthDecrease == (int)Keys.Left)
+                { AzimuthIncrease = (int)(Keys.Shift | Keys.Right); AzimuthDecrease = (int)(Keys.Shift | Keys.Left); }
+                if (!ValidAzimuthShortcut((Keys)AzimuthIncrease) || !ValidAzimuthShortcut((Keys)AzimuthDecrease) ||
+                    new[] { Increase, Decrease, AzimuthIncrease, AzimuthDecrease }.Distinct().Count() != 4)
+                {
+                    AzimuthIncrease = (int)(Keys.Shift | Keys.Right);
+                    AzimuthDecrease = (int)(Keys.Shift | Keys.Left);
+                    if (Increase == AzimuthIncrease || Decrease == AzimuthIncrease) AzimuthIncrease = (int)(Keys.Alt | Keys.Right);
+                    if (Increase == AzimuthDecrease || Decrease == AzimuthDecrease) AzimuthDecrease = (int)(Keys.Alt | Keys.Left);
+                }
+            }
         }
         private readonly AltitudeTarget target = new AltitudeTarget();
         private Options options = new Options();
         private TabPage tab;
         private TabControl tabs;
         private IList originalTabs;
-        private Label indicator;
+        private Label indicator, azimuthIndicator;
         private Font indicatorFont;
         private Control hud;
         private System.Windows.Forms.Timer timer;
         private MissionPlanner.MAVLinkInterface port;
-        private int systemId, componentId, axisChannel;
-        private double initialStick, deadzone;
+        private int systemId, componentId, axisChannel, yawChannel;
+        private double initialStick, deadzone, initialYawStick, yawDeadzone;
         private volatile bool active;
         private bool starting, closing, awaitingGuided;
         private DateTime guidedDeadline;
         private MAVLink.mavlink_set_position_target_global_int_t guidedCommand;
+        private double submittedAzimuth;
         private string previousMode;
         private int manualMovement;
-        private long heartbeatTicks, positionTicks, stickTicks;
+        private long heartbeatTicks, positionTicks, stickTicks, yawStickTicks;
         private readonly object sampleLock = new object();
-        private double latestStick;
-        private double latitude, longitude;
+        private double latestStick, latestYawStick;
+        private double latitude, longitude, altitude, heading = double.NaN;
         private string status = "";
         private static string SettingsRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SarmatPlugin");
         private static string SettingsPath => Path.Combine(SettingsRoot, "altitude-settings.json");
+        private static string TargetsPath => Path.Combine(SettingsRoot, "altitude-targets.json");
+        private bool targetSaveFailed;
+        private void SaveTargets()
+        {
+            try { WorkingTargetStore.Save(TargetsPath, target); targetSaveFailed = false; }
+            catch (Exception) { targetSaveFailed = true; }
+        }
         public override string Name => "Sarmat Altitude";
         public override string Version => "1.0.0";
         public override string Author => "Sarmat";
@@ -76,11 +110,18 @@ namespace SarmatAltitude
                     options.Increase = (int)(Keys.Shift | Keys.Up);
                     options.Decrease = (int)(Keys.Shift | Keys.Down);
                 }
+                options.Step = Math.Round(options.Step, MidpointRounding.AwayFromZero);
                 options.ShortcutDefaultsVersion = 1;
-                indicator = new Label { AutoSize = true, BackColor = Color.FromArgb(0, 160, 0),
-                    ForeColor = Color.White, Padding = new Padding(8, 4, 8, 4),
-                    TextAlign = ContentAlignment.MiddleCenter, Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                    Text = "Target alt: —" };
+                options.NormalizeAzimuth();
+                try { WorkingTargetStore.Load(TargetsPath, target); }
+                catch (Exception) { status = "Could not restore working targets"; }
+                indicator = new Label { AutoSize = true, BackColor = Color.DarkOrange,
+                    ForeColor = Color.White, Padding = new Padding(8, 4, 0, 4),
+                    TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                    Text = "TARGET: alt —" };
+                azimuthIndicator = new Label { AutoSize = true, BackColor = Color.DarkOrange, ForeColor = Color.White,
+                    Padding = new Padding(0, 4, 8, 4), TextAlign = ContentAlignment.MiddleLeft,
+                    Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Text = "| az —" };
                 AttachIndicator();
                 Application.AddMessageFilter(this);
                 timer = new System.Windows.Forms.Timer { Interval = 50 };
@@ -112,7 +153,7 @@ namespace SarmatAltitude
             {
                 if (hud != null) hud.Resize -= HudResize;
                 hud = resolved;
-                hud.Controls.Add(indicator);
+                hud.Controls.Add(indicator); hud.Controls.Add(azimuthIndicator);
                 hud.Resize += HudResize;
             }
             HudResize(null, EventArgs.Empty);
@@ -137,13 +178,15 @@ namespace SarmatAltitude
             {
                 var previousFont = indicatorFont;
                 indicatorFont = new Font(SystemFonts.MessageBoxFont.FontFamily, fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-                indicator.Font = indicatorFont;
+                indicator.Font = indicatorFont; azimuthIndicator.Font = indicatorFont;
                 previousFont?.Dispose();
             }
             indicator.MinimumSize = new Size(0, badgeHeight);
             indicator.MaximumSize = new Size(Math.Max(1, hud.ClientSize.Width - margin * 2), 0);
             indicator.Location = new Point(margin, Math.Max(0, hud.ClientSize.Height - indicator.Height - margin));
-            indicator.BringToFront();
+            azimuthIndicator.MinimumSize = indicator.MinimumSize;
+            azimuthIndicator.Location = new Point(indicator.Right, indicator.Top);
+            indicator.BringToFront(); azimuthIndicator.BringToFront();
         }
         private static Control Find(Control root, string name)
         {
@@ -180,16 +223,25 @@ namespace SarmatAltitude
                 WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
             var up = ShortcutBox((Keys)options.Increase);
             var down = ShortcutBox((Keys)options.Decrease);
-            var step = new NumericUpDown { Minimum = 1, Maximum = 10000, DecimalPlaces = 1,
+            var step = new NumericUpDown { Minimum = 1, Maximum = 10000, DecimalPlaces = 0, Increment = 1,
                 Value = (decimal)options.Step, Width = 180 };
+            var azimuthRight = ShortcutBox((Keys)options.AzimuthIncrease, true);
+            var azimuthLeft = ShortcutBox((Keys)options.AzimuthDecrease, true);
+            var azimuthStep = new NumericUpDown { Minimum = 1, Maximum = 180, DecimalPlaces = 0, Increment = 1,
+                Value = (decimal)options.AzimuthStep, Width = 180 };
             layout.Controls.Add(new Label { Text = "Increase target altitude", AutoSize = true }); layout.Controls.Add(up);
             layout.Controls.Add(new Label { Text = "Decrease target altitude", AutoSize = true }); layout.Controls.Add(down);
             layout.Controls.Add(new Label { Text = "Altitude step, m", AutoSize = true }); layout.Controls.Add(step);
+            layout.Controls.Add(new Label { Text = "Increase target azimuth (right)", AutoSize = true }); layout.Controls.Add(azimuthRight);
+            layout.Controls.Add(new Label { Text = "Decrease target azimuth (left)", AutoSize = true }); layout.Controls.Add(azimuthLeft);
+            layout.Controls.Add(new Label { Text = "Azimuth step, degrees", AutoSize = true }); layout.Controls.Add(azimuthStep);
             var save = new Button { Name = "AltitudeSave", Text = "Save", Dock = DockStyle.Fill };
             save.Click += (s, e) =>
             {
-                if ((Keys)up.Tag == (Keys)down.Tag) { status = "Choose different shortcuts"; Render(); return; }
-                var next = new Options { Increase = (int)(Keys)up.Tag, Decrease = (int)(Keys)down.Tag, Step = (double)step.Value };
+                if (new[] { (Keys)up.Tag, (Keys)down.Tag, (Keys)azimuthRight.Tag, (Keys)azimuthLeft.Tag }.Distinct().Count() != 4)
+                { status = "Choose four different shortcuts"; Render(); return; }
+                var next = new Options { Increase = (int)(Keys)up.Tag, Decrease = (int)(Keys)down.Tag, Step = (double)step.Value,
+                    AzimuthIncrease = (int)(Keys)azimuthRight.Tag, AzimuthDecrease = (int)(Keys)azimuthLeft.Tag, AzimuthStep = (double)azimuthStep.Value };
                 try
                 {
                     Directory.CreateDirectory(SettingsRoot);
@@ -200,7 +252,7 @@ namespace SarmatAltitude
                 Render();
             };
             var guide = new Label { AutoSize = true, Location = new Point(12, 24), MaximumSize = new Size(240, 0), Text =
-                "Target starts at 0 m above Home.\nShortcuts add or subtract the step.\nEnter applies; throttle movement pauses.\nEnter resumes the saved target.\n\n○ Idle   ◷ Waiting   ▶ Active\n\nClick a shortcut field to change it." };
+                "Working targets are saved locally and restored on startup.\nNew altitude starts at 0 m above Home.\nShortcuts adjust altitude/azimuth by their configured steps.\nEnter applies both targets; yaw/throttle movement pauses.\nEnter resumes the saved target.\n\n○ Idle   ◷ Waiting   ▶ Active\n\nClick a shortcut field to change it." };
             var help = new GroupBox { Text = "Quick guide", Width = 264,
                 Margin = new Padding(3, 16, 3, 3), Padding = new Padding(12) };
             help.Controls.Add(guide);
@@ -245,13 +297,14 @@ namespace SarmatAltitude
         private static bool ValidShortcut(Keys key) => (key & Keys.Modifiers) != Keys.None &&
             (key & Keys.KeyCode) != Keys.Enter && (key & Keys.KeyCode) != Keys.ControlKey &&
             (key & Keys.KeyCode) != Keys.ShiftKey && (key & Keys.KeyCode) != Keys.Menu && (key & Keys.KeyCode) != Keys.None;
-        private static TextBox ShortcutBox(Keys value)
+        private static bool ValidAzimuthShortcut(Keys key) => key == Keys.Left || key == Keys.Right || ValidShortcut(key);
+        private static TextBox ShortcutBox(Keys value, bool azimuth = false)
         {
             var box = new TextBox { ReadOnly = true, Width = 220, Tag = value, Text = new KeysConverter().ConvertToString(value) };
             box.KeyDown += (s, e) =>
             {
                 e.SuppressKeyPress = true;
-                if (!ValidShortcut(e.KeyData)) return;
+                if (!(azimuth ? ValidAzimuthShortcut(e.KeyData) : ValidShortcut(e.KeyData))) return;
                 box.Tag = e.KeyData; box.Text = new KeysConverter().ConvertToString(e.KeyData);
             };
             return box;
@@ -263,19 +316,28 @@ namespace SarmatAltitude
             if (main == null || Form.ActiveForm != main || (tab != null && tab.ContainsFocus)) return false;
             var key = (Keys)(int)message.WParam | Control.ModifierKeys;
             bool adjust = key == (Keys)options.Increase || key == (Keys)options.Decrease;
+            bool azimuthAdjust = key == (Keys)options.AzimuthDecrease || key == (Keys)options.AzimuthIncrease;
             bool submit = key == Keys.Enter && target.Pending;
-            if (!adjust && !submit) return false;
+            if (!adjust && !azimuthAdjust && !submit) return false;
             // Never steal Enter or hotkeys from text entry and native settings editors.
             Control focus = main;
             while (focus is ContainerControl container && container.ActiveControl != null) focus = container.ActiveControl;
             if (focus is TextBoxBase || focus is NumericUpDown || focus is ComboBox || focus is DataGridView) return false;
-            if ((message.LParam.ToInt64() & (1L << 30)) != 0) return true;
+            // Allow keyboard auto-repeat for target edits, but never repeat Enter commands.
+            if (!adjust && !azimuthAdjust && (message.LParam.ToInt64() & (1L << 30)) != 0) return true;
             try
             {
-                if (adjust)
+                if (azimuthAdjust)
+                {
+                    target.AdjustAzimuth(options.AzimuthStep, key == (Keys)options.AzimuthIncrease ? 1 : -1, heading);
+                    SaveTargets();
+                    status = ""; Render();
+                }
+                else if (adjust)
                 {
                     target.Adjust(options.Step,
                         key == (Keys)options.Increase ? 1 : -1);
+                    SaveTargets();
                     status = ""; Render();
                 }
                 else Start();
@@ -297,21 +359,27 @@ namespace SarmatAltitude
                 !Fresh(Interlocked.Read(ref heartbeatTicks)) || !Fresh(Interlocked.Read(ref positionTicks)))
                 throw new InvalidOperationException("Connect the vehicle, ARM it and wait for live telemetry");
             if (!Copter) throw new InvalidOperationException("ArduCopter only");
-            double lat, lng;
-            lock (sampleLock) { lat = latitude; lng = longitude; }
+            double lat, lng, currentHeading;
+            lock (sampleLock) { lat = latitude; lng = longitude; currentHeading = heading; }
             if (Host.cs.gpsstatus < 3 || lat == 0 && lng == 0)
                 throw new InvalidOperationException("GPS fix required");
             axisChannel = (int)Parameter("RCMAP_THROTTLE", 3);
-            if (axisChannel < 1 || axisChannel > 18) throw new InvalidOperationException("Throttle channel unavailable");
+            yawChannel = (int)Parameter("RCMAP_YAW", 4);
+            if (axisChannel < 1 || axisChannel > 18 || yawChannel < 1 || yawChannel > 18) throw new InvalidOperationException("Yaw/throttle channel unavailable");
             var joystick = MissionPlanner.MainV2.joystick;
-            if (joystick != null && joystick.enabled) initialStick = joystick.getValueForChannel(axisChannel);
+            if (joystick != null && joystick.enabled)
+            { initialStick = joystick.getValueForChannel(axisChannel); initialYawStick = joystick.getValueForChannel(yawChannel); }
             else
             {
-                lock (sampleLock) initialStick = latestStick;
-                if (!Fresh(Interlocked.Read(ref stickTicks))) throw new InvalidOperationException("Throttle input unavailable; check RC_CHANNELS");
+                lock (sampleLock) { initialStick = latestStick; initialYawStick = latestYawStick; }
+                if (!Fresh(Interlocked.Read(ref stickTicks)) || !Fresh(Interlocked.Read(ref yawStickTicks))) throw new InvalidOperationException("Throttle input unavailable; check RC_CHANNELS");
             }
-            if (initialStick < 800 || initialStick > 2200) throw new InvalidOperationException("Invalid throttle input");
+            if (initialStick < 800 || initialStick > 2200 || initialYawStick < 800 || initialYawStick > 2200) throw new InvalidOperationException("Invalid throttle input");
             deadzone = Math.Max(10, Parameter("RC" + axisChannel + "_DZ", 30));
+            yawDeadzone = Math.Max(10, Parameter("RC" + yawChannel + "_DZ", 30));
+            if (double.IsNaN(currentHeading)) throw new InvalidOperationException("Live heading required");
+            target.EnsureAzimuth(currentHeading, options.AzimuthStep);
+            SaveTargets();
             if (!active) previousMode = Host.cs.mode;
             active = true; starting = true; Interlocked.Exchange(ref manualMovement, 0);
             awaitingGuided = true; guidedDeadline = DateTime.UtcNow.AddSeconds(5);
@@ -319,13 +387,14 @@ namespace SarmatAltitude
             {
                 guidedCommand = GuidedAltitudeCommand.Create((byte)systemId, (byte)componentId,
                     lat, lng, target.TargetMeters.Value);
+                submittedAzimuth = target.TargetAzimuth.Value;
                 // The position setpoint must arrive AFTER Guided has been confirmed.
                 // setGuidedModeWP sends it immediately and swallows transmission exceptions.
                 if (string.Equals(Host.cs.mode, "Guided", StringComparison.OrdinalIgnoreCase))
                     SendGuidedTarget();
                 else port.setMode((byte)systemId, (byte)componentId, "Guided");
                 target.Submitted(); status = awaitingGuided ? "Waiting for Guided mode" : "Automatic altitude control";
-                if (Interlocked.Exchange(ref manualMovement, 0) != 0) Cancel("Cancelled by throttle input", true, true);
+                if (Interlocked.Exchange(ref manualMovement, 0) != 0) Cancel("Cancelled by yaw/throttle input", true);
             }
             catch
             {
@@ -336,15 +405,26 @@ namespace SarmatAltitude
         }
         private void SendGuidedTarget()
         {
+            double currentHeading;
+            lock (sampleLock) currentHeading = heading;
+            if (double.IsNaN(currentHeading) || !Fresh(Interlocked.Read(ref positionTicks)))
+                throw new InvalidOperationException("Live heading required");
             port.sendPacket(guidedCommand, (byte)systemId, (byte)componentId);
+            port.sendPacket(new MAVLink.mavlink_command_long_t {
+                target_system = (byte)systemId, target_component = (byte)componentId,
+                command = (ushort)MAVLink.MAV_CMD.CONDITION_YAW,
+                param1 = (float)submittedAzimuth, param2 = 10,
+                param3 = (float)(AltitudeTarget.AngularDelta(currentHeading, submittedAzimuth) < 0 ? -1 : 1), param4 = 0
+            }, (byte)systemId, (byte)componentId);
             awaitingGuided = false;
         }
-        private void ObserveStick(double value)
+        private void ObserveStick(double value, bool yaw = false)
         {
             if (value < 800 || value > 2200) return;
-            lock (sampleLock) latestStick = value;
-            Interlocked.Exchange(ref stickTicks, DateTime.UtcNow.Ticks);
-            if (active && AltitudeTarget.StickMoved(initialStick, value, deadzone)) Interlocked.Exchange(ref manualMovement, 1);
+            lock (sampleLock) { if (yaw) latestYawStick = value; else latestStick = value; }
+            if (yaw) Interlocked.Exchange(ref yawStickTicks, DateTime.UtcNow.Ticks);
+            else Interlocked.Exchange(ref stickTicks, DateTime.UtcNow.Ticks);
+            if (active && AltitudeTarget.StickMoved(yaw ? initialYawStick : initialStick, value, yaw ? yawDeadzone : deadzone)) Interlocked.Exchange(ref manualMovement, 1);
         }
         private void Received(object sender, MAVLink.MAVLinkMessage packet)
         {
@@ -354,7 +434,8 @@ namespace SarmatAltitude
             {
                 var position = (MAVLink.mavlink_global_position_int_t)packet.data;
                 lock (sampleLock)
-                { latitude = position.lat / 1e7; longitude = position.lon / 1e7; }
+                { latitude = position.lat / 1e7; longitude = position.lon / 1e7;
+                    altitude = position.relative_alt / 1000.0; heading = position.hdg == ushort.MaxValue ? double.NaN : position.hdg / 100.0; }
                 Interlocked.Exchange(ref positionTicks, DateTime.UtcNow.Ticks);
             }
             if (packet.msgid == (uint)MAVLink.MAVLINK_MSG_ID.RC_CHANNELS || packet.msgid == (uint)MAVLink.MAVLINK_MSG_ID.RC_CHANNELS_RAW)
@@ -378,6 +459,8 @@ namespace SarmatAltitude
                 if (channel == 0) return;
                 var field = type.GetField("chan" + channel + "_raw");
                 if (field != null) ObserveStick(Convert.ToDouble(field.GetValue(data)));
+                var yawField = type.GetField("chan" + yawChannel + "_raw");
+                if (yawField != null) ObserveStick(Convert.ToDouble(yawField.GetValue(data)), true);
             }
             catch { /* Unsupported packet shape is ignored, never treated as a centered stick. */ }
         }
@@ -393,19 +476,21 @@ namespace SarmatAltitude
                 {
                     Cancel("Vehicle changed", false);
                     DetachPort(); port = next;
-                    target.Reset(); heartbeatTicks = positionTicks = stickTicks = 0;
+                    target.Interrupted(); heartbeatTicks = positionTicks = stickTicks = yawStickTicks = 0; heading = double.NaN;
                     if (port != null)
                     {
                         systemId = port.sysidcurrent; componentId = port.compidcurrent;
                         axisChannel = (int)Parameter("RCMAP_THROTTLE", 3);
+                        yawChannel = (int)Parameter("RCMAP_YAW", 4);
                         port.OnPacketReceived += Received; port.OnPacketSent += Sent;
                     }
                 }
                 if (active)
                 {
                     var joystick = MissionPlanner.MainV2.joystick;
-                    if (joystick != null && joystick.enabled) ObserveStick(joystick.getValueForChannel(axisChannel));
-                    if (Interlocked.Exchange(ref manualMovement, 0) != 0) Cancel("Cancelled by throttle input", true, true);
+                    if (joystick != null && joystick.enabled)
+                    { ObserveStick(joystick.getValueForChannel(axisChannel)); ObserveStick(joystick.getValueForChannel(yawChannel), true); }
+                    if (Interlocked.Exchange(ref manualMovement, 0) != 0) Cancel("Cancelled by yaw/throttle input", true);
                     else if (!Host.cs.armed || port == null || !port.BaseStream.IsOpen || !Fresh(Interlocked.Read(ref heartbeatTicks)))
                         Cancel("Altitude control stopped: link lost or DISARMED", false);
                     else if (string.Equals(Host.cs.mode, "Guided", StringComparison.OrdinalIgnoreCase))
@@ -415,7 +500,7 @@ namespace SarmatAltitude
                             try { SendGuidedTarget(); }
                             catch
                             {
-                                Cancel("Altitude command failed", true, true);
+                                Cancel("Altitude command failed", true);
                                 Render(); return;
                             }
                         }
@@ -428,13 +513,14 @@ namespace SarmatAltitude
                 {
                     var mapped = (int)Parameter("RCMAP_THROTTLE", 3);
                     if (mapped != axisChannel) { axisChannel = mapped; Interlocked.Exchange(ref stickTicks, 0); }
-                    if (!port.BaseStream.IsOpen || !Fresh(Interlocked.Read(ref heartbeatTicks))) target.Reset();
+                    var mappedYaw = (int)Parameter("RCMAP_YAW", 4);
+                    if (mappedYaw != yawChannel) { yawChannel = mappedYaw; Interlocked.Exchange(ref yawStickTicks, 0); }
                 }
                 Render();
             }
             catch (Exception) { status = "Altitude control error"; Render(); }
         }
-        private void Cancel(string reason, bool restore, bool preserveTarget = false)
+        private void Cancel(string reason, bool restore)
         {
             if (!active) return;
             // Only relinquish a Guided mode owned by this plugin; never overwrite a pilot mode change.
@@ -447,7 +533,7 @@ namespace SarmatAltitude
                 catch (Exception) { Interlocked.Exchange(ref manualMovement, 1); status = "Could not restore manual mode"; return; }
             }
             active = false; awaitingGuided = false;
-            if (preserveTarget) target.Interrupted(); else target.Reset();
+            target.Interrupted();
             status = reason;
         }
         private void Render()
@@ -455,10 +541,16 @@ namespace SarmatAltitude
             if (indicator == null || indicator.IsDisposed) return;
             var symbol = active ? (awaitingGuided ? "◷" : "▶") : "○";
             var normalStatuses = new[] { "Waiting for Guided mode", "Automatic altitude control", "Settings saved",
-                "Cancelled by throttle input", "Vehicle changed", "Flight mode changed", "Plugin disabled" };
+                "Cancelled by yaw/throttle input", "Vehicle changed", "Flight mode changed", "Plugin disabled" };
             var message = string.IsNullOrEmpty(status) || normalStatuses.Contains(status) ? "" : " - " + status;
-            indicator.Text = "Target alt: " + (target.TargetMeters.HasValue ? target.TargetMeters.Value.ToString("0.#") : "—") +
-                "  " + symbol + message;
+            if (targetSaveFailed) message += " - Could not save working targets";
+            indicator.Text = "TARGET: alt " + (target.TargetMeters.HasValue ? target.TargetMeters.Value.ToString("0.#") : "—");
+            azimuthIndicator.Text = "| az " + (target.TargetAzimuth.HasValue ? target.TargetAzimuth.Value.ToString("0.#") : "—") + "  " + symbol + message;
+            bool live = port != null && port.BaseStream.IsOpen && Fresh(Interlocked.Read(ref positionTicks)) && Fresh(Interlocked.Read(ref heartbeatTicks));
+            double currentAltitude, currentHeading;
+            lock (sampleLock) { currentAltitude = altitude; currentHeading = heading; }
+            indicator.BackColor = live && target.AltitudeInRange(currentAltitude) ? Color.FromArgb(0, 160, 0) : Color.DarkOrange;
+            azimuthIndicator.BackColor = live && target.AzimuthInRange(currentHeading) ? Color.FromArgb(0, 160, 0) : Color.DarkOrange;
             HudResize(null, EventArgs.Empty);
         }
         private void DetachPort()
@@ -480,6 +572,7 @@ namespace SarmatAltitude
                 Application.RemoveMessageFilter(this); timer?.Stop(); timer?.Dispose(); RemoveTab();
                 if (hud != null) hud.Resize -= HudResize;
                 indicator?.Parent?.Controls.Remove(indicator); indicator?.Dispose();
+                azimuthIndicator?.Parent?.Controls.Remove(azimuthIndicator); azimuthIndicator?.Dispose();
                 indicatorFont?.Dispose(); indicatorFont = null;
             });
             return true;

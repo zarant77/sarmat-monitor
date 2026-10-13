@@ -19,6 +19,8 @@ namespace SarmatPlugin.Tests
         {
             Run("Altitude target accumulates metres and stick override respects deadzone", AltitudeTargets);
             Run("Guided altitude command sets full position above Home in metres", GuidedAltitudePacket);
+            Run("Working targets preserve goals and use inclusive altitude/azimuth tolerances", WorkingTargets);
+            Run("Working targets persist edits and restore pending goals after restart", WorkingTargetPersistence);
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery widget accepts only a valid server charge percentage", BatteryWidgetCharge);
@@ -71,6 +73,72 @@ namespace SarmatPlugin.Tests
                 throw new Exception("Guided packet must hold horizontal position and use exactly 50 metres above Home");
             if (GuidedAltitudeCommand.Create(7, 1, 47, 34, 0).alt != 0)
                 throw new Exception("Zero altitude must not be silently discarded");
+        }
+        private static void WorkingTargetPersistence()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "sarmat-targets-" + Guid.NewGuid() + ".json");
+            try
+            {
+                var target = new AltitudeTarget();
+                target.Adjust(400, 1); target.EnsureAzimuth(310);
+                target.Submitted();
+                WorkingTargetStore.Save(path, target);
+                var restored = new AltitudeTarget();
+                WorkingTargetStore.Load(path, restored);
+                if (restored.TargetMeters != 400 || restored.TargetAzimuth != 310 || !restored.Pending)
+                    throw new Exception("Restart must restore both goals pending explicit Enter");
+                restored.AdjustAzimuth(5, 1, double.NaN);
+                WorkingTargetStore.Save(path, restored);
+                WorkingTargetStore.Load(path, target);
+                if (target.TargetAzimuth != 315 || File.Exists(path + ".tmp"))
+                    throw new Exception("Updates must atomically replace the saved goals");
+                restored.Reset(); restored.Adjust(50, 1);
+                WorkingTargetStore.Save(path, restored);
+                WorkingTargetStore.Load(path, target);
+                if (target.TargetMeters != 50 || target.TargetAzimuth.HasValue || !target.Pending)
+                    throw new Exception("Altitude-only goals must restore without inventing an azimuth");
+                File.WriteAllText(path, "{\"Altitude\":-1,\"Azimuth\":310}");
+                try { WorkingTargetStore.Load(path, target); throw new Exception("Invalid saved goal accepted"); }
+                catch (ArgumentOutOfRangeException) { }
+                if (target.TargetMeters != 50) throw new Exception("Failed load must not partially mutate goals");
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+            }
+        }
+        private static void WorkingTargets()
+        {
+            var target = new AltitudeTarget();
+            target.Adjust(400, 1);
+            target.AdjustAzimuth(5, 1, 355);
+            if (target.TargetAzimuth != 0 || !target.AzimuthInRange(355) || !target.AzimuthInRange(5) || target.AzimuthInRange(354.9))
+                throw new Exception("Heading tolerance must wrap across north and include exactly five degrees");
+            if (!target.AltitudeInRange(390) || !target.AltitudeInRange(410) || target.AltitudeInRange(410.1))
+                throw new Exception("Altitude tolerance must include exactly ten metres");
+            target.AdjustAzimuth(5, -1, 100);
+            if (target.TargetAzimuth != 355) throw new Exception("Left arrow must wrap and adjust saved heading");
+            target.Submitted(); target.Interrupted();
+            if (target.TargetMeters != 400 || target.TargetAzimuth != 355 || !target.Pending)
+                throw new Exception("Stopping control must keep both working targets available to resume");
+            if (target.AzimuthInRange(double.NaN) || target.AltitudeInRange(double.NaN))
+                throw new Exception("Unknown telemetry must never be green");
+            if (AltitudeTarget.AngularDelta(350, 10) != 20 || AltitudeTarget.AngularDelta(10, 350) != -20)
+                throw new Exception("Automatic turn must choose the shortest direction");
+            target.Reset();
+            target.EnsureAzimuth(312.4, 5);
+            if (target.TargetAzimuth != 310) throw new Exception("Initial heading must snap to a whole step multiple");
+            target.AdjustAzimuth(5, 1, 312.4);
+            if (target.TargetAzimuth != 315) throw new Exception("Right must advance by one whole step");
+            target.EnsureAzimuth(312.4, 10);
+            if (target.TargetAzimuth != 320) throw new Exception("Changing step must snap the existing target");
+            target.Reset(); target.EnsureAzimuth(357, 7); target.AdjustAzimuth(7, 1, 357);
+            if (target.TargetAzimuth != 0) throw new Exception("Non-divisor step must wrap to zero without losing alignment");
+            target.AdjustAzimuth(7, -1, 0);
+            if (target.TargetAzimuth != 357) throw new Exception("Left from north must wrap to the final whole multiple");
+            try { target.AdjustAzimuth(2.5, 1, 0); throw new Exception("Fractional azimuth step accepted"); }
+            catch (ArgumentOutOfRangeException) { }
         }
         private static void AltitudeTargets()
         {
