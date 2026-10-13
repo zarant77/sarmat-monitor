@@ -334,14 +334,12 @@ attitude, position, navigation, GPS2, sensor, RC, vibration, wind, EKF, mission,
 `NAMED_VALUE_FLOAT` slots when exposed by that Mission Planner version. Dynamically discovered
 items are off by default and only selected values are read during each telemetry update.
 
-The Sarmat context menu includes **Start Sarmat RTSP video**. It stores the supplied RTSP pipeline
+The Sarmat context menu includes **Reconnect camera**. It stores the supplied RTSP pipeline
 in Mission Planner's native `gstreamer_url` setting and starts it through
-`FlightData.hudGStreamer`; it does not launch an external player. Successful startup is silent;
-an error dialog is shown only when the source cannot be started. After startup, the plugin sets
+`FlightData.hudGStreamer`; it does not launch an external player. Camera discovery and stream Stop/Start run in a serialized background worker. Progress, failures and a startup lasting over 10 seconds are shown in the Sarmat panel without a modal dialog; native video waits never run on the UI thread. After startup, the plugin sets
 the native Mission Planner HUD to 16:9 and invokes its normal resize routine.
 Once the Sarmat GStreamer source has started successfully, that fact is persisted. On the next
-Mission Planner run, the source is restored on the first vehicle connection; later
-disconnected-to-connected transitions also restart it once.
+Mission Planner run, the source is restored after connection negotiation releases the port and telemetry has remained fresh for 3 seconds. Stale telemetry, disconnects and packet counter resets restart this settling period. An identical active Sarmat pipeline is preserved on reconnect; the manual Reconnect camera command forces a restart. Disabling Camera or unloading the plugin invalidates pending starts and queues background shutdown.
 
 On each new vehicle connection, Sarmat also checks Mission Planner's configured USB joystick. If
 `MainV2.joystick` is already enabled and valid, it is left untouched. Otherwise, the plugin uses

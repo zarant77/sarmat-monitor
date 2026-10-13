@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Linq.Expressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using MissionPlanner.Plugin;
 using SarmatPlugin.Infrastructure;
@@ -19,6 +20,14 @@ namespace SarmatPlugin
         private int batterySystemId, batteryComponentId;
         private object flightData;
         private object sarmatVideoStream;
+        private readonly System.Threading.SemaphoreSlim videoLock = new System.Threading.SemaphoreSlim(1, 1);
+        private readonly CameraConnectionGate cameraConnection = new CameraConnectionGate();
+        private Timer cameraTimer;
+        private bool cameraRestorePending, videoStartPending;
+        private int videoGeneration;
+        private string activeVideoPipeline;
+        private int activeVideoGeneration;
+        private DateTime videoStartTime;
         private SarmatPlugin.UI.SarmatPanel panel;
         private TabControl hostTabs;
         private TabPage sarmatTab;
@@ -94,6 +103,9 @@ namespace SarmatPlugin
                 runtime.VehicleConnected += SaveVehicleConnectionOnConnect;
                 runtime.VehicleReconnectRequested += ReconnectVehicle;
                 panel = runtime.CreatePanel();
+                cameraTimer = new Timer { Interval = 250 };
+                cameraTimer.Tick += CameraTick;
+                cameraTimer.Start();
                 panel.VideoSourceRequested += PanelVideoSourceRequested;
                 panel.VehicleReconnectRequested += PanelVehicleReconnectRequested;
                 ConfigureOptionalFlightDataUi();
@@ -245,7 +257,7 @@ namespace SarmatPlugin
                 mainType.GetField("FlightData", flags)?.GetValue(Host.MainForm);
         }
 
-        private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo();
+        private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo(true);
         private void PanelVehicleReconnectRequested(object sender, EventArgs e) => ReconnectVehicle();
 
         private void CleanupUiAndRuntime()
@@ -268,6 +280,8 @@ namespace SarmatPlugin
 
         private void DisposeRuntime()
         {
+            cameraTimer?.Stop(); cameraTimer?.Dispose(); cameraTimer = null;
+            StopSarmatVideo();
             if (batteryPort != null) batteryPort.OnPacketReceived -= BatteryPacketReceived;
             batteryPort = null;
             if (panel != null)
@@ -519,20 +533,62 @@ namespace SarmatPlugin
 
         private void ApplyCameraSettings()
         {
-            if (runtime?.CurrentSettings.CameraEnabled == true) return;
-            if (sarmatVideoStream == null) return;
-            try
+            if (runtime?.CurrentSettings.CameraEnabled == true)
             {
-                sarmatVideoStream.GetType().GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)
-                    ?.Invoke(sarmatVideoStream, null);
-                sarmatVideoStream = null;
+                if (runtime.ShouldRestoreGStreamer) RestoreVideoOnConnect();
+                return;
             }
-            catch (Exception ex) { TryLog("Unable to stop Sarmat camera", ex); }
+            StopSarmatVideo();
         }
 
-        private void StartSarmatVideo()
+        private void PostCameraUi(Action action)
         {
-            if (runtime?.CurrentSettings.CameraEnabled != true) return;
+            var main = Host?.MainForm;
+            if (main == null || main.IsDisposed || !main.IsHandleCreated) return;
+            try { main.BeginInvoke(new Action(() => { if (!main.IsDisposed) action(); })); }
+            catch (InvalidOperationException) { }
+        }
+
+        private void StopSarmatVideo()
+        {
+            cameraRestorePending = false;
+            var generation = System.Threading.Interlocked.Increment(ref videoGeneration);
+            if (panel != null && !panel.IsDisposed) panel.SetCameraStatus(null);
+            Task.Run(async () =>
+            {
+                await videoLock.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (activeVideoGeneration > generation) return;
+                    var stream = sarmatVideoStream;
+                    sarmatVideoStream = null; activeVideoPipeline = null;
+                    stream?.GetType().GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)?.Invoke(stream, null);
+                }
+                catch (Exception ex) { TryLog("Unable to stop Sarmat camera", ex); }
+                finally { videoLock.Release(); }
+            });
+        }
+
+        private void CameraTick(object sender, EventArgs e)
+        {
+            try
+            {
+                var port = Host.comPort;
+                if (videoStartPending && DateTime.UtcNow - videoStartTime > TimeSpan.FromSeconds(10))
+                    panel?.SetCameraStatus("Camera: startup is taking too long; drone connection remains available.");
+                var baseStream = port == null ? null : GetMember(port, "BaseStream");
+                var ready = cameraConnection.Update(baseStream != null && GetMember(baseStream, "IsOpen") is bool open && open && Host.cs.connected,
+                    port != null && GetMember(port, "giveComport") is bool busy && busy,
+                    port?.packetcount ?? 0, DateTime.UtcNow);
+                if (ready && cameraRestorePending && !videoStartPending)
+                { cameraRestorePending = false; StartSarmatVideo(); }
+            }
+            catch (Exception ex) { cameraConnection.Reset(); TryLog("Camera connection check failed", ex); }
+        }
+
+        private void StartSarmatVideo(bool force = false)
+        {
+            if (runtime?.CurrentSettings.CameraEnabled != true || videoStartPending) return;
             try
             {
                 var pipeline = GStreamerPipelineBuilder.Build(runtime?.CurrentSettings);
@@ -542,37 +598,86 @@ namespace SarmatPlugin
                 var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
                 var stream = flightData.GetType().GetField("hudGStreamer", flags)?.GetValue(null);
                 if (stream == null) throw new InvalidOperationException("Mission Planner GStreamer service is unavailable");
-                var type = stream.GetType();
-                var launch = type.GetMethod("LookForGstreamer", flags)?.Invoke(null, null);
-                SetStaticMember(type, "GstLaunch", launch);
-                var exists = GetStaticMember(type, "GstLaunchExists");
-                if (!(exists is bool available) || !available)
-                    throw new InvalidOperationException(
-                        "GStreamer was not found. Install it using Mission Planner's GStreamer video command first.");
+                var owner = runtime;
+                var generation = System.Threading.Interlocked.Increment(ref videoGeneration);
+                videoStartPending = true;
+                videoStartTime = DateTime.UtcNow;
+                panel?.SetCameraStatus("Camera: starting…");
+                Task.Run(async () =>
+                {
+                    await videoLock.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        if (generation != System.Threading.Volatile.Read(ref videoGeneration)) return;
+                        if (!force && ReferenceEquals(sarmatVideoStream, stream) && activeVideoPipeline == pipeline)
+                        {
+                            PostCameraUi(() => { if (runtime == owner && generation == videoGeneration) panel?.SetCameraStatus(null); });
+                            return;
+                        }
+                        var type = stream.GetType();
+                        var stop = type.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance);
+                        var start = type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string) }, null);
+                        if (stop == null || start == null) throw new MissingMethodException("Mission Planner GStreamer Start/Stop unavailable");
+                        TryLog("Camera worker: locating GStreamer");
+                        var launch = type.GetMethod("LookForGstreamer", flags)?.Invoke(null, null);
+                        SetStaticMember(type, "GstLaunch", launch);
+                        var exists = GetStaticMember(type, "GstLaunchExists");
+                        if (!(exists is bool available) || !available)
+                            throw new InvalidOperationException(
+                                "GStreamer was not found. Install it using Mission Planner's GStreamer video command first.");
 
-                type.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance)?.Invoke(stream, null);
-                type.GetMethod("Start", BindingFlags.Public | BindingFlags.Instance)?.Invoke(
-                    stream, new object[] { pipeline });
-                sarmatVideoStream = stream;
-                SetHudSixteenByNine();
-                runtime?.MarkGStreamerStarted();
+                        // Mission Planner Stop waits for its video thread; never call it on the UI thread.
+                        TryLog("Camera worker: stopping previous stream");
+                        stop.Invoke(stream, null);
+                        sarmatVideoStream = null; activeVideoPipeline = null;
+                        if (generation != System.Threading.Volatile.Read(ref videoGeneration)) return;
+                        TryLog("Camera worker: starting stream");
+                        start.Invoke(stream, new object[] { pipeline });
+                        sarmatVideoStream = stream; activeVideoPipeline = pipeline; activeVideoGeneration = generation;
+                        TryLog("Camera worker: startup request completed");
+                        PostCameraUi(() =>
+                        {
+                            if (runtime != owner || generation != videoGeneration) return;
+                            try { SetHudSixteenByNine(); owner.MarkGStreamerStarted(); panel?.SetCameraStatus(null); }
+                            catch (Exception ex) { TryLog("Camera UI setup failed", ex); panel?.SetCameraStatus("Camera: unable to finish setup."); }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        TryLog("Sarmat camera start failed", ex);
+                        PostCameraUi(() =>
+                        {
+                            if (runtime == owner && generation == videoGeneration)
+                                panel?.SetCameraStatus("Camera: unable to start. Use Reconnect camera to retry.");
+                        });
+                    }
+                    finally
+                    {
+                        videoLock.Release();
+                        PostCameraUi(() => { videoStartPending = false; });
+                    }
+                });
             }
             catch (TargetInvocationException ex)
             {
-                ShowVideoError(ex.InnerException ?? ex);
+                TryLog("Sarmat camera setup failed", ex.InnerException ?? ex);
+                panel?.SetCameraStatus("Camera: unable to start. Use Reconnect camera to retry.");
             }
             catch (Exception ex)
             {
-                ShowVideoError(ex);
+                TryLog("Sarmat camera setup failed", ex);
+                panel?.SetCameraStatus("Camera: unable to start. Use Reconnect camera to retry.");
             }
         }
 
         private void RestoreVideoOnConnect()
         {
             if (runtime?.ShouldRestoreGStreamer != true) return;
-            var control = flightData as Control;
-            if (control == null) return;
-            OnUi(control, StartSarmatVideo);
+            PostCameraUi(() =>
+            {
+                if (runtime?.ShouldRestoreGStreamer != true) return;
+                cameraConnection.Reset(); cameraRestorePending = true;
+            });
         }
 
         private void ReconnectJoystickOnConnect()
@@ -695,10 +800,5 @@ namespace SarmatPlugin
             throw new MissingMemberException(type.FullName, name);
         }
 
-        private static void ShowVideoError(Exception error)
-        {
-            MessageBox.Show("Unable to start Sarmat RTSP video:\r\n" + error.Message,
-                "Sarmat Plugin", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
     }
 }

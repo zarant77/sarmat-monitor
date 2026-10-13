@@ -21,6 +21,7 @@ namespace SarmatPlugin.Tests
             Run("Guided altitude command sets full position above Home in metres", GuidedAltitudePacket);
             Run("Working targets preserve goals and use inclusive altitude/azimuth tolerances", WorkingTargets);
             Run("Working targets persist edits and restore pending goals after restart", WorkingTargetPersistence);
+            Run("Camera waits for completed connection and sustained fresh telemetry", CameraStartupTiming);
             Run("Feature switches preserve legacy settings and round trip", FeatureSettings);
             Run("Battery API endpoints and disabled guards", BatteryApiSettings);
             Run("Battery widget accepts only a valid server charge percentage", BatteryWidgetCharge);
@@ -73,6 +74,24 @@ namespace SarmatPlugin.Tests
                 throw new Exception("Guided packet must hold horizontal position and use exactly 50 metres above Home");
             if (GuidedAltitudeCommand.Create(7, 1, 47, 34, 0).alt != 0)
                 throw new Exception("Zero altitude must not be silently discarded");
+        }
+        private static void CameraStartupTiming()
+        {
+            var gate = new CameraConnectionGate();
+            var now = new DateTime(2026, 10, 13, 0, 0, 0, DateTimeKind.Utc);
+            if (gate.Update(true, false, 100, now)) throw new Exception("Open port alone must not trigger camera");
+            if (gate.Update(true, true, 101, now.AddSeconds(1))) throw new Exception("Connection negotiation must block camera");
+            if (gate.Update(true, false, 102, now.AddSeconds(2)) || gate.Update(true, false, 103, now.AddSeconds(4)))
+                throw new Exception("Fresh telemetry must settle for three seconds");
+            if (!gate.Update(true, false, 104, now.AddSeconds(5))) throw new Exception("Stable connection should release camera startup");
+            if (gate.Update(true, false, 104, now.AddSeconds(8))) throw new Exception("Stale telemetry must reset readiness");
+            if (gate.Update(true, false, 105, now.AddSeconds(9))) throw new Exception("Resumed telemetry must settle again");
+            if (gate.Update(false, false, 105, now.AddSeconds(10))) throw new Exception("Disconnect must reset readiness");
+            if (gate.Update(true, false, 1, now.AddSeconds(11))) throw new Exception("Reconnect must not inherit old settling time");
+            gate.Update(true, false, 2, now.AddSeconds(12));
+            gate.Update(true, false, 3, now.AddSeconds(14));
+            if (!gate.Update(true, false, 4, now.AddSeconds(15))) throw new Exception("Reconnect should eventually become ready");
+            if (gate.Update(true, false, 0, now.AddSeconds(16))) throw new Exception("Packet counter reset must reset readiness");
         }
         private static void WorkingTargetPersistence()
         {

@@ -16,6 +16,13 @@ namespace SarmatPlugin.UI
         private bool layoutScheduled;
         private string layoutContentSignature;
         private readonly ToolStripItem reconnectCamera;
+        private readonly Label cameraStatus = new Label { Dock = DockStyle.Bottom, AutoSize = true,
+            ForeColor = Color.DarkOrange, Padding = new Padding(4), Visible = false };
+        public void SetCameraStatus(string text)
+        {
+            cameraStatus.Text = text ?? "";
+            cameraStatus.Visible = !string.IsNullOrEmpty(text);
+        }
 
         public event EventHandler SettingsRequested;
         public event EventHandler BatterySelectionRequested;
@@ -45,6 +52,7 @@ namespace SarmatPlugin.UI
             widgets = WidgetCatalog.Definitions.ToDictionary(x => x.Id, x => new TelemetryWidget(),
                 StringComparer.OrdinalIgnoreCase);
             Controls.Add(grid);
+            Controls.Add(cameraStatus);
 
             var menu = new ContextMenuStrip();
             menu.Items.Add("Settings", null, (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty));
