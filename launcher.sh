@@ -163,18 +163,23 @@ show_menu() {
     while true; do
         printf '\n\033[1;36mSARMAT - LAUNCHER\033[0m\n'
         cat <<'EOF'
-  1. Start Monitor in development mode
-  2. Build Monitor for production
-  3. Build Android release (APK + AAB)
-  4. Build and install Android debug
-  5. Build Android debug APK
-  6. Run all tests
-  7. Run TypeScript checks
-  8. Apply database migrations
-  9. Seed the database
- 10. Install Node.js dependencies
- 11. Build Mission Planner plugin (Windows)
- 12. Build Sarmat Altitude plugin (Windows)
+RUN
+  1. Run: Monitor (development mode)
+BUILD
+  2. Build: Monitor (production)
+  3. Build: Sarmat Crew (Android release APK + AAB)
+  4. Build and install: Sarmat Crew (Android debug)
+  5. Build: Sarmat Crew (Android debug APK)
+  6. Build: Sarmat Telemetry Plugin (Windows)
+  7. Build: Sarmat Altitude Plugin (Windows)
+VERIFY
+  8. Test: Monitor and Sarmat Crew
+  9. Check: Monitor TypeScript
+DATABASE
+ 10. Migrate: Database
+ 11. Seed: Database
+SETUP
+ 12. Install: Node.js dependencies
   0. Exit
 EOF
         printf '\nSelect an action: '
@@ -185,13 +190,13 @@ EOF
             3) command_android_release ;;
             4) command_android_install ;;
             5) command_android_debug ;;
-            6) command_test ;;
-            7) command_typecheck ;;
-            8) command_db_migrate ;;
-            9) command_db_seed ;;
-            10) command_install_dependencies ;;
-            11) command_plugin ;;
-            12) command_altitude_plugin ;;
+            6) command_plugin ;;
+            7) command_altitude_plugin ;;
+            8) command_test ;;
+            9) command_typecheck ;;
+            10) command_db_migrate ;;
+            11) command_db_seed ;;
+            12) command_install_dependencies ;;
             0) exit 0 ;;
             *) printf 'Unknown option: %s\n' "$choice" >&2 ;;
         esac

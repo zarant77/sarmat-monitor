@@ -108,6 +108,7 @@ namespace SarmatPlugin
                 cameraTimer.Start();
                 panel.VideoSourceRequested += PanelVideoSourceRequested;
                 panel.VehicleReconnectRequested += PanelVehicleReconnectRequested;
+                panel.JoystickReconnectRequested += PanelJoystickReconnectRequested;
                 ConfigureOptionalFlightDataUi();
                 if (!RegisterSarmatTab())
                 {
@@ -259,11 +260,13 @@ namespace SarmatPlugin
 
         private void PanelVideoSourceRequested(object sender, EventArgs e) => StartSarmatVideo(true);
         private void PanelVehicleReconnectRequested(object sender, EventArgs e) => ReconnectVehicle();
+        private void PanelJoystickReconnectRequested(object sender, EventArgs e) => ReconnectJoystickOnConnect(true);
 
         private void CleanupUiAndRuntime()
         {
             RemoveSarmatTab();
             if (panel != null) panel.VideoSourceRequested -= PanelVideoSourceRequested;
+            if (panel != null) panel.JoystickReconnectRequested -= PanelJoystickReconnectRequested;
             DisposeRuntime();
             panel = null;
             if (takeoffModeWarning != null)
@@ -288,6 +291,7 @@ namespace SarmatPlugin
             {
                 panel.VideoSourceRequested -= PanelVideoSourceRequested;
                 panel.VehicleReconnectRequested -= PanelVehicleReconnectRequested;
+                panel.JoystickReconnectRequested -= PanelJoystickReconnectRequested;
             }
             if (runtime != null)
             {
@@ -682,6 +686,11 @@ namespace SarmatPlugin
 
         private void ReconnectJoystickOnConnect()
         {
+            ReconnectJoystickOnConnect(false);
+        }
+
+        private void ReconnectJoystickOnConnect(bool force)
+        {
             var main = Host.MainForm;
             if (main == null) return;
             OnUi(main, () =>
@@ -699,7 +708,7 @@ namespace SarmatPlugin
                         var currentType = current.GetType();
                         var enabled = currentType.GetField("enabled", flags);
                         var valid = currentType.GetMethod("IsJoystickValid", flags);
-                        if (enabled != null && (bool)enabled.GetValue(current) &&
+                        if (!force && enabled != null && (bool)enabled.GetValue(current) &&
                             valid != null && (bool)valid.Invoke(current, null)) return;
                         currentType.GetMethod("UnAcquireJoyStick", flags)?.Invoke(current, null);
                         (current as IDisposable)?.Dispose();

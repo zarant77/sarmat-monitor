@@ -204,25 +204,30 @@ if (-not $interactive) {
 while ($true) {
     Write-Host ''
     Write-Host 'SARMAT - LAUNCHER' -ForegroundColor Cyan
-    Write-Host '  1. Start Monitor in development mode'
-    Write-Host '  2. Build Monitor for production'
-    Write-Host '  3. Build Android release (APK + AAB)'
-    Write-Host '  4. Build and install Android debug'
-    Write-Host '  5. Build Android debug APK'
-    Write-Host '  6. Run all tests'
-    Write-Host '  7. Run TypeScript checks'
-    Write-Host '  8. Apply database migrations'
-    Write-Host '  9. Seed the database'
-    Write-Host ' 10. Install Node.js dependencies'
-    Write-Host ' 11. Build Mission Planner plugin (Windows)'
-    Write-Host ' 12. Build Sarmat Altitude plugin (Windows)'
+    Write-Host 'RUN'
+    Write-Host '  1. Run: Monitor (development mode)'
+    Write-Host 'BUILD'
+    Write-Host '  2. Build: Monitor (production)'
+    Write-Host '  3. Build: Sarmat Crew (Android release APK + AAB)'
+    Write-Host '  4. Build and install: Sarmat Crew (Android debug)'
+    Write-Host '  5. Build: Sarmat Crew (Android debug APK)'
+    Write-Host '  6. Build: Sarmat Telemetry Plugin (Windows)'
+    Write-Host '  7. Build: Sarmat Altitude Plugin (Windows)'
+    Write-Host 'VERIFY'
+    Write-Host '  8. Test: Monitor and Sarmat Crew'
+    Write-Host '  9. Check: Monitor TypeScript'
+    Write-Host 'DATABASE'
+    Write-Host ' 10. Migrate: Database'
+    Write-Host ' 11. Seed: Database'
+    Write-Host 'SETUP'
+    Write-Host ' 12. Install: Node.js dependencies'
     Write-Host '  0. Exit'
     $choice = Read-Host 'Select an action'
     if ($choice -eq '0' -or $null -eq $choice) { exit 0 }
     $action = switch ($choice) {
         '1' { 'dev' }; '2' { 'build' }; '3' { 'android-release' }; '4' { 'android-install' }
-        '5' { 'android-debug' }; '6' { 'test' }; '7' { 'typecheck' }; '8' { 'db-migrate' }
-        '9' { 'db-seed' }; '10' { 'install' }; '11' { 'plugin' }; '12' { 'altitude-plugin' }; default { $null }
+        '5' { 'android-debug' }; '6' { 'plugin' }; '7' { 'altitude-plugin' }; '8' { 'test' }
+        '9' { 'typecheck' }; '10' { 'db-migrate' }; '11' { 'db-seed' }; '12' { 'install' }; default { $null }
     }
     if (-not $action) { Write-Host "Unknown option: $choice"; continue }
     try { Invoke-Action $action '' }

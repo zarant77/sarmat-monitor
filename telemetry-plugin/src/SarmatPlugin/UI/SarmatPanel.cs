@@ -28,6 +28,7 @@ namespace SarmatPlugin.UI
         public event EventHandler BatterySelectionRequested;
         public event EventHandler VideoSourceRequested;
         public event EventHandler VehicleReconnectRequested;
+        public event EventHandler JoystickReconnectRequested;
 
         public SarmatPanel()
         {
@@ -62,6 +63,8 @@ namespace SarmatPlugin.UI
                 (s, e) => VideoSourceRequested?.Invoke(this, EventArgs.Empty));
             menu.Items.Add("Reconnect drone", null,
                 (s, e) => VehicleReconnectRequested?.Invoke(this, EventArgs.Empty));
+            menu.Items.Add("Reconnect controller", null,
+                (s, e) => JoystickReconnectRequested?.Invoke(this, EventArgs.Empty));
             ApplyContextMenu(this, menu);
             foreach (var widget in widgets.Values) ApplyContextMenu(widget, menu);
 
